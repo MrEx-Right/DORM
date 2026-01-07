@@ -14,6 +14,26 @@ Unlike traditional scanners, DORM features a hybrid engine that utilizes **Headl
 
 ---
 
+---
+
+## ✨ Dashboard Preview
+
+### 🖥️ Scanner Interface
+<p align="center">
+  <img src="docs/images/dashboard1.png" alt="Main Interface" width="100%">
+</p>
+
+### 📊 Live Results
+<p align="center">
+  <img src="docs/images/dashboard2.png" alt="Results Interface" width="100%">
+</p>
+
+<p align="center">
+  <i>Real-time monitoring and advanced vulnerability detection capabilities.</i>
+</p>
+
+---
+
 ## 🚀 Key Features
 
 ### 🔥 Core Engine
