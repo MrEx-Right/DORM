@@ -4,7 +4,7 @@ Modern, High-Performance Vulnerability Scanner. Features: Spider Crawler, Chaos 
 # 👁️ DORM - Next-Gen Vulnerability Scanner
 
 ![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)
-![License](https://img.shields.io/badge/License-MIT-green)
+![License](https://img.shields.io/badge/License-GPLv3-blue)
 ![Status](https://img.shields.io/badge/Status-Beta-orange)
 ![Type](https://img.shields.io/badge/Type-Offensive%20Security-red)
 
