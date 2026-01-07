@@ -14,8 +14,6 @@ Unlike traditional scanners, DORM features a hybrid engine that utilizes **Headl
 
 ---
 
----
-
 ## ✨ Dashboard Preview
 
 ### 🖥️ Scanner Interface
