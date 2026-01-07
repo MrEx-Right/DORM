@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>DORM SCANNER - Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; color: #58a6ff; letter-spacing: 4px; font-weight: 800; text-transform: uppercase; margin-bottom: 5px; }
+        .brand-subtitle { font-size:0.4em; color:#8b949e; letter-spacing: 2px; font-weight: normal; display:block; text-align:center; margin-bottom:20px;}
+
+        /* CONTROL PANEL */
+        .control-panel { background: #161b22; padding: 20px; border: 1px solid #30363d; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; gap: 15px; }
+        .input-group { display: flex; gap: 10px; align-items: center; }
+        input[type="text"] { flex-grow: 1; padding: 12px; background: #0d1117; border: 1px solid #30363d; color: #fff; border-radius: 6px; font-family: 'Consolas', monospace; }
+        #timerDisplay { font-family: 'Consolas', monospace; font-size: 20px; color: #58a6ff; font-weight: bold; width: 60px; text-align: center; }
+
+        button { padding: 12px 25px; background: #238636; color: white; border: none; cursor: pointer; border-radius: 6px; font-weight: bold; transition: 0.2s; }
+        button:hover { opacity: 0.9; }
+        button:disabled { background: #30363d; cursor: not-allowed; }
+        .btn-group { display: flex; gap: 10px; justify-content: flex-end; }
+
+        /* PLUGIN SECTION */
+        #plugin-section { display: none; background: #0d1117; border: 1px solid #30363d; padding: 15px; border-radius: 6px; margin-top: 10px; }
+        .plugin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; max-height: 200px; overflow-y: auto; }
+        .plugin-item { display: flex; align-items: center; gap: 8px; padding: 5px; background: #21262d; border-radius: 4px; cursor: pointer; font-size: 12px; }
+
+        /* CHART */
+        .chart-container { background: #161b22; padding: 15px; border: 1px solid #30363d; border-radius: 12px; margin-top: 20px; height: 220px; display: flex; justify-content: center; }
+
+        /* TABLE & BADGES */
+        table { width: 100%; margin-top: 20px; border-collapse: separate; border-spacing: 0 5px; }
+        th { text-align: left; padding: 12px; color: #8b949e; text-transform: uppercase; font-size: 0.85em; }
+        .vuln-row { background: #161b22; cursor: pointer; transition: background 0.2s; }
+        .vuln-row:hover { background: #21262d; }
+        td { padding: 12px; border-top: 1px solid #30363d; border-bottom: 1px solid #30363d; }
+        
+        .badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; color:#000; text-transform: uppercase; }
+        
+        /* RISK COLORS (Standardized) */
+        .sev-CRITICAL { background: #ff7b72 !important; box-shadow: 0 0 8px #ff7b72; }
+        .sev-HIGH { background: #ff9b5e !important; }
+        .sev-MEDIUM { background: #d29922 !important; }
+        .sev-LOW { background: #e3b341 !important; }
+        .sev-INFO { background: #58a6ff !important; }
+
+        /* DETAILS */
+        .detail-row { display: none; background: #0d1117; }
+        .detail-content { padding: 20px; border: 1px solid #30363d; border-top: none; color: #8b949e; border-radius: 0 0 8px 8px; margin: 0 5px 10px 5px; }
+        .arrow { font-size: 18px; color: #58a6ff; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>DORM <span class="brand-subtitle">VULNERABILITY SCANNER</span></h1>
+    
+    <div class="control-panel">
+        <div class="input-group">
+            <input type="text" id="targetInput" placeholder="Enter Target URL or IP (e.g., scanme.nmap.org)" value="scanme.nmap.org">
+            <div id="timerDisplay">00:00</div>
+            <button onclick="startScan()" id="scanBtn">START SCAN</button>
+        </div>
+        <div class="btn-group">
+            <button onclick="togglePlugins()" style="background:#1f6feb">⚙️ SELECT PLUGINS</button>
+            <button onclick="downloadReport()" style="background:#8957e5">📄 DOWNLOAD REPORT</button>
+        </div>
+
+        <div id="plugin-section">
+            <div class="plugin-grid" id="pluginGrid"></div>
+        </div>
+    </div>
+
+    <div class="chart-container"><canvas id="vulnChart"></canvas></div>
+
+    <table id="resultsTable">
+        <thead>
+            <tr>
+                <th width="100">SEVERITY</th>
+                <th width="60">CVSS</th>
+                <th>VULNERABILITY NAME</th>
+                <th>ENGINE</th>
+                <th>TARGET</th>
+                <th width="30"></th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+</div>
+
+<script>
+    let timerInterval, timerSeconds = 0, vulnCount = 0, scanResults = [];
+
+    const ctx = document.getElementById('vulnChart').getContext('2d');
+    let vulnChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'], datasets: [{ data: [0,0,0,0,0], backgroundColor: ['#ff7b72', '#ff9b5e', '#d29922', '#e3b341', '#58a6ff'], borderWidth: 0 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#c9d1d9' } } } }
+    });
+
+    window.onload = async () => {
+        const resp = await fetch('/plugins');
+        const plugins = await resp.json();
+        const grid = document.getElementById('pluginGrid');
+        plugins.forEach(p => { grid.innerHTML += `<label class="plugin-item"><input type="checkbox" class="plugin-check" value="${p}" checked> ${p}</label>`; });
+    };
+
+    function togglePlugins() { const s = document.getElementById('plugin-section'); s.style.display = s.style.display === 'block' ? 'none' : 'block'; }
+    function toggleDetail(id) { const row = document.getElementById('detail-' + id); row.style.display = row.style.display === 'table-row' ? 'none' : 'table-row'; }
+
+    // HTML REPORT GENERATION (ENGLISH)
+    function downloadReport() {
+        if (scanResults.length === 0) return alert("No results to export!");
+        const target = document.getElementById('targetInput').value;
+        const date = new Date().toLocaleString();
+        
+        let html = `<html><head><meta charset="UTF-8"><title>DORM Scan Report - ${target}</title><style>body{font-family:sans-serif;padding:30px;background:#f9f9f9;}table{width:100%;border-collapse:collapse;background:#fff;margin-top:20px;}th,td{border:1px solid #ddd;padding:12px;text-align:left;}th{background:#0d1117;color:#fff;}.CRITICAL{background:#ffebee;color:#c62828;}.HIGH{background:#fff3e0;color:#e65100;}.INFO{background:#e3f2fd;color:#0d47a1;}</style></head><body>`;
+        html += `<h1>DORM SECURITY REPORT</h1><p><strong>Target:</strong> ${target}</p><p><strong>Date:</strong> ${date}</p>`;
+        html += `<table><thead><tr><th>SEVERITY</th><th>CVSS</th><th>VULNERABILITY</th><th>DETAILS</th></tr></thead><tbody>`;
+        
+        scanResults.forEach(r => {
+            html += `<tr><td class="${r.Severity}">${r.Severity}</td><td>${r.CVSS}</td><td>${r.Name}</td><td>${r.Description}</td></tr>`;
+        });
+        html += `</tbody></table></body></html>`;
+        
+        const blob = new Blob([html], {type:"text/html"});
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `DORM_Report_${target}.html`;
+        link.click();
+    }
+
+    function startScan() {
+        const target = document.getElementById('targetInput').value;
+        const selected = Array.from(document.querySelectorAll('.plugin-check:checked')).map(c => c.value);
+        if(!target) return alert("Please enter a target!");
+        
+        document.getElementById('tableBody').innerHTML = '';
+        vulnCount = 0; scanResults = [];
+        const btn = document.getElementById('scanBtn');
+        btn.disabled = true; btn.innerText = "SCANNING...";
+
+        timerSeconds = 0; clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            timerSeconds++;
+            const m = Math.floor(timerSeconds/60).toString().padStart(2,'0');
+            const s = (timerSeconds%60).toString().padStart(2,'0');
+            document.getElementById('timerDisplay').innerText = `${m}:${s}`;
+        }, 1000);
+
+        const eventSource = new EventSource(`/scan?target=${target}&plugins=${selected.join(",")}`);
+
+        eventSource.onmessage = (e) => {
+            const data = JSON.parse(e.data);
+            if(data.Status === "DONE") { clearInterval(timerInterval); btn.disabled = false; btn.innerText = "START SCAN"; eventSource.close(); return; }
+
+            vulnCount++; scanResults.push(data);
+            const isCpp = data.Description.includes("Native Engine"); 
+            const badgeClass = "sev-" + data.Severity.toUpperCase();
+            
+            // Determine Engine Label (EDB, Fuzzer, Spider)
+            let engineLabel = 'Plugin';
+            if (data.Name.includes("Exploit")) engineLabel = 'EDB';
+            else if (data.Name.includes("Fuzzer")) engineLabel = 'Fuzzer';
+            else if (data.Name.includes("Spider")) engineLabel = 'Spider';
+            else if (isCpp) engineLabel = 'C++ Native';
+
+            const html = `
+                <tr class="vuln-row" onclick="toggleDetail(${vulnCount})">
+                    <td><span class="badge ${badgeClass}">${data.Severity}</span></td>
+                    <td style="font-weight:bold; color:#fff;">${data.CVSS.toFixed(1)}</td>
+                    <td style="color:#fff;">${data.Name}</td>
+                    <td style="color:#8b949e; font-size:0.9em;">${engineLabel}</td>
+                    <td>${data.Target.IP}:${data.Target.Port}</td>
+                    <td class="arrow">&#9662;</td>
+                </tr>
+                <tr class="detail-row" id="detail-${vulnCount}">
+                    <td colspan="6">
+                        <div class="detail-content">
+                            <strong style="color:#58a6ff">ANALYSIS:</strong><br>${data.Description.replace(/\n/g, '<br>')}<br><br>
+                            <strong style="color:#238636">SOLUTION:</strong><br>${data.Solution || "Apply security patches."}<br><br>
+                            <em style="font-size:0.8em">Reference: ${data.Reference || "N/A"}</em>
+                        </div>
+                    </td>
+                </tr>`;
+            document.getElementById('tableBody').insertAdjacentHTML('beforeend', html);
+            
+            // Chart Update
+            const idx = ['CRITICAL','HIGH','MEDIUM','LOW','INFO'].indexOf(data.Severity.toUpperCase());
+            if(idx !== -1) { vulnChart.data.datasets[0].data[idx]++; vulnChart.update(); }
+        };
+    }
+</script>
+</body>
+</html>
