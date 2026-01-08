@@ -61,7 +61,7 @@ DORM requires **Go 1.21+** and **Google Chrome** (for DOM Scanner).
 
 ```bash
 # 1. Clone the repository
-git clone [https://github.com/yourusername/dorm.git](https://github.com/yourusername/dorm.git)
+git clone 
 cd dorm
 
 # 2. Initialize the module
