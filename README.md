@@ -73,4 +73,4 @@ go get [github.com/jlaffaye/ftp](https://github.com/jlaffaye/ftp)
 go get golang.org/x/crypto/ssh
 
 # 4. Run DORM
-go run main.go
+go run .
