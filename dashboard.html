@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>DORM SCANNER - Dashboard</title>
+    <title>DORM SCANNER<title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { background-color: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; }
@@ -103,16 +103,29 @@
         const resp = await fetch('/plugins');
         const plugins = await resp.json();
         const grid = document.getElementById('pluginGrid');
-        plugins.forEach(p => { grid.innerHTML += `<label class="plugin-item"><input type="checkbox" class="plugin-check" value="${p}" checked> ${p}</label>`; });
+        plugins.forEach(p => { 
+            
+            grid.innerHTML += `<label class="plugin-item"><input type="checkbox" class="plugin-check" value="${escapeHtml(p)}" checked> ${escapeHtml(p)}</label>`; 
+        });
     };
 
     function togglePlugins() { const s = document.getElementById('plugin-section'); s.style.display = s.style.display === 'block' ? 'none' : 'block'; }
     function toggleDetail(id) { const row = document.getElementById('detail-' + id); row.style.display = row.style.display === 'table-row' ? 'none' : 'table-row'; }
 
-    // HTML REPORT GENERATION (ENGLISH)
+
+    function escapeHtml(text) {
+        if (!text) return text;
+
+        const div = document.createElement('div');
+        div.innerText = text;
+        return div.innerHTML;
+    }
+
+    // HTML REPORT GENERATION (ENGLISH & SANITIZED)
     function downloadReport() {
         if (scanResults.length === 0) return alert("No results to export!");
-        const target = document.getElementById('targetInput').value;
+        const rawTarget = document.getElementById('targetInput').value;
+        const target = escapeHtml(rawTarget); 
         const date = new Date().toLocaleString();
         
         let html = `<html><head><meta charset="UTF-8"><title>DORM Scan Report - ${target}</title><style>body{font-family:sans-serif;padding:30px;background:#f9f9f9;}table{width:100%;border-collapse:collapse;background:#fff;margin-top:20px;}th,td{border:1px solid #ddd;padding:12px;text-align:left;}th{background:#0d1117;color:#fff;}.CRITICAL{background:#ffebee;color:#c62828;}.HIGH{background:#fff3e0;color:#e65100;}.INFO{background:#e3f2fd;color:#0d47a1;}</style></head><body>`;
@@ -120,14 +133,15 @@
         html += `<table><thead><tr><th>SEVERITY</th><th>CVSS</th><th>VULNERABILITY</th><th>DETAILS</th></tr></thead><tbody>`;
         
         scanResults.forEach(r => {
-            html += `<tr><td class="${r.Severity}">${r.Severity}</td><td>${r.CVSS}</td><td>${r.Name}</td><td>${r.Description}</td></tr>`;
+            
+            html += `<tr><td class="${escapeHtml(r.Severity)}">${escapeHtml(r.Severity)}</td><td>${r.CVSS}</td><td>${escapeHtml(r.Name)}</td><td>${escapeHtml(r.Description)}</td></tr>`;
         });
         html += `</tbody></table></body></html>`;
         
         const blob = new Blob([html], {type:"text/html"});
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = `DORM_Report_${target}.html`;
+        link.download = `DORM_Report_Cleaned.html`;
         link.click();
     }
 
@@ -149,7 +163,7 @@
             document.getElementById('timerDisplay').innerText = `${m}:${s}`;
         }, 1000);
 
-        const eventSource = new EventSource(`/scan?target=${target}&plugins=${selected.join(",")}`);
+        const eventSource = new EventSource(`/scan?target=${encodeURIComponent(target)}&plugins=${encodeURIComponent(selected.join(","))}`);
 
         eventSource.onmessage = (e) => {
             const data = JSON.parse(e.data);
@@ -157,7 +171,7 @@
 
             vulnCount++; scanResults.push(data);
             const isCpp = data.Description.includes("Native Engine"); 
-            const badgeClass = "sev-" + data.Severity.toUpperCase();
+            const badgeClass = "sev-" + escapeHtml(data.Severity.toUpperCase());
             
             // Determine Engine Label (EDB, Fuzzer, Spider)
             let engineLabel = 'Plugin';
@@ -166,21 +180,30 @@
             else if (data.Name.includes("Spider")) engineLabel = 'Spider';
             else if (isCpp) engineLabel = 'C++ Native';
 
+
+            const safeName = escapeHtml(data.Name);
+            const safeSeverity = escapeHtml(data.Severity);
+            const safeIP = escapeHtml(data.Target.IP);
+            const safePort = escapeHtml(data.Target.Port.toString());
+            const safeDescription = escapeHtml(data.Description).replace(/\n/g, '<br>');
+            const safeSolution = escapeHtml(data.Solution || "Apply security patches.");
+            const safeReference = escapeHtml(data.Reference || "N/A");
+
             const html = `
                 <tr class="vuln-row" onclick="toggleDetail(${vulnCount})">
-                    <td><span class="badge ${badgeClass}">${data.Severity}</span></td>
+                    <td><span class="badge ${badgeClass}">${safeSeverity}</span></td>
                     <td style="font-weight:bold; color:#fff;">${data.CVSS.toFixed(1)}</td>
-                    <td style="color:#fff;">${data.Name}</td>
+                    <td style="color:#fff;">${safeName}</td>
                     <td style="color:#8b949e; font-size:0.9em;">${engineLabel}</td>
-                    <td>${data.Target.IP}:${data.Target.Port}</td>
+                    <td>${safeIP}:${safePort}</td>
                     <td class="arrow">&#9662;</td>
                 </tr>
                 <tr class="detail-row" id="detail-${vulnCount}">
                     <td colspan="6">
                         <div class="detail-content">
-                            <strong style="color:#58a6ff">ANALYSIS:</strong><br>${data.Description.replace(/\n/g, '<br>')}<br><br>
-                            <strong style="color:#238636">SOLUTION:</strong><br>${data.Solution || "Apply security patches."}<br><br>
-                            <em style="font-size:0.8em">Reference: ${data.Reference || "N/A"}</em>
+                            <strong style="color:#58a6ff">ANALYSIS:</strong><br>${safeDescription}<br><br>
+                            <strong style="color:#238636">SOLUTION:</strong><br>${safeSolution}<br><br>
+                            <em style="font-size:0.8em">Reference: ${safeReference}</em>
                         </div>
                     </td>
                 </tr>`;
