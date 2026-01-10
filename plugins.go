@@ -41,10 +41,32 @@ func getURL(target ScanTarget, path string) string {
 
 func getClient() *http.Client {
 	return &http.Client{
-		Timeout:   5 * time.Second,
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 20,
+		},
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return http.ErrUseLastResponse
+			}
+
+			initialHost := via[0].URL.Hostname()
+			newHost := req.URL.Hostname()
+
+			initialBase := strings.TrimPrefix(initialHost, "www.")
+			newBase := strings.TrimPrefix(newHost, "www.")
+
+			if initialBase != "" && newBase != "" && !strings.Contains(newBase, initialBase) {
+				return http.ErrUseLastResponse
+			}
+
+			return nil
+		},
 	}
 }
+
 
 func min(a, b int) int {
 	if a < b {
@@ -2437,4 +2459,5 @@ func GetPluginInventory() []string {
 		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
 	}
 }
+
 
