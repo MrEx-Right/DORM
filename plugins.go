@@ -1252,32 +1252,69 @@ func (p *PrometheusPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 36. SSTI (Server Side Template Injection)
+// 36. SSTI (Server Side Template Injection) - v2
 type SSTIPlugin struct{}
 
-func (p *SSTIPlugin) Name() string { return "SSTI Test" }
+func (p *SSTIPlugin) Name() string { return "SSTI Test (Advanced & Verified)" }
+
 func (p *SSTIPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	payload := "{{7*7}}"
-	resp, err := getClient().Get(getURL(target, "/?q="+payload))
-	if err == nil {
-		defer resp.Body.Close()
-		buf := make([]byte, 2048)
-		resp.Body.Read(buf)
-		if strings.Contains(string(buf), "49") && !strings.Contains(string(buf), "7*7") {
-			return &Vulnerability{
-				Target: target, Name: "Template Injection (SSTI)", Severity: "CRITICAL", CVSS: 9.0,
-				Description: "Template engine is executing code.",
-				Solution:    "Sanitize inputs.",
-				Reference:   "OWASP SSTI",
+
+	client := getClient()
+
+	// Unique mathematical operation to minimize false positives.
+	// Operation: 1337 * 1337 = 1787569
+	const num1, num2 = 1337, 1337
+	const expectedResult = "1787569"
+
+	// List of common template engine syntaxes
+	payloads := []struct {
+		Engine  string
+		Pattern string
+	}{
+		{"Jinja2/Twig (Python/PHP)", "{{%d*%d}}"},
+		{"Smarty/Mako (PHP/Python)", "${%d*%d}"},
+		{"FreeMarker/Velocity (Java)", "#{%d*%d}"},
+		{"ERB (Ruby)", "<%%= %d*%d %%>"},
+	}
+
+	for _, entry := range payloads {
+		payloadStr := fmt.Sprintf(entry.Pattern, num1, num2)
+		encodedPayload := url.QueryEscape(payloadStr)
+		targetURL := getURL(target, "/?q="+encodedPayload)
+
+		resp, err := client.Get(targetURL)
+		if err == nil {
+			defer resp.Body.Close()
+
+			// Read response body (limited to 4KB for performance)
+			buf := make([]byte, 4096)
+			n, _ := resp.Body.Read(buf)
+			body := string(buf[:n])
+
+			// Verification Logic:
+			// 1. Check if the mathematical result exists in the response.
+			// 2. Ensure the raw payload is NOT reflected (avoids false positives from simple reflection).
+			hasResult := strings.Contains(body, expectedResult)
+			hasRawPayload := strings.Contains(body, payloadStr)
+
+			if hasResult && !hasRawPayload {
+				return &Vulnerability{
+					Target:      target,
+					Name:        fmt.Sprintf("Template Injection (SSTI) - %s", entry.Engine),
+					Severity:    "CRITICAL",
+					CVSS:        9.9,
+					Description: fmt.Sprintf("Template engine successfully executed code.\nPayload: %s\nResult: %s", payloadStr, expectedResult),
+					Solution:    "Sanitize user inputs and enforce strict context isolation in templates.",
+					Reference:   "OWASP SSTI",
+				}
 			}
 		}
 	}
 	return nil
 }
-
 // 37. HSTS CHECK
 type HSTSPlugin struct{}
 
@@ -2459,5 +2496,6 @@ func GetPluginInventory() []string {
 		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
 	}
 }
+
 
 
