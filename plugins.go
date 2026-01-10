@@ -971,28 +971,76 @@ func (p *ShellshockPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 24. LARAVEL DEBUG MODE
+// 24. LARAVEL DEBUG MODE (Advanced & Verified)
 type LaravelDebugPlugin struct{}
 
-func (p *LaravelDebugPlugin) Name() string { return "Laravel Debug Mode" }
+func (p *LaravelDebugPlugin) Name() string { return "Laravel Debug Mode / Ignition (Verified)" }
+
 func (p *LaravelDebugPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	// Request a non-random page to trigger error
-	resp, err := getClient().Get(getURL(target, "/_ignition/health-check"))
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
 
-	if strings.Contains(string(body), "Whoops! There was an error") || strings.Contains(string(body), "ignition") {
-		return &Vulnerability{Target: target, Name: "Laravel Debug Mode Enabled", Severity: "HIGH", CVSS: 7.5, Description: "Code errors and stack trace exposed.", Solution: "Set APP_DEBUG=false.", Reference: ""}
+	client := getClient()
+
+	ignitionURL := getURL(target, "/_ignition/health-check")
+	respIgnition, err := client.Get(ignitionURL)
+
+	if err == nil {
+		defer respIgnition.Body.Close()
+		bodyBytes, _ := io.ReadAll(respIgnition.Body)
+		bodyString := string(bodyBytes)
+
+		// Verification: Look for specific JSON keys used by Facade/Ignition.
+		// "can_execute_commands": true indicates a high-risk RCE vector.
+		if strings.Contains(bodyString, "\"can_execute_commands\"") {
+			severity := "HIGH"
+			desc := "Laravel Ignition health check exposed. Debug information available."
+
+			if strings.Contains(bodyString, "\"can_execute_commands\":true") || strings.Contains(bodyString, "\"can_execute_commands\": true") {
+				severity = "CRITICAL" // This is directly RCE vulnerable
+				desc = "Laravel Ignition exposed with command execution enabled (CVE-2021-3129)."
+			}
+
+			return &Vulnerability{
+				Target:      target,
+				Name:        "Laravel Ignition Debug Page",
+				Severity:    severity,
+				CVSS:        9.8, // Critical if RCE is possible
+				Description: desc,
+				Solution:    "Disable 'APP_DEBUG' in .env and restrict access to '_ignition' endpoints.",
+				Reference:   "CVE-2021-3129",
+			}
+		}
 	}
+
+	errorURL := getURL(target, "/dorm-404-test-"+fmt.Sprintf("%d", time.Now().Unix()))
+	respError, err := client.Get(errorURL)
+
+	if err == nil {
+		defer respError.Body.Close()
+		bodyBytes, _ := io.ReadAll(respError.Body)
+		bodyString := string(bodyBytes)
+
+		isIgnition := strings.Contains(bodyString, "window.ignition")
+		isSymfonyDump := strings.Contains(bodyString, "sf-dump")
+		isFacade := strings.Contains(bodyString, "facade/ignition")
+
+		if isIgnition || (isSymfonyDump && isFacade) {
+			return &Vulnerability{
+				Target:      target,
+				Name:        "Laravel Debug Mode Enabled (Stack Trace)",
+				Severity:    "MEDIUM",
+				CVSS:        5.3,
+				Description: "Application reveals detailed stack traces and environment variables on error pages.",
+				Solution:    "Set 'APP_DEBUG=false' in your production environment configuration.",
+				Reference:   "OWASP Information Exposure",
+			}
+		}
+	}
+
 	return nil
 }
-
 // 25. DOCKER API EXPOSURE
 type DockerAPIPlugin struct{}
 
@@ -2496,6 +2544,7 @@ func GetPluginInventory() []string {
 		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
 	}
 }
+
 
 
 
