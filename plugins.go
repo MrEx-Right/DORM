@@ -1470,23 +1470,98 @@ func (p *HSTSPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 38. TOMCAT MANAGER
+// 38. TOMCAT MANAGER (Fingerprinting & Default Creds) - v2
 type TomcatManagerPlugin struct{}
 
-func (p *TomcatManagerPlugin) Name() string { return "Tomcat Manager Panel" }
+func (p *TomcatManagerPlugin) Name() string { return "Tomcat Manager Panel (Verified)" }
+
 func (p *TomcatManagerPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	resp, err := getClient().Get(getURL(target, "/manager/html"))
+
+	client := getClient()
+	targetPath := "/manager/html"
+	fullURL := getURL(target, targetPath)
+
+	// Step 1: Initial Probe (Check for existence)
+	req, _ := http.NewRequest("GET", fullURL, nil)
+	resp, err := client.Do(req)
+
 	if err == nil {
 		defer resp.Body.Close()
-		if resp.StatusCode == 401 || resp.StatusCode == 200 {
-			return &Vulnerability{Target: target, Name: "Tomcat Manager Panel", Severity: "HIGH", CVSS: 7.0, Description: "Tomcat Manager panel is accessible.", Solution: "Block external access.", Reference: ""}
+
+		// Verification Logic 1: Fingerprint the Realm
+		// Tomcat usually sends: WWW-Authenticate: Basic realm="Tomcat Manager Application"
+		authHeader := resp.Header.Get("WWW-Authenticate")
+		isTomcat := strings.Contains(authHeader, "Tomcat Manager") || strings.Contains(authHeader, "Tomcat")
+
+		// Also check body content if status is 200 (Unprotected)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyString := string(bodyBytes)
+		isUnprotected := resp.StatusCode == 200 && strings.Contains(bodyString, "Tomcat Web Application Manager")
+
+		if isUnprotected {
+			// OPEN ACCESS -> CRITICAL
+			return &Vulnerability{
+				Target:      target,
+				Name:        "Tomcat Manager (Unauthenticated)",
+				Severity:    "CRITICAL",
+				CVSS:        9.8,
+				Description: "Tomcat Manager panel is accessible without authentication.",
+				Solution:    "Enable authentication or restrict access by IP.",
+				Reference:   "OWASP Misconfiguration",
+			}
+		}
+
+		if resp.StatusCode == 401 && isTomcat {
+
+			creds := []struct {
+				User string
+				Pass string
+			}{
+				{"tomcat", "s3cret"},
+				{"admin", "admin"},
+				{"manager", "manager"},
+			}
+
+			for _, cred := range creds {
+				reqAuth, _ := http.NewRequest("GET", fullURL, nil)
+				reqAuth.SetBasicAuth(cred.User, cred.Pass)
+
+				respAuth, errAuth := client.Do(reqAuth)
+				if errAuth == nil {
+					respAuth.Body.Close()
+					// If we get 200 OK after auth, we hacked it.
+					if respAuth.StatusCode == 200 {
+						return &Vulnerability{
+							Target:      target,
+							Name:        "Tomcat Manager (Default Credentials)",
+							Severity:    "CRITICAL",
+							CVSS:        9.8, // RCE is guaranteed via WAR upload
+							Description: fmt.Sprintf("Access gained using default credentials.\nUser: %s\nPass: %s", cred.User, cred.Pass),
+							Solution:    "Change default passwords in tomcat-users.xml immediately.",
+							Reference:   "CVE-1999-0508", // Generic Default Creds
+						}
+					}
+				}
+			}
+
+			// If brute force fails but panel is exposed:
+			return &Vulnerability{
+				Target:      target,
+				Name:        "Tomcat Manager Panel Exposed",
+				Severity:    "HIGH",
+				CVSS:        7.5,
+				Description: "Tomcat Manager login panel is exposed to the internet.",
+				Solution:    "Restrict access to the /manager endpoint via firewall/IP whitelisting.",
+				Reference:   "OWASP Security Misconfiguration",
+			}
 		}
 	}
 	return nil
 }
+
 
 // 39. SENSITIVE CONFIGS
 type SensitiveConfigPlugin struct{}
@@ -2665,6 +2740,7 @@ func GetPluginInventory() []string {
 		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
 	}
 }
+
 
 
 
