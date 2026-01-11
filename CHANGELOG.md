@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.0.3] - 2026-01-11
+### 🎯 Enterprise Verification & Proof-of-Concept Update
+- **F5 BIG-IP RCE (Hardened):** Switched detection strategy from `fileSave.jsp` to `directoryList.jsp`. Vulnerability is now verified by listing internal config files (`web.xml`), eliminating WAF false positives.
+- **Spring Boot Actuator (Hardened):** Implemented strict JSON fingerprinting. The scanner now validates `propertySources` and `systemProperties` keys instead of relying on HTTP 200 OK status.
+- **Spring Cloud Gateway (Hardened):** Enhanced CVE-2022-22947 detection. Verifies the presence of `predicate` and `route_id` in JSON responses. Severity bumped to CVSS 10.0.
+- **Backup File Discovery (Smart):** Added **"Magic Bytes"** verification. The engine now checks file headers (e.g., `PK` for Zip, `1F 8B` for Gzip) to prevent "Soft 404" HTML pages from being flagged as backups.
+- **Tomcat Manager (Aggressive):** Added Realm fingerprinting (`WWW-Authenticate`) and automatic default credential testing (`tomcat:s3cret`). Now distinguishes between "Exposed Panel" (High) and "Pwned Panel" (Critical).
+
 ## [v1.0.2] - 2026-01-10
 ### 🛡️ Security & Accuracy Update
 - **Security Fix:** Patched a stored Cross-Site Scripting (XSS) vulnerability in the Web Dashboard. All scan results are now properly sanitized before rendering.
