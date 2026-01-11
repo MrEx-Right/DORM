@@ -737,22 +737,53 @@ func (p *LFIPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 14. SPRING BOOT
+// 14. SPRING BOOT ACTUATOR (Information Disclosure) - v2
 type SpringBootPlugin struct{}
 
-func (p *SpringBootPlugin) Name() string { return "Spring Boot Actuator" }
+func (p *SpringBootPlugin) Name() string { return "Spring Boot Actuator (Verified)" }
+
 func (p *SpringBootPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	resp, err := getClient().Get(getURL(target, "/actuator/env"))
-	if err == nil && resp.StatusCode == 200 {
-		resp.Body.Close()
-		return &Vulnerability{Target: target, Name: "Spring Boot Actuator", Severity: "CRITICAL", CVSS: 9.0, Description: "Management panel exposed.", Solution: "Close access.", Reference: ""}
+
+	client := getClient()
+
+	// Check common endpoints for both Spring Boot 1.x and 2.x+
+	endpoints := []string{
+		"/actuator/env", // Spring Boot 2.x+ (Most common)
+		"/env",          // Spring Boot 1.x (Legacy)
+	}
+
+	for _, endpoint := range endpoints {
+		fullURL := getURL(target, endpoint)
+		resp, err := client.Get(fullURL)
+
+		if err == nil {
+			// Read body to verify content
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close() // Close immediately to avoid leaks in loop
+			bodyString := string(bodyBytes)
+
+			isVerified := resp.StatusCode == 200 && (strings.Contains(bodyString, "\"propertySources\"") ||
+				strings.Contains(bodyString, "\"systemProperties\"") ||
+				(strings.Contains(bodyString, "\"activeProfiles\"") && strings.Contains(bodyString, "server.port")))
+
+			if isVerified {
+				return &Vulnerability{
+					Target:      target,
+					Name:        "Spring Boot Actuator Exposed",
+					Severity:    "CRITICAL",
+					CVSS:        9.8,
+					Description: fmt.Sprintf("Sensitive configuration and environment variables exposed via %s.\nSignature verified: Spring Boot JSON structure detected.", endpoint),
+					Solution:    "Restrict access to Actuator endpoints using Spring Security or block external access via firewall.",
+					Reference:   "OWASP Security Misconfiguration",
+				}
+			}
+		}
 	}
 	return nil
 }
-
 // 15. GIT CONFIG
 type GitConfigPlugin struct{}
 
@@ -2558,6 +2589,7 @@ func GetPluginInventory() []string {
 		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
 	}
 }
+
 
 
 
