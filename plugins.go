@@ -804,38 +804,95 @@ func (p *GitConfigPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 16. BACKUP FILE
+// 16. BACKUP FILE DISCLOSURE (Verified via Magic Bytes)
 type BackupFilePlugin struct{}
 
-func (p *BackupFilePlugin) Name() string { return "Backup File" }
+func (p *BackupFilePlugin) Name() string { return "Sensitive Backup File Discovery (Verified)" }
+
 func (p *BackupFilePlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	resp, err := getClient().Get(getURL(target, "/index.php.bak"))
-	if err == nil && resp.StatusCode == 200 {
-		resp.Body.Close()
-		return &Vulnerability{Target: target, Name: "Backup File Found", Severity: "HIGH", CVSS: 7.0, Description: "Backup file disclosure.", Solution: "Delete it.", Reference: ""}
-	}
-	return nil
-}
 
-// 17. APACHE STATUS
-type ApacheStatusPlugin struct{}
+	client := getClient()
 
-func (p *ApacheStatusPlugin) Name() string { return "Apache Server Status" }
-func (p *ApacheStatusPlugin) Run(target ScanTarget) *Vulnerability {
-	if !isWebPort(target.Port) {
-		return nil
+	// High-Probability Target List
+	// We don't fuzz everything to keep it fast. We check the "Deadly Dozen".
+	commonBackups := []string{
+		"/index.php.bak",
+		"/config.php.bak",
+		"/wp-config.php.bak",
+		"/web.config.old",
+		"/backup.zip",
+		"/backup.sql",
+		"/www.zip",
+		"/site.tar.gz",
+		"/.env.save",
 	}
-	resp, err := getClient().Get(getURL(target, "/server-status"))
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode == 200 && strings.Contains(string(body), "Apache Server Status") {
-		return &Vulnerability{Target: target, Name: "Apache Status Page", Severity: "LOW", CVSS: 3.0, Description: "Server status is accessible.", Solution: "Disable it.", Reference: ""}
+
+	for _, path := range commonBackups {
+		fullURL := getURL(target, path)
+		resp, err := client.Get(fullURL)
+
+		if err == nil {
+			defer resp.Body.Close()
+
+			// 1. Status Check: Must be 200 OK.
+			if resp.StatusCode != 200 {
+				continue
+			}
+
+			// Read first 512 bytes for signature verification
+			// We don't need the whole file, just the header.
+			header := make([]byte, 512)
+			n, _ := resp.Body.Read(header)
+			content := string(header[:n])
+			
+			isVerified := false
+			fileType := "Unknown"
+
+			// 2. MAGIC BYTES & SIGNATURE VERIFICATION
+			// Prevent "Soft 404" False Positives (HTML pages returning 200 OK)
+
+			if strings.HasSuffix(path, ".zip") {
+				// ZIP files must start with "PK" (50 4B)
+				if strings.HasPrefix(content, "PK") {
+					isVerified = true
+					fileType = "ZIP Archive"
+				}
+			} else if strings.HasSuffix(path, ".tar.gz") || strings.HasSuffix(path, ".tgz") {
+				// GZIP header check (1F 8B)
+				if len(content) > 2 && header[0] == 0x1f && header[1] == 0x8b {
+					isVerified = true
+					fileType = "GZIP Archive"
+				}
+			} else if strings.HasSuffix(path, ".sql") {
+				// SQL dumps usually contain statements
+				if strings.Contains(content, "INSERT INTO") || strings.Contains(content, "CREATE TABLE") || strings.Contains(content, "-- MySQL dump") {
+					isVerified = true
+					fileType = "SQL Database Dump"
+				}
+			} else if strings.HasSuffix(path, ".php.bak") || strings.HasSuffix(path, ".old") || strings.HasSuffix(path, ".save") {
+				// Source code backups must contain opening tags or config keys
+				// Also ensure it's NOT an HTML error page (Soft 404)
+				if strings.Contains(content, "<?php") && !strings.Contains(strings.ToLower(content), "<html") {
+					isVerified = true
+					fileType = "Source Code Backup"
+				}
+			}
+
+			if isVerified {
+				return &Vulnerability{
+					Target:      target,
+					Name:        fmt.Sprintf("Sensitive Backup File Found (%s)", fileType),
+					Severity:    "HIGH",
+					CVSS:        7.5,
+					Description: fmt.Sprintf("A publicly accessible backup file was discovered and verified.\nFile: %s\nType: %s", path, fileType),
+					Solution:    "Remove backup files from the public web directory or restrict access via web server configuration.",
+					Reference:   "OWASP Sensitive Data Exposure",
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -2608,6 +2665,7 @@ func GetPluginInventory() []string {
 		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
 	}
 }
+
 
 
 
