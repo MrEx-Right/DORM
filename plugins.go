@@ -1943,22 +1943,41 @@ func (p *DockerRegistryPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 54. SPRING CLOUD GATEWAY RCE
+// 54. SPRING CLOUD GATEWAY RCE (CVE-2022-22947) - v2
 type SpringCloudPlugin struct{}
 
-func (p *SpringCloudPlugin) Name() string { return "Spring Cloud Gateway RCE" }
+func (p *SpringCloudPlugin) Name() string { return "Spring Cloud Gateway RCE (Verified)" }
+
 func (p *SpringCloudPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	resp, err := getClient().Get(getURL(target, "/actuator/gateway/routes"))
-	if err == nil && resp.StatusCode == 200 {
+
+	client := getClient()
+
+	targetEndpoint := "/actuator/gateway/routes"
+	fullURL := getURL(target, targetEndpoint)
+
+	resp, err := client.Get(fullURL)
+	if err == nil {
 		defer resp.Body.Close()
-		return &Vulnerability{
-			Target: target, Name: "Spring Gateway Actuator", Severity: "HIGH", CVSS: 9.0,
-			Description: "Actuator route endpoint exposed, RCE possible.",
-			Solution:    "Close the endpoint.",
-			Reference:   "CVE-2022-22947",
+
+		// Read response body for content verification (Fingerprinting)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyString := string(bodyBytes)
+
+		if resp.StatusCode == 200 {
+			if strings.Contains(bodyString, "\"predicate\"") && (strings.Contains(bodyString, "\"filters\"") || strings.Contains(bodyString, "\"route_id\"")) {
+				return &Vulnerability{
+					Target:      target,
+					Name:        "Spring Cloud Gateway RCE (Exposed Actuator)",
+					Severity:    "CRITICAL",
+					CVSS:        10.0, // CVE-2022-22947 is max severity
+					Description: "Spring Cloud Gateway Actuator endpoint is exposed and unauthenticated.\nVerified Signature: Valid Route JSON structure detected.",
+					Solution:    "Disable the gateway actuator endpoint (`management.endpoint.gateway.enabled=false`) or secure it with authentication.",
+					Reference:   "CVE-2022-22947",
+				}
+			}
 		}
 	}
 	return nil
@@ -2589,6 +2608,7 @@ func GetPluginInventory() []string {
 		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
 	}
 }
+
 
 
 
