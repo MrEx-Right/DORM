@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid" //go get github.com/google/uuid
+	"github.com/google/uuid"
 )
 
 // ScanRecord represents a single execution of the scanner.
@@ -155,3 +155,4 @@ func NewScanRecord(target string) ScanRecord {
 		Vulnerabilities: []*Vulnerability{},
 	}
 }
+
