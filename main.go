@@ -164,6 +164,17 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// --- STORAGE INTEGRATION START (1/2) ---
+	// Initialize a new scan record and save it as "Running"
+	record := NewScanRecord(targetHost)
+	DB.SaveScan(record)
+
+	// We need a slice to capture vulnerabilities as they are found,
+	// because SSE streams them one by one, but Storage needs the full list.
+	var foundVulns []*Vulnerability
+	var muVulns sync.Mutex
+	// --- STORAGE INTEGRATION END ---
+
 	// STEP 1: SMART PORT DISCOVERY (FAST PRE-SCAN)
 	fmt.Printf("[*] %s is being scanned...\n", targetHost)
 
@@ -212,9 +223,8 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	engine.AddPlugin(&BruteForcePlugin{})  // Brute Force
 	engine.AddPlugin(&SpiderPlugin{})      // Spider
 	engine.AddPlugin(&EDBPlugin{})         // Exploit-DB
-	// engine.AddPlugin(&FuzzerPlugin{})   // Fuzzer (Ensure this struct exists in your code or uncomment if added)
+	engine.AddPlugin(&FuzzerPlugin{})      // Fuzzer
 
-	engine.AddPlugin(&PortCheckPlugin{})
 	engine.AddPlugin(&BannerGrabPlugin{})
 	engine.AddPlugin(&HTTPHeaderPlugin{})
 	engine.AddPlugin(&SSLCheckPlugin{})
@@ -291,12 +301,27 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	engine.AddPlugin(&GitLabPlugin{})
 	engine.AddPlugin(&NginxTraversalPlugin{})
 
+	engine.AddPlugin(&SSRFMetadataPlugin{})
+	engine.AddPlugin(&JWTWeaknessPlugin{})
+	engine.AddPlugin(&StrutsPlugin{})
+	engine.AddPlugin(&CitrixPlugin{})
+	engine.AddPlugin(&NoSQLPlugin{})
+	engine.AddPlugin(&ConfluencePlugin{})
+	engine.AddPlugin(&TerraformPlugin{})
+	engine.AddPlugin(&WebSocketPlugin{})
+	engine.AddPlugin(&TeamCityPlugin{})
+	engine.AddPlugin(&ShadowAPIPlugin{})
+
 	// Apply User Filters
 	engine.SetFilter(selectedPluginsStr)
 
 	if len(openPorts) == 0 {
 		fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
 		flusher.Flush()
+		// Even if no ports found, update record to completed
+		record.Status = "Completed"
+		record.EndTime = time.Now()
+		DB.UpdateScan(record.ID, record)
 		return
 	}
 
@@ -304,13 +329,39 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		engine.AddTarget(targetHost, p)
 	}
 
+	// Capture and Stream Findings
 	engine.OnFind = func(v *Vulnerability) {
+		// 1. Send to Frontend via SSE
 		data, _ := json.Marshal(v)
 		fmt.Fprintf(w, "data: %s\n\n", data)
 		flusher.Flush()
+
+		// 2. Capture for Database Storage
+		muVulns.Lock()
+		foundVulns = append(foundVulns, v)
+		muVulns.Unlock()
 	}
 
 	engine.Start()
+
+	// --- STORAGE INTEGRATION START (2/2) ---
+	// Update the record with results and finalize status
+	record.EndTime = time.Now()
+	record.Status = "Completed"
+	record.Vulnerabilities = foundVulns
+	record.TotalVulns = len(foundVulns)
+
+	// Calculate severity statistics
+	stats := make(map[string]int)
+	for _, v := range foundVulns {
+		stats[v.Severity]++
+	}
+	record.SeverityStats = stats
+
+	// Save final state to DB
+	DB.UpdateScan(record.ID, record)
+	// --- STORAGE INTEGRATION END ---
+
 	fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
 	flusher.Flush()
 }
@@ -328,18 +379,66 @@ type CPPScanResult struct {
 	Banner      string  `json:"Banner"`
 }
 
+// --- HISTORY API HANDLERS ---
+
+// handleHistory returns the full list of past scans as JSON.
+func handleHistory(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+
+	records, err := DB.GetAll()
+	if err != nil {
+		http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(records)
+}
+
+// handleDelete removes a specific scan record by ID.
+func handleDelete(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "Missing 'id' parameter", http.StatusBadRequest)
+		return
+	}
+
+	err := DB.DeleteScan(id)
+	if err != nil {
+		http.Error(w, "Failed to delete: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Scan deleted successfully"))
+}
+
 func main() {
+	// 1. Initialize the Database (Auto-creates scans.json)
+	InitDB("scans.json")
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "dashboard.html")
 	})
 	http.HandleFunc("/scan", handleScan)
 	http.HandleFunc("/plugins", handlePluginList)
 
+	// 2. Register History API Routes
+	http.HandleFunc("/api/history", handleHistory)       // GET: List all scans
+	http.HandleFunc("/api/history/delete", handleDelete) // POST: Delete a scan by ID
+
 	port := ":8080"
 	url := "http://localhost" + port
 
 	fmt.Println("===========================================")
-	fmt.Println("   DORM SCANNER v1.0.3      ")
+	fmt.Println("   DORM SCANNER v1.1.0 (Enterprise)        ")
 	fmt.Println("===========================================")
 	fmt.Printf("[*] Server Active: %s\n", url)
 
@@ -352,4 +451,3 @@ func main() {
 		fmt.Println("ERROR:", err)
 	}
 }
-
