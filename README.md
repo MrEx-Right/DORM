@@ -46,8 +46,8 @@ Unlike traditional scanners, DORM features a hybrid engine that utilizes **Headl
 - **📚 Exploit-DB Integration:** Loads the entire Exploit Database into RAM for instant service version matching.
 - **🔓 Brute Force (Mini-Hydra):** Supports dictionary attacks on SSH and FTP.
 
-### 🛡️ 70+ Attack Modules
-DORM comes with over 70 specialized plugins including:
+### 🛡️ 80+ Attack Modules
+DORM comes with over 80 specialized plugins including:
 - **Injection:** SQLi (Blind/Time), XSS (Reflected/DOM), SSTI, CRLF, Host Header.
 - **Cloud & DevOps:** Docker API, Kubernetes Kubelet, AWS/Google Key Leaks, S3 Buckets.
 - **Critical CVEs:** Log4Shell, Spring4Shell, Drupalgeddon2, F5 BIG-IP TMUI.
@@ -71,6 +71,7 @@ go mod init DORM
 go get [github.com/chromedp/chromedp](https://github.com/chromedp/chromedp)
 go get [github.com/jlaffaye/ftp](https://github.com/jlaffaye/ftp)
 go get golang.org/x/crypto/ssh
+go get github.com/google/uuid
 
 # 4. Run DORM
 go run .
