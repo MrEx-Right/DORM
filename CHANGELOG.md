@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.1.0] - 2026-01-13
+### 🧠 Persistence, Reporting & Enterprise Logic Update
+- **Scan Persistence Engine (New):** Implemented a local JSON-based storage system (`storage.go`). The scanner now automatically saves scan history, enabling retrospective analysis and data persistence across sessions.
+- **Enterprise PDF Reporting (Client-Side):** Integrated `jspdf` and `autotable` for generating executive summaries. Reports now feature severity-based color coding (Critical/Red, High/Orange) and auto-formatted tables.
+- **Dashboard Logic (Refactored):** Introduced a Sidebar layout with "New Scan" and "History" views. Added real-time status tracking (Running/Completed) to the interface.
+- **10x Enterprise Plugins (Logic Expansion):** Added high-impact modules targeting cloud and CI/CD stacks: `SSRF Cloud Metadata` (AWS/GCP), `Terraform State Exposure`, `TeamCity Auth Bypass`, `Citrix ADC Traversal`, and `WebSocket Hijacking`.
+- **Core Stability (Fix):** Resolved `strings.Header` type mismatch in Citrix module and cleaned up unused payload variables in SSRF module. Added missing `google/uuid` dependency.
+
 ## [v1.0.3] - 2026-01-11
 ### 🎯 Enterprise Verification & Proof-of-Concept Update
 - **F5 BIG-IP RCE (Hardened):** Switched detection strategy from `fileSave.jsp` to `directoryList.jsp`. Vulnerability is now verified by listing internal config files (`web.xml`), eliminating WAF false positives.
