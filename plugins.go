@@ -39,34 +39,6 @@ func getURL(target ScanTarget, path string) string {
 	return fmt.Sprintf("%s://%s:%d%s", proto, target.IP, target.Port, path)
 }
 
-func getClient() *http.Client {
-	return &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 20,
-		},
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 10 {
-				return http.ErrUseLastResponse
-			}
-
-			initialHost := via[0].URL.Hostname()
-			newHost := req.URL.Hostname()
-
-			initialBase := strings.TrimPrefix(initialHost, "www.")
-			newBase := strings.TrimPrefix(newHost, "www.")
-
-			if initialBase != "" && newBase != "" && !strings.Contains(newBase, initialBase) {
-				return http.ErrUseLastResponse
-			}
-
-			return nil
-		},
-	}
-}
-
 func min(a, b int) int {
 	if a < b {
 		return a
