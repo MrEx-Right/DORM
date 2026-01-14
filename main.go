@@ -100,6 +100,12 @@ func (e *Engine) Start() {
 					}
 				}
 
+				// --- [RATE LIMIT KORUMASI] ---
+				// Her bir worker işlem yapmadan önce 300ms bekler.
+				// Bu sayede sunucuyu boğmadan (DoS yapmadan) tarama yapar.
+				time.Sleep(300 * time.Millisecond)
+				// -----------------------------
+
 				vuln := job.Plugin.Run(job.Target)
 				if vuln != nil {
 					e.mu.Lock()
@@ -156,6 +162,16 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	targetHost := r.URL.Query().Get("target")
 	selectedPluginsStr := r.URL.Query().Get("plugins")
 
+	rotateParam := r.URL.Query().Get("rotateUA")
+
+	if rotateParam == "true" {
+		GlobalRotateUA = true
+	} else {
+		GlobalRotateUA = false
+	}
+	// ----------------------------------
+
+	// 3. VALIDATION
 	if targetHost == "" {
 		return
 	}
@@ -213,7 +229,8 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	wg.Wait()
 
 	// STEP 2: PREPARE AND RUN ENGINE
-	engine := NewEngine(50)
+	// [HIZ AYARI]: Concurrency'yi 50'den 10'a düşürdük. Daha az paralel istek = Daha az yük.
+	engine := NewEngine(10)
 
 	// PLUGINS REGISTRATION
 	engine.AddPlugin(&DOMScannerPlugin{}) // DOM Based Scanner
@@ -438,7 +455,7 @@ func main() {
 	url := "http://localhost" + port
 
 	fmt.Println("===========================================")
-	fmt.Println("   DORM SCANNER v1.1.0 		    	    ")
+	fmt.Println("   	DORM SCANNER v1.2.0                 ")
 	fmt.Println("===========================================")
 	fmt.Printf("[*] Server Active: %s\n", url)
 
@@ -452,4 +469,44 @@ func main() {
 	}
 }
 
+// ==========================================
+// 4. CHAMELEON MODE (USER-AGENT ROTATION)
+// ==========================================
 
+// Global Flag to control rotation (Simple implementation)
+var GlobalRotateUA bool = false
+
+var userAgents = []string{
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
+	"Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+}
+
+func getRandomUserAgent() string {
+	// Simple random selection
+	return userAgents[time.Now().UnixNano()%int64(len(userAgents))]
+}
+
+// --- PROXY MIDDLEWARE ---
+type UARoundTripper struct {
+	Proxied http.RoundTripper
+}
+
+func (urt *UARoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	// ONLY rotate if the checkbox was checked (Global Flag is true)
+	if GlobalRotateUA {
+		req.Header.Set("User-Agent", getRandomUserAgent())
+	}
+	return urt.Proxied.RoundTrip(req)
+}
+
+// Client Helper
+func getClient() *http.Client {
+	return &http.Client{
+
+		Transport: &UARoundTripper{Proxied: http.DefaultTransport},
+		Timeout:   10 * time.Second,
+	}
+}
