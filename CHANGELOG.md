@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.0] - 2026-01-14
+### 🦎 Chameleon, Stealth & Evasion Update
+- **Chameleon Mode (Evasion):** Implemented a dynamic User-Agent rotation engine (`UARoundTripper`). The scanner now mimics legitimate browsers (Chrome, Firefox, Safari on Windows/Mac/Linux) to bypass WAF signatures.
+- **Smart Rate Limiting (Stability):** Integrated a backend throttling mechanism (default 300ms delay) and optimized worker concurrency (reduced to 10 threads). Prevents unintentional DoS behavior and ensures server stability during scans.
+- **Dashboard Controls (UI):** Added a "Chameleon Mode" toggle switch to the sidebar interface, allowing operators to enable/disable evasion tactics in real-time.
+- **Engine Optimization (Core):** Refactored the `getClient` logic to support middleware injection, creating a modular base for future proxy integrations.
+
 ## [v1.1.0] - 2026-01-13
 ### 🧠 Persistence, Reporting & Enterprise Logic Update
 - **Scan Persistence Engine (New):** Implemented a local JSON-based storage system (`storage.go`). The scanner now automatically saves scan history, enabling retrospective analysis and data persistence across sessions.
