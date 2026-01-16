@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.3.0] - 2026-01-16
+### 🔐 Authentication & Deep Logic Update
+- **Authenticated Scanning (New):** Implemented a session-aware scanning engine, enabling the scanner to perform deep vulnerability assessments on endpoints behind login pages.
+- **XSS Engine (Refactored):** Upgraded to "Context-Aware" detection logic (v3). Implemented Polyglot payloads and "Canary Token" verification to eliminate false positives caused by sanitization.
+- **IDOR / BOLA Logic (Advanced):** Introduced "Differential Analysis" for Broken Access Control. The engine now compares baseline, target, and "Soft-404" responses to validate unauthorized access with high precision.
+- **JWT Attack Module (New):** Integrated an automated JWT vulnerability scanner. Features "None" algorithm bypass testing (`alg: none`), token discovery, and signature validation checks.
+- **NoSQL Injection (Pro):** Enhanced MongoDB detection using differential response size analysis (`$ne` operator injection) to identify database leakage.
+- **SQL Injection (Hardened):** Optimized payload injection patterns to support more complex detection scenarios and reduce noise.
+
 ## [v1.2.0] - 2026-01-14
 ### 🦎 Chameleon, Stealth & Evasion Update
 - **Chameleon Mode (Evasion):** Implemented a dynamic User-Agent rotation engine (`UARoundTripper`). The scanner now mimics legitimate browsers (Chrome, Firefox, Safari on Windows/Mac/Linux) to bypass WAF signatures.
