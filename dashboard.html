@@ -56,6 +56,12 @@
         .toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-main); user-select: none; }
         .toggle-label input { accent-color: var(--accent); width: 16px; height: 16px; }
 
+        /* COLLAPSIBLE AUTH SECTION */
+        .auth-trigger { cursor: pointer; color: var(--text-dim); font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; user-select: none; transition: 0.2s; }
+        .auth-trigger:hover { color: var(--accent); }
+        .auth-content { display: none; padding-left: 10px; border-left: 2px solid var(--border); margin-top: 5px; animation: slideDown 0.2s ease; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
         /* BUTTONS */
         button { padding: 12px 25px; background: var(--success); color: white; border: none; cursor: pointer; border-radius: 6px; font-weight: bold; transition: 0.2s; display: flex; align-items: center; gap: 8px; font-size: 13px; }
         button:hover { filter: brightness(1.1); }
@@ -121,7 +127,7 @@
             <i class="fas fa-history"></i> Scan History
         </div>
         <div style="margin-top:auto; font-size:11px; color:#30363d; text-align:center;">
-            v1.2.0
+            v1.3.0
         </div>
     </div>
 
@@ -134,6 +140,20 @@
                         <input type="text" id="targetInput" placeholder="Target URL or IP (e.g., example.com)" value="http://testphp.vulnweb.com">
                         <div id="timerDisplay">00:00</div>
                         <button onclick="startScan()" id="scanBtn"><i class="fas fa-play"></i> START SCAN</button>
+                    </div>
+
+                    <div style="margin-top: 15px;">
+                        <div class="auth-trigger" onclick="toggleAuth()">
+                            <i class="fas fa-chevron-right" id="authArrow"></i> 
+                            <i class="fas fa-key"></i> Authentication Options (Optional)
+                        </div>
+                        
+                        <div id="authContainer" class="auth-content">
+                            <div class="input-group" style="margin-top:10px;">
+                                <input type="text" id="authInput" placeholder='Paste Header e.g. "Cookie: PHPSESSID=xyz..." or "Authorization: Bearer..."' 
+                                       style="border-color:var(--border); font-size:13px; color:#aaffaa; font-family:'Consolas';">
+                            </div>
+                        </div>
                     </div>
 
                     <div class="settings-row">
@@ -244,6 +264,19 @@
 
     function togglePlugins() { const s = document.getElementById('plugin-section'); s.style.display = s.style.display === 'block' ? 'none' : 'block'; }
     
+    // NEW FUNCTION FOR AUTH TOGGLE
+    function toggleAuth() {
+        const el = document.getElementById('authContainer');
+        const arrow = document.getElementById('authArrow');
+        if (el.style.display === 'block') {
+            el.style.display = 'none';
+            arrow.classList.replace('fa-chevron-down', 'fa-chevron-right');
+        } else {
+            el.style.display = 'block';
+            arrow.classList.replace('fa-chevron-right', 'fa-chevron-down');
+        }
+    }
+
     function toggleDetail(id) { 
         const row = document.getElementById('detail-' + id); 
         const parent = document.getElementById('row-' + id);
@@ -304,14 +337,15 @@
     function startScan() {
         const target = document.getElementById('targetInput').value;
         const rotateUA = document.getElementById('uaToggle').checked;
-        const speed = "300"; // Fixed Speed since UI was removed
+        const speed = "300"; 
+        
+        // AUTH HEADER (Gizli olsa bile değeri varsa alır)
+        const authHeader = document.getElementById('authInput').value;
 
         const selected = Array.from(document.querySelectorAll('.plugin-check:checked')).map(c => c.value);
         if(!target) return alert("Please enter a target!");
         
-        // Reset UI
         document.getElementById('tableBody').innerHTML = '';
-        document.getElementById('techStackBar').innerHTML = ''; // Clear previous badges
         vulnCount = 0; scanResults = [];
         vulnChart.data.datasets[0].data = [0,0,0,0,0];
         vulnChart.update();
@@ -327,7 +361,7 @@
             document.getElementById('timerDisplay').innerText = `${m}:${s}`;
         }, 1000);
 
-        const eventSource = new EventSource(`/scan?target=${encodeURIComponent(target)}&plugins=${encodeURIComponent(selected.join(","))}&delay=${speed}&rotateUA=${rotateUA}`);
+        const eventSource = new EventSource(`/scan?target=${encodeURIComponent(target)}&plugins=${encodeURIComponent(selected.join(","))}&delay=${speed}&rotateUA=${rotateUA}&auth=${encodeURIComponent(authHeader)}`);
 
         eventSource.onmessage = (e) => {
             const data = JSON.parse(e.data);
@@ -340,7 +374,6 @@
                 loadHistory(); 
                 return; 
             }
-
 
             vulnCount++; scanResults.push(data);
             const badgeClass = "sev-" + escapeHtml(data.Severity.toUpperCase());
