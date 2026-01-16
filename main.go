@@ -93,18 +93,16 @@ func (e *Engine) Start() {
 			defer wg.Done()
 			for job := range jobs {
 				// FILTER CHECK
-				// If filter is active and this plugin is not selected -> SKIP
 				if len(e.AllowedPlugins) > 0 {
 					if !e.AllowedPlugins[job.Plugin.Name()] {
 						continue
 					}
 				}
 
-				// --- [RATE LIMIT KORUMASI] ---
-				// Her bir worker işlem yapmadan önce 300ms bekler.
-				// Bu sayede sunucuyu boğmadan (DoS yapmadan) tarama yapar.
+				// --- [RATE LIMIT PROTECTION] ---
+				// 300ms Backend Delay to prevent DoS
 				time.Sleep(300 * time.Millisecond)
-				// -----------------------------
+				// -------------------------------
 
 				vuln := job.Plugin.Run(job.Target)
 				if vuln != nil {
@@ -162,14 +160,20 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	targetHost := r.URL.Query().Get("target")
 	selectedPluginsStr := r.URL.Query().Get("plugins")
 
-	rotateParam := r.URL.Query().Get("rotateUA")
+	// --- UPDATE CLIENT SETTINGS (Located in client.go) ---
 
+	// 1. Chameleon Mode
+	rotateParam := r.URL.Query().Get("rotateUA")
 	if rotateParam == "true" {
 		GlobalRotateUA = true
 	} else {
 		GlobalRotateUA = false
 	}
-	// ----------------------------------
+
+	// 2. Auth Header (Cookie/Token)
+	authParam := r.URL.Query().Get("auth")
+	GlobalAuthHeader = authParam
+	// ----------------------------------------------------
 
 	// 3. VALIDATION
 	if targetHost == "" {
@@ -181,12 +185,9 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// --- STORAGE INTEGRATION START (1/2) ---
-	// Initialize a new scan record and save it as "Running"
 	record := NewScanRecord(targetHost)
 	DB.SaveScan(record)
 
-	// We need a slice to capture vulnerabilities as they are found,
-	// because SSE streams them one by one, but Storage needs the full list.
 	var foundVulns []*Vulnerability
 	var muVulns sync.Mutex
 	// --- STORAGE INTEGRATION END ---
@@ -229,18 +230,16 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	wg.Wait()
 
 	// STEP 2: PREPARE AND RUN ENGINE
-	// [HIZ AYARI]: Concurrency'yi 50'den 10'a düşürdük. Daha az paralel istek = Daha az yük.
-	engine := NewEngine(10)
+	engine := NewEngine(10) // Concurrency 10
 
 	// PLUGINS REGISTRATION
-	engine.AddPlugin(&DOMScannerPlugin{}) // DOM Based Scanner
-
-	engine.AddPlugin(&FingerprintPlugin{}) // Service
-	engine.AddPlugin(&TLSCheckPlugin{})    // Encryption
-	engine.AddPlugin(&BruteForcePlugin{})  // Brute Force
-	engine.AddPlugin(&SpiderPlugin{})      // Spider
-	engine.AddPlugin(&EDBPlugin{})         // Exploit-DB
-	engine.AddPlugin(&FuzzerPlugin{})      // Fuzzer
+	engine.AddPlugin(&DOMScannerPlugin{})  //DOM Scanner
+	engine.AddPlugin(&FingerprintPlugin{}) //Fingerprinting
+	engine.AddPlugin(&TLSCheckPlugin{})    //TLS Check
+	engine.AddPlugin(&BruteForcePlugin{})  //Brute Force
+	engine.AddPlugin(&SpiderPlugin{})      //Spider
+	engine.AddPlugin(&EDBPlugin{})         //Exploit DB
+	engine.AddPlugin(&FuzzerPlugin{})      //Fuzzer
 
 	engine.AddPlugin(&BannerGrabPlugin{})
 	engine.AddPlugin(&HTTPHeaderPlugin{})
@@ -335,7 +334,6 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	if len(openPorts) == 0 {
 		fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
 		flusher.Flush()
-		// Even if no ports found, update record to completed
 		record.Status = "Completed"
 		record.EndTime = time.Now()
 		DB.UpdateScan(record.ID, record)
@@ -362,7 +360,6 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	engine.Start()
 
 	// --- STORAGE INTEGRATION START (2/2) ---
-	// Update the record with results and finalize status
 	record.EndTime = time.Now()
 	record.Status = "Completed"
 	record.Vulnerabilities = foundVulns
@@ -383,22 +380,8 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 }
 
-// New struct for CPP Integration (If needed)
-type CPPScanResult struct {
-	Target struct {
-		IP   string `json:"IP"`
-		Port int    `json:"Port"`
-	} `json:"Target"`
-	Name        string  `json:"Name"`
-	Severity    string  `json:"Severity"`
-	CVSS        float64 `json:"CVSS"`
-	Description string  `json:"Description"`
-	Banner      string  `json:"Banner"`
-}
-
 // --- HISTORY API HANDLERS ---
 
-// handleHistory returns the full list of past scans as JSON.
 func handleHistory(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
@@ -412,7 +395,6 @@ func handleHistory(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(records)
 }
 
-// handleDelete removes a specific scan record by ID.
 func handleDelete(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
@@ -438,7 +420,7 @@ func handleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	// 1. Initialize the Database (Auto-creates scans.json)
+	// 1. Initialize the Database
 	InitDB("scans.json")
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -448,14 +430,14 @@ func main() {
 	http.HandleFunc("/plugins", handlePluginList)
 
 	// 2. Register History API Routes
-	http.HandleFunc("/api/history", handleHistory)       // GET: List all scans
-	http.HandleFunc("/api/history/delete", handleDelete) // POST: Delete a scan by ID
+	http.HandleFunc("/api/history", handleHistory)
+	http.HandleFunc("/api/history/delete", handleDelete)
 
 	port := ":8080"
 	url := "http://localhost" + port
 
 	fmt.Println("===========================================")
-	fmt.Println("   	DORM SCANNER v1.2.0                 ")
+	fmt.Println("       DORM SCANNER v1.3.0                 ")
 	fmt.Println("===========================================")
 	fmt.Printf("[*] Server Active: %s\n", url)
 
@@ -466,47 +448,5 @@ func main() {
 
 	if err := http.ListenAndServe(port, nil); err != nil {
 		fmt.Println("ERROR:", err)
-	}
-}
-
-// ==========================================
-// 4. CHAMELEON MODE (USER-AGENT ROTATION)
-// ==========================================
-
-// Global Flag to control rotation (Simple implementation)
-var GlobalRotateUA bool = false
-
-var userAgents = []string{
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
-	"Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
-}
-
-func getRandomUserAgent() string {
-	// Simple random selection
-	return userAgents[time.Now().UnixNano()%int64(len(userAgents))]
-}
-
-// --- PROXY MIDDLEWARE ---
-type UARoundTripper struct {
-	Proxied http.RoundTripper
-}
-
-func (urt *UARoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// ONLY rotate if the checkbox was checked (Global Flag is true)
-	if GlobalRotateUA {
-		req.Header.Set("User-Agent", getRandomUserAgent())
-	}
-	return urt.Proxied.RoundTrip(req)
-}
-
-// Client Helper
-func getClient() *http.Client {
-	return &http.Client{
-
-		Transport: &UARoundTripper{Proxied: http.DefaultTransport},
-		Timeout:   10 * time.Second,
 	}
 }
