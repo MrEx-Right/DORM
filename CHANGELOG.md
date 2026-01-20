@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.3.1] - 2026-01-20
+### 🏗️ Architecture Refactor & Detection Engine Upgrade
+
+- **Frontend Architecture (Refactored):** Decoupled the presentation layer from logic by migrating all JavaScript to a standalone `app.js`. Updated `main.go` to serve static assets, significantly improving maintainability.
+- **Node.js Prototype Pollution (v2.0):** Upgraded detection logic to use recursive JSON injection targeting `__proto__` and `constructor` properties, featuring a new canary check mechanism for accurate verification.
+- **SSRF Cloud Metadata (v2.0):** Expanded the attack vector list to cover 9 common parameter names (e.g., `dest`, `u`, `uri`) and implemented signature-based detection for critical AWS Metadata (IMDSv1) leakage.
+
 ## [v1.3.0] - 2026-01-16
 ### 🔐 Authentication & Deep Logic Update
 - **Authenticated Scanning (New):** Implemented a session-aware scanning engine, enabling the scanner to perform deep vulnerability assessments on endpoints behind login pages.
