@@ -426,6 +426,11 @@ func main() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "dashboard.html")
 	})
+
+	http.HandleFunc("/app.js", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "app.js")
+	})
+
 	http.HandleFunc("/scan", handleScan)
 	http.HandleFunc("/plugins", handlePluginList)
 
@@ -437,7 +442,7 @@ func main() {
 	url := "http://localhost" + port
 
 	fmt.Println("===========================================")
-	fmt.Println("       DORM SCANNER v1.3.0                 ")
+	fmt.Println("       DORM SCANNER v1.3.1                 ")
 	fmt.Println("===========================================")
 	fmt.Printf("[*] Server Active: %s\n", url)
 
