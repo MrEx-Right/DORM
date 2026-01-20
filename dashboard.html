@@ -10,7 +10,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
 
     <style>
-        /* CORE VARIABLES & RESET */
         :root {
             --bg-dark: #0d1117;
             --panel-bg: #161b22;
@@ -23,46 +22,38 @@
         }
         body { background-color: var(--bg-dark); color: var(--text-main); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; display: flex; height: 100vh; overflow: hidden; }
         
-        /* LAYOUT (Sidebar + Main) */
         .sidebar { width: 240px; background: var(--panel-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px; flex-shrink: 0; }
         .main-content { flex-grow: 1; padding: 30px; overflow-y: auto; position: relative; }
         .container { max-width: 1200px; margin: 0 auto; }
 
-        /* BRANDING */
         .brand { margin-bottom: 40px; text-align: center; }
         .brand h1 { color: var(--accent); letter-spacing: 4px; font-weight: 800; margin: 0; font-size: 28px; }
         .brand span { font-size: 10px; color: var(--text-dim); letter-spacing: 2px; display: block; margin-top: 5px; }
 
-        /* NAVIGATION */
         .nav-item { padding: 12px 15px; margin-bottom: 8px; border-radius: 6px; cursor: pointer; color: var(--text-dim); display: flex; align-items: center; gap: 10px; transition: 0.2s; font-weight: 600; font-size: 14px; }
         .nav-item:hover { background: rgba(88, 166, 255, 0.1); color: var(--accent); }
         .nav-item.active { background: var(--accent); color: #fff; }
         .nav-item i { width: 20px; text-align: center; }
 
-        /* VIEW TOGGLING */
         .view-section { display: none; animation: fadeIn 0.3s ease; }
         .view-section.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* CONTROL PANEL (Scanner) */
         .control-panel { background: var(--panel-bg); padding: 20px; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; gap: 15px; }
         .input-group { display: flex; gap: 10px; align-items: center; }
         input[type="text"] { flex-grow: 1; padding: 12px; background: var(--bg-dark); border: 1px solid var(--border); color: #fff; border-radius: 6px; font-family: 'Consolas', monospace; outline: none; }
         input[type="text"]:focus { border-color: var(--accent); }
         #timerDisplay { font-family: 'Consolas', monospace; font-size: 20px; color: var(--accent); font-weight: bold; width: 60px; text-align: center; }
 
-        /* SETTINGS ROW */
         .settings-row { display: flex; align-items: center; gap: 20px; padding: 5px 0; }
         .toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-main); user-select: none; }
         .toggle-label input { accent-color: var(--accent); width: 16px; height: 16px; }
 
-        /* COLLAPSIBLE AUTH SECTION */
         .auth-trigger { cursor: pointer; color: var(--text-dim); font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; user-select: none; transition: 0.2s; }
         .auth-trigger:hover { color: var(--accent); }
         .auth-content { display: none; padding-left: 10px; border-left: 2px solid var(--border); margin-top: 5px; animation: slideDown 0.2s ease; }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* BUTTONS */
         button { padding: 12px 25px; background: var(--success); color: white; border: none; cursor: pointer; border-radius: 6px; font-weight: bold; transition: 0.2s; display: flex; align-items: center; gap: 8px; font-size: 13px; }
         button:hover { filter: brightness(1.1); }
         button:disabled { background: var(--border); cursor: not-allowed; opacity: 0.6; }
@@ -70,16 +61,13 @@
         .btn-danger { background: var(--danger); }
         .btn-icon { padding: 8px; aspect-ratio: 1; justify-content: center; }
 
-        /* PLUGINS */
         #plugin-section { display: none; background: var(--bg-dark); border: 1px solid var(--border); padding: 15px; border-radius: 6px; margin-top: 10px; }
         .plugin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; max-height: 200px; overflow-y: auto; }
         .plugin-item { display: flex; align-items: center; gap: 8px; padding: 6px; background: #21262d; border-radius: 4px; cursor: pointer; font-size: 12px; border: 1px solid transparent; }
         .plugin-item:hover { border-color: var(--text-dim); }
 
-        /* CHART & STATS */
         .chart-container { background: var(--panel-bg); padding: 15px; border: 1px solid var(--border); border-radius: 12px; margin-top: 20px; height: 220px; display: flex; justify-content: center; }
 
-        /* TABLES */
         table { width: 100%; margin-top: 20px; border-collapse: separate; border-spacing: 0 5px; }
         th { text-align: left; padding: 12px; color: var(--text-dim); text-transform: uppercase; font-size: 0.85em; letter-spacing: 1px; }
         .vuln-row { background: var(--panel-bg); cursor: pointer; transition: background 0.2s; }
@@ -88,7 +76,6 @@
         td:first-child { border-left: 1px solid var(--border); border-radius: 6px 0 0 6px; }
         td:last-child { border-right: 1px solid var(--border); border-radius: 0 6px 6px 0; }
 
-        /* BADGES */
         .badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; color:#000; text-transform: uppercase; display: inline-block; min-width: 60px; text-align: center; }
         .sev-CRITICAL { background: #ff7b72; box-shadow: 0 0 8px rgba(255, 123, 114, 0.4); }
         .sev-HIGH { background: #ff9b5e; }
@@ -100,13 +87,11 @@
         
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
-        /* DETAILS EXPANSION */
         .detail-row { display: none; }
         .detail-content { background: var(--bg-dark); padding: 20px; border: 1px solid var(--border); border-top: none; color: var(--text-dim); margin: 0 10px 10px 10px; border-radius: 0 0 8px 8px; font-size: 13px; line-height: 1.6; }
         .arrow { font-size: 12px; color: var(--accent); transition: transform 0.2s; }
         .vuln-row.open .arrow { transform: rotate(180deg); }
 
-        /* SCROLLBAR */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg-dark); }
         ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
@@ -127,7 +112,7 @@
             <i class="fas fa-history"></i> Scan History
         </div>
         <div style="margin-top:auto; font-size:11px; color:#30363d; text-align:center;">
-            v1.3.0
+            v1.3.1
         </div>
     </div>
 
@@ -163,7 +148,6 @@
                         </label>
                     </div>
                     
-
                     <div class="btn-group">
                         <button onclick="togglePlugins()" style="background:#1f6feb"><i class="fas fa-cogs"></i> PLUGINS</button>
                         <button onclick="downloadReport()" style="background:#8957e5"><i class="fas fa-file-code"></i> HTML</button>
@@ -211,273 +195,13 @@
                             <th style="text-align:right">ACTIONS</th>
                         </tr>
                     </thead>
-                    <tbody id="historyBody">
-                        </tbody>
+                    <tbody id="historyBody"></tbody>
                 </table>
             </div>
         </div>
-
     </div>
 
-<script>
-    // --- GLOBAL VARIABLES ---
-    let timerInterval, timerSeconds = 0, vulnCount = 0, scanResults = [];
-    const ctx = document.getElementById('vulnChart').getContext('2d');
-    
-    // --- CHART CONFIG ---
-    let vulnChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: { labels: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'], datasets: [{ data: [0,0,0,0,0], backgroundColor: ['#ff7b72', '#ff9b5e', '#d29922', '#e3b341', '#58a6ff'], borderWidth: 0 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#c9d1d9', font: {family: 'Segoe UI'} } } } }
-    });
+    <script src="app.js"></script>
 
-    // --- INITIALIZATION ---
-    window.onload = async () => {
-        // Load Plugins
-        const resp = await fetch('/plugins');
-        const plugins = await resp.json();
-        const grid = document.getElementById('pluginGrid');
-        plugins.forEach(p => { 
-            grid.innerHTML += `<label class="plugin-item"><input type="checkbox" class="plugin-check" value="${escapeHtml(p)}" checked> ${escapeHtml(p)}</label>`; 
-        });
-
-        // Load History Initially
-        loadHistory();
-    };
-
-    // --- VIEW SWITCHING ---
-    function switchView(viewName) {
-        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-        event.currentTarget.classList.add('active');
-        document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
-        document.getElementById('view-' + viewName).classList.add('active');
-        if(viewName === 'history') loadHistory();
-    }
-
-    // --- HELPER FUNCTIONS ---
-    function escapeHtml(text) {
-        if (!text) return text;
-        const div = document.createElement('div');
-        div.innerText = text;
-        return div.innerHTML;
-    }
-
-    function togglePlugins() { const s = document.getElementById('plugin-section'); s.style.display = s.style.display === 'block' ? 'none' : 'block'; }
-    
-    // NEW FUNCTION FOR AUTH TOGGLE
-    function toggleAuth() {
-        const el = document.getElementById('authContainer');
-        const arrow = document.getElementById('authArrow');
-        if (el.style.display === 'block') {
-            el.style.display = 'none';
-            arrow.classList.replace('fa-chevron-down', 'fa-chevron-right');
-        } else {
-            el.style.display = 'block';
-            arrow.classList.replace('fa-chevron-right', 'fa-chevron-down');
-        }
-    }
-
-    function toggleDetail(id) { 
-        const row = document.getElementById('detail-' + id); 
-        const parent = document.getElementById('row-' + id);
-        if (row.style.display === 'table-row') {
-            row.style.display = 'none';
-            parent.classList.remove('open');
-        } else {
-            row.style.display = 'table-row';
-            parent.classList.add('open');
-        }
-    }
-
-    // --- HISTORY LOGIC ---
-    async function loadHistory() {
-        const tbody = document.getElementById('historyBody');
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#58a6ff;">Loading history...</td></tr>';
-        try {
-            const resp = await fetch('/api/history');
-            const records = await resp.json();
-            tbody.innerHTML = '';
-            if(!records || records.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#8b949e;">No scan history found.</td></tr>';
-                return;
-            }
-            records.forEach(rec => {
-                const date = new Date(rec.start_time).toLocaleString();
-                const duration = rec.end_time ? Math.round((new Date(rec.end_time) - new Date(rec.start_time)) / 1000) + 's' : 'Running...';
-                const statusClass = rec.status === 'Completed' ? 'status-completed' : 'status-running';
-                const html = `
-                    <tr>
-                        <td class="${statusClass}">${escapeHtml(rec.status)}</td>
-                        <td style="color:#fff; font-weight:bold;">${escapeHtml(rec.target)}</td>
-                        <td style="color:var(--text-dim); font-size:0.9em;">${date}</td>
-                        <td style="font-family:'Consolas'">${duration}</td>
-                        <td>
-                            <span style="color:#ff7b72; font-weight:bold;">${rec.severity_stats['CRITICAL'] || 0}</span> /
-                            <span style="color:#ff9b5e; font-weight:bold;">${rec.severity_stats['HIGH'] || 0}</span>
-                            <span style="color:var(--text-dim); font-size:0.8em; margin-left:5px;">(Total: ${rec.total_vulns})</span>
-                        </td>
-                        <td style="text-align:right;">
-                            <button onclick="deleteScan('${rec.id}')" class="btn-danger btn-icon" title="Delete Scan"><i class="fas fa-trash"></i></button>
-                        </td>
-                    </tr>`;
-                tbody.insertAdjacentHTML('beforeend', html);
-            });
-        } catch(e) {
-            tbody.innerHTML = `<tr><td colspan="6" style="color:red">Error loading history: ${e}</td></tr>`;
-        }
-    }
-
-    async function deleteScan(id) {
-        if(!confirm("Are you sure you want to delete this scan record?")) return;
-        await fetch('/api/history/delete?id=' + id, { method: 'POST' });
-        loadHistory(); 
-    }
-
-    // --- SCANNER LOGIC ---
-    function startScan() {
-        const target = document.getElementById('targetInput').value;
-        const rotateUA = document.getElementById('uaToggle').checked;
-        const speed = "300"; 
-        
-        // AUTH HEADER (Gizli olsa bile değeri varsa alır)
-        const authHeader = document.getElementById('authInput').value;
-
-        const selected = Array.from(document.querySelectorAll('.plugin-check:checked')).map(c => c.value);
-        if(!target) return alert("Please enter a target!");
-        
-        document.getElementById('tableBody').innerHTML = '';
-        vulnCount = 0; scanResults = [];
-        vulnChart.data.datasets[0].data = [0,0,0,0,0];
-        vulnChart.update();
-        
-        const btn = document.getElementById('scanBtn');
-        btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> SCANNING...';
-
-        timerSeconds = 0; clearInterval(timerInterval);
-        timerInterval = setInterval(() => {
-            timerSeconds++;
-            const m = Math.floor(timerSeconds/60).toString().padStart(2,'0');
-            const s = (timerSeconds%60).toString().padStart(2,'0');
-            document.getElementById('timerDisplay').innerText = `${m}:${s}`;
-        }, 1000);
-
-        const eventSource = new EventSource(`/scan?target=${encodeURIComponent(target)}&plugins=${encodeURIComponent(selected.join(","))}&delay=${speed}&rotateUA=${rotateUA}&auth=${encodeURIComponent(authHeader)}`);
-
-        eventSource.onmessage = (e) => {
-            const data = JSON.parse(e.data);
-            
-            if(data.Status === "DONE") { 
-                clearInterval(timerInterval); 
-                btn.disabled = false; 
-                btn.innerHTML = '<i class="fas fa-play"></i> START SCAN'; 
-                eventSource.close(); 
-                loadHistory(); 
-                return; 
-            }
-
-            vulnCount++; scanResults.push(data);
-            const badgeClass = "sev-" + escapeHtml(data.Severity.toUpperCase());
-            
-            let engineLabel = 'Plugin';
-            if (data.Name.includes("Exploit")) engineLabel = 'EDB';
-            else if (data.Name.includes("Fuzzer")) engineLabel = 'Fuzzer';
-            else if (data.Name.includes("Spider")) engineLabel = 'Spider';
-
-            const html = `
-                <tr class="vuln-row" id="row-${vulnCount}" onclick="toggleDetail(${vulnCount})">
-                    <td><span class="badge ${badgeClass}">${escapeHtml(data.Severity)}</span></td>
-                    <td style="font-weight:bold; color:#fff;">${data.CVSS.toFixed(1)}</td>
-                    <td style="color:#fff;">${escapeHtml(data.Name)}</td>
-                    <td style="color:var(--text-dim); font-size:0.9em;">${engineLabel}</td>
-                    <td>${escapeHtml(data.Target.IP)}:${data.Target.Port}</td>
-                    <td class="arrow"><i class="fas fa-chevron-down"></i></td>
-                </tr>
-                <tr class="detail-row" id="detail-${vulnCount}">
-                    <td colspan="6" style="padding:0; border:none;">
-                        <div class="detail-content">
-                            <strong style="color:var(--accent)">ANALYSIS:</strong><br>${escapeHtml(data.Description).replace(/\n/g, '<br>')}<br><br>
-                            <strong style="color:var(--success)">SOLUTION:</strong><br>${escapeHtml(data.Solution || "Apply patches.")}<br><br>
-                            <em style="font-size:0.8em">Ref: ${escapeHtml(data.Reference)}</em>
-                        </div>
-                    </td>
-                </tr>`;
-            
-            document.getElementById('tableBody').insertAdjacentHTML('beforeend', html);
-            
-            const idx = ['CRITICAL','HIGH','MEDIUM','LOW','INFO'].indexOf(data.Severity.toUpperCase());
-            if(idx !== -1) { vulnChart.data.datasets[0].data[idx]++; vulnChart.update(); }
-        };
-        
-        eventSource.onerror = () => {
-            eventSource.close();
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-play"></i> START SCAN';
-            clearInterval(timerInterval);
-        };
-    }
-
-    // --- REPORT GENERATION ---
-    function downloadReport() {
-        if (scanResults.length === 0) return alert("No results to export!");
-        const target = document.getElementById('targetInput').value;
-        const date = new Date().toLocaleString();
-        
-        let html = `<html><head><title>DORM Report</title><style>body{font-family:sans-serif;padding:30px;color:#333}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ddd;padding:12px;text-align:left}th{background:#f4f4f4}.CRITICAL{color:#d32f2f;font-weight:bold}.HIGH{color:#f57c00;font-weight:bold}</style></head><body>`;
-        html += `<h1>DORM Security Report</h1><p>Target: ${escapeHtml(target)}<br>Date: ${date}</p><table><thead><tr><th>Sev</th><th>Vuln</th><th>Details</th></tr></thead><tbody>`;
-        scanResults.forEach(r => html += `<tr><td class="${r.Severity}">${r.Severity}</td><td>${escapeHtml(r.Name)}</td><td>${escapeHtml(r.Description)}</td></tr>`);
-        html += `</tbody></table></body></html>`;
-        
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(new Blob([html], {type:"text/html"}));
-        link.download = `DORM_Report_${Date.now()}.html`;
-        link.click();
-    }
-
-    function downloadPDF() {
-        if (scanResults.length === 0) return alert("No results to export!");
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        const target = document.getElementById('targetInput').value;
-        const date = new Date().toLocaleString();
-
-        doc.setFillColor(13, 17, 23); 
-        doc.rect(0, 0, 210, 40, 'F'); 
-        doc.setFontSize(22); doc.setTextColor(88, 166, 255); doc.text("DORM SECURITY REPORT", 14, 20);
-        doc.setFontSize(10); doc.setTextColor(201, 209, 217); doc.text(`Target: ${target}`, 14, 30); doc.text(`Date: ${date}`, 14, 35);
-        
-        const tableRows = scanResults.map(vuln => [
-            vuln.Severity, vuln.CVSS.toFixed(1), vuln.Name,
-            vuln.Description.replace(/<br>/g, "\n").substring(0, 200) + (vuln.Description.length > 200 ? "..." : "")
-        ]);
-
-        doc.autoTable({
-            head: [['SEVERITY', 'CVSS', 'VULNERABILITY', 'DETAILS']],
-            body: tableRows,
-            startY: 45,
-            theme: 'grid',
-            headStyles: { fillColor: [22, 27, 34], textColor: [255, 255, 255], fontStyle: 'bold' },
-            styles: { fontSize: 9, cellPadding: 4, overflow: 'linebreak' },
-            columnStyles: { 0: { fontStyle: 'bold', cellWidth: 25 }, 1: { cellWidth: 15, halign: 'center' }, 2: { cellWidth: 50 }, 3: { cellWidth: 'auto' } },
-            didParseCell: function(data) {
-                if (data.section === 'body' && data.column.index === 0) {
-                    const sev = data.cell.raw.toUpperCase();
-                    if (sev === 'CRITICAL') data.cell.styles.textColor = [255, 123, 114];
-                    else if (sev === 'HIGH') data.cell.styles.textColor = [255, 155, 94];
-                    else if (sev === 'MEDIUM') data.cell.styles.textColor = [210, 153, 34];
-                    else if (sev === 'LOW') data.cell.styles.textColor = [227, 179, 65];
-                    else data.cell.styles.textColor = [88, 166, 255];
-                }
-            }
-        });
-
-        const pageCount = doc.internal.getNumberOfPages();
-        for(let i = 1; i <= pageCount; i++) {
-            doc.setPage(i);
-            doc.setFontSize(8); doc.setTextColor(150);
-            doc.text(`Page ${i} of ${pageCount} - Generated by DORM Scanner`, 105, 290, null, null, "center");
-        }
-        doc.save(`DORM_Report_${Date.now()}.pdf`);
-    }
-</script>
 </body>
 </html>
