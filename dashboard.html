@@ -10,6 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
 
     <style>
+        /* CORE VARIABLES */
         :root {
             --bg-dark: #0d1117;
             --panel-bg: #161b22;
@@ -19,22 +20,38 @@
             --accent: #58a6ff;
             --success: #238636;
             --danger: #da3633;
+            --warning: #d29922;
         }
         body { background-color: var(--bg-dark); color: var(--text-main); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; display: flex; height: 100vh; overflow: hidden; }
         
+        /* SIDEBAR */
         .sidebar { width: 240px; background: var(--panel-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px; flex-shrink: 0; }
         .main-content { flex-grow: 1; padding: 30px; overflow-y: auto; position: relative; }
         .container { max-width: 1200px; margin: 0 auto; }
 
+        /* BRAND */
         .brand { margin-bottom: 40px; text-align: center; }
         .brand h1 { color: var(--accent); letter-spacing: 4px; font-weight: 800; margin: 0; font-size: 28px; }
         .brand span { font-size: 10px; color: var(--text-dim); letter-spacing: 2px; display: block; margin-top: 5px; }
 
+        /* NAVIGATION */
         .nav-item { padding: 12px 15px; margin-bottom: 8px; border-radius: 6px; cursor: pointer; color: var(--text-dim); display: flex; align-items: center; gap: 10px; transition: 0.2s; font-weight: 600; font-size: 14px; }
         .nav-item:hover { background: rgba(88, 166, 255, 0.1); color: var(--accent); }
         .nav-item.active { background: var(--accent); color: #fff; }
         .nav-item i { width: 20px; text-align: center; }
 
+        /* FUZZER PANEL (YENİ) */
+        .fuzzer-panel {
+            margin-top: 20px;
+            background: rgba(218, 54, 51, 0.1); /* Hafif kırmızı */
+            border: 1px solid var(--danger);
+            border-radius: 8px;
+            padding: 15px;
+        }
+        .fuzzer-header { color: var(--danger); font-size: 11px; font-weight: 800; letter-spacing: 1px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        .fuzzer-status { font-size: 10px; color: var(--text-dim); margin-top: 5px; display: flex; align-items: center; gap: 5px; }
+
+        /* VIEW & CONTROLS */
         .view-section { display: none; animation: fadeIn 0.3s ease; }
         .view-section.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -49,11 +66,13 @@
         .toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-main); user-select: none; }
         .toggle-label input { accent-color: var(--accent); width: 16px; height: 16px; }
 
+        /* AUTH */
         .auth-trigger { cursor: pointer; color: var(--text-dim); font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px; user-select: none; transition: 0.2s; }
         .auth-trigger:hover { color: var(--accent); }
         .auth-content { display: none; padding-left: 10px; border-left: 2px solid var(--border); margin-top: 5px; animation: slideDown 0.2s ease; }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
+        /* BUTTONS & PLUGINS */
         button { padding: 12px 25px; background: var(--success); color: white; border: none; cursor: pointer; border-radius: 6px; font-weight: bold; transition: 0.2s; display: flex; align-items: center; gap: 8px; font-size: 13px; }
         button:hover { filter: brightness(1.1); }
         button:disabled { background: var(--border); cursor: not-allowed; opacity: 0.6; }
@@ -66,8 +85,8 @@
         .plugin-item { display: flex; align-items: center; gap: 8px; padding: 6px; background: #21262d; border-radius: 4px; cursor: pointer; font-size: 12px; border: 1px solid transparent; }
         .plugin-item:hover { border-color: var(--text-dim); }
 
+        /* CHART & TABLES */
         .chart-container { background: var(--panel-bg); padding: 15px; border: 1px solid var(--border); border-radius: 12px; margin-top: 20px; height: 220px; display: flex; justify-content: center; }
-
         table { width: 100%; margin-top: 20px; border-collapse: separate; border-spacing: 0 5px; }
         th { text-align: left; padding: 12px; color: var(--text-dim); text-transform: uppercase; font-size: 0.85em; letter-spacing: 1px; }
         .vuln-row { background: var(--panel-bg); cursor: pointer; transition: background 0.2s; }
@@ -75,7 +94,7 @@
         td { padding: 12px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); font-size: 14px; }
         td:first-child { border-left: 1px solid var(--border); border-radius: 6px 0 0 6px; }
         td:last-child { border-right: 1px solid var(--border); border-radius: 0 6px 6px 0; }
-
+        
         .badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; color:#000; text-transform: uppercase; display: inline-block; min-width: 60px; text-align: center; }
         .sev-CRITICAL { background: #ff7b72; box-shadow: 0 0 8px rgba(255, 123, 114, 0.4); }
         .sev-HIGH { background: #ff9b5e; }
@@ -84,18 +103,16 @@
         .sev-INFO { background: #58a6ff; }
         .status-running { color: var(--accent); font-weight: bold; animation: pulse 1.5s infinite; }
         .status-completed { color: var(--success); font-weight: bold; }
-        
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
         .detail-row { display: none; }
         .detail-content { background: var(--bg-dark); padding: 20px; border: 1px solid var(--border); border-top: none; color: var(--text-dim); margin: 0 10px 10px 10px; border-radius: 0 0 8px 8px; font-size: 13px; line-height: 1.6; }
         .arrow { font-size: 12px; color: var(--accent); transition: transform 0.2s; }
         .vuln-row.open .arrow { transform: rotate(180deg); }
-
+        
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: var(--bg-dark); }
         ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
     </style>
 </head>
 <body>
@@ -111,8 +128,22 @@
         <div class="nav-item" onclick="switchView('history')">
             <i class="fas fa-history"></i> Scan History
         </div>
+
+        <div class="fuzzer-panel">
+            <div class="fuzzer-header">
+                <i class="fas fa-hammer"></i> FUZZER ENGINE
+            </div>
+            <label class="toggle-label" style="color:#c9d1d9;">
+                <input type="checkbox" id="sidebarFuzzerToggle"> 
+                Enable Fuzzing
+            </label>
+            <div class="fuzzer-status">
+                <i class="fas fa-file-alt"></i> payloads/fuzzing.txt
+            </div>
+        </div>
+
         <div style="margin-top:auto; font-size:11px; color:#30363d; text-align:center;">
-            v1.3.1
+            v1.3.2
         </div>
     </div>
 
@@ -132,7 +163,6 @@
                             <i class="fas fa-chevron-right" id="authArrow"></i> 
                             <i class="fas fa-key"></i> Authentication Options (Optional)
                         </div>
-                        
                         <div id="authContainer" class="auth-content">
                             <div class="input-group" style="margin-top:10px;">
                                 <input type="text" id="authInput" placeholder='Paste Header e.g. "Cookie: PHPSESSID=xyz..." or "Authorization: Bearer..."' 
