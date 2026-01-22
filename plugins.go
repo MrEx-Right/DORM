@@ -3434,6 +3434,7 @@ func GetPluginInventory() []string {
 		"Memcached Stats", "Anonymous FTP", "SMTP Open Relay", "API Key in JS Files", "Subdomain Takeover Risk",
 		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
 		"SSRF Cloud Metadata", "JWT None Algorithm", "Apache Struts RCE", "Citrix ADC Traversal", "NoSQL Injection (MongoDB)", "Atlassian Confluence RCE",
-		"Terraform State Exposure", "WebSocket Hijacking", "TeamCity Auth Bypass", "Shadow API Discovery",
+		"Terraform State Exposure", "WebSocket Hijacking", "TeamCity Auth Bypass", "Shadow API Discovery", "Fuzer" ,
 	}
 }
+
