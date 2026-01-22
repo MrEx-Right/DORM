@@ -1,5 +1,6 @@
 // --- GLOBAL VARIABLES ---
 let timerInterval, timerSeconds = 0, vulnCount = 0, scanResults = [];
+let fuzzerPluginName = ""; // Fuzzer'ın tam adını backend'den yakalamak için
 const ctx = document.getElementById('vulnChart').getContext('2d');
 
 // --- CHART CONFIG ---
@@ -15,11 +16,19 @@ window.onload = async () => {
     const resp = await fetch('/plugins');
     const plugins = await resp.json();
     const grid = document.getElementById('pluginGrid');
-    plugins.forEach(p => { 
-        grid.innerHTML += `<label class="plugin-item"><input type="checkbox" class="plugin-check" value="${escapeHtml(p)}" checked> ${escapeHtml(p)}</label>`; 
+    
+    plugins.forEach(p => {
+        // ZEKİ FİLTRELEME:
+        // Eğer plugin adında "Fuzzer" geçiyorsa, onu grid'e ekleme.
+        // Onun yerine adını sakla ki Sidebar'dan tetikleyebilelim.
+        if (p.includes("Fuzzer")) {
+            fuzzerPluginName = p;
+        } else {
+            // Diğer standart pluginleri grid'e ekle
+            grid.innerHTML += `<label class="plugin-item"><input type="checkbox" class="plugin-check" value="${escapeHtml(p)}" checked> ${escapeHtml(p)}</label>`; 
+        }
     });
 
-    // Load History Initially
     loadHistory();
 };
 
@@ -42,7 +51,6 @@ function escapeHtml(text) {
 
 function togglePlugins() { const s = document.getElementById('plugin-section'); s.style.display = s.style.display === 'block' ? 'none' : 'block'; }
 
-// NEW FUNCTION FOR AUTH TOGGLE
 function toggleAuth() {
     const el = document.getElementById('authContainer');
     const arrow = document.getElementById('authArrow');
@@ -116,11 +124,18 @@ function startScan() {
     const target = document.getElementById('targetInput').value;
     const rotateUA = document.getElementById('uaToggle').checked;
     const speed = "300"; 
-    
-    // AUTH HEADER (Gizli olsa bile değeri varsa alır)
     const authHeader = document.getElementById('authInput').value;
 
+    // 1. Grid'deki seçili pluginleri al
     const selected = Array.from(document.querySelectorAll('.plugin-check:checked')).map(c => c.value);
+    
+    // 2. Sidebar'daki Fuzzer Toggle'ı kontrol et
+    // Eğer Sidebar'daki "Sledgehammer" açık ise ve Fuzzer adını backend'den aldıysak listeye ekle.
+    const fuzzerEnabled = document.getElementById('sidebarFuzzerToggle').checked;
+    if (fuzzerEnabled && fuzzerPluginName !== "") {
+        selected.push(fuzzerPluginName);
+    }
+
     if(!target) return alert("Please enter a target!");
     
     document.getElementById('tableBody').innerHTML = '';
@@ -194,7 +209,6 @@ function startScan() {
     };
 }
 
-// --- REPORT GENERATION ---
 function downloadReport() {
     if (scanResults.length === 0) return alert("No results to export!");
     const target = document.getElementById('targetInput').value;
