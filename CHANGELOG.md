@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.3.2] - 2026-01-22
+### 🌪️ Advanced Fuzzer & Deep Anomaly Detection
+
+- **Dynamic Fuzzing Engine (Enhanced):** Completely overhauled the fuzzing architecture to support external payload loading via `payloads/fuzzing.txt`, allowing for extensive and customizable attack simulations.
+- **Deep Anomaly Detection:** Implemented a multi-vector analysis system that identifies vulnerabilities through Status Code crashes (500), Response Size deviations (>40%), Time Latency (Blind SQLi/DoS), and Input Reflection.
+- **Smart Jitter (WAF Evasion):** Integrated a randomized delay mechanism (300ms-1500ms) to mimic organic traffic behavior, significantly improving evasion capabilities against WAFs and Rate Limiters.
+- **Dashboard Integration (UX):** Integrated a dedicated "Fuzzer Control Panel" into the sidebar, providing seamless control over active fuzzing operations without disrupting the main scanning workflow.
+
 ## [v1.3.1] - 2026-01-20
 ### 🏗️ Architecture Refactor & Detection Engine Upgrade
 
