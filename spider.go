@@ -13,14 +13,19 @@ import (
 )
 
 // ==========================
-// SPIDER ENGINE (CORE)
+// SPIDER ENGINE (OPTIMIZED)
 // ==========================
+
+// Global Regex compilation for performance.
+// Improved pattern to catch unquoted attributes and handle spaces.
+var linkRegex = regexp.MustCompile(`(?i)href\s*=\s*["']?([^"'\s>]+)["']?`)
 
 type Spider struct {
 	BaseURL   *url.URL
 	MaxDepth  int
 	Visited   sync.Map
 	FoundURLs []string
+	Client    *http.Client // Persistent HTTP Client
 	mu        sync.Mutex
 }
 
@@ -29,10 +34,39 @@ func NewSpider(targetURL string) (*Spider, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Spider{BaseURL: u, MaxDepth: 2, FoundURLs: []string{}}, nil
+
+	// Initialize Client once and reuse (Performance Boost)
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 20,
+		},
+		// Redirect Policy (Stay within domain scope)
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return http.ErrUseLastResponse
+			}
+			initialHost := via[0].URL.Hostname()
+			newHost := req.URL.Hostname()
+			if !strings.Contains(newHost, initialHost) {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
+	}
+
+	return &Spider{
+		BaseURL:   u,
+		MaxDepth:  3, // Increased depth to 3 for better coverage
+		FoundURLs: []string{},
+		Client:    client,
+	}, nil
 }
 
 func (s *Spider) Crawl() []string {
+	// Add start URL to the queue to begin crawling
 	s.crawlRecursive(s.BaseURL.String(), 0)
 	return s.FoundURLs
 }
@@ -42,28 +76,32 @@ func (s *Spider) crawlRecursive(currentURL string, depth int) {
 		return
 	}
 
-	// Already visited?
+	// Fast check: Already visited?
 	if _, loaded := s.Visited.LoadOrStore(currentURL, true); loaded {
 		return
 	}
 
 	s.mu.Lock()
-	if len(s.FoundURLs) > 50 { // Limit to max 50 links
+	// Hard limit check to prevent memory bloat
+	if len(s.FoundURLs) > 100 {
 		s.mu.Unlock()
 		return
 	}
 	s.FoundURLs = append(s.FoundURLs, currentURL)
 	s.mu.Unlock()
 
+	// Fetch page content
 	body, err := s.fetchBody(currentURL)
 	if err != nil {
 		return
 	}
 
+	// Extract and traverse links
 	links := s.extractLinks(body)
 	for _, link := range links {
 		absURL := s.resolveURL(link)
-		// Stay within the same hostname
+
+		// Scope check: Stay within the same domain (including subdomains)
 		if absURL != "" && strings.Contains(absURL, s.BaseURL.Hostname()) {
 			s.crawlRecursive(absURL, depth+1)
 		}
@@ -71,44 +109,21 @@ func (s *Spider) crawlRecursive(currentURL string, depth int) {
 }
 
 func (s *Spider) fetchBody(target string) (string, error) {
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 20,
-		},
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 10 {
-				return http.ErrUseLastResponse
-			}
-
-			initialHost := via[0].URL.Hostname()
-			newHost := req.URL.Hostname()
-
-			initialBase := strings.TrimPrefix(initialHost, "www.")
-			newBase := strings.TrimPrefix(newHost, "www.")
-
-			if initialBase != "" && newBase != "" && !strings.Contains(newBase, initialBase) {
-				return http.ErrUseLastResponse
-			}
-
-			return nil
-		},
-	}
-
-	resp, err := client.Get(target)
+	// Reuse existing client
+	resp, err := s.Client.Get(target)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	bytes, _ := io.ReadAll(resp.Body)
-	return string(bytes), nil
+
+	// Memory Protection: Limit read size to Max 5MB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
+	return string(body), nil
 }
 
 func (s *Spider) extractLinks(body string) []string {
-	re := regexp.MustCompile(`href=["'](.*?)["']`)
-	matches := re.FindAllStringSubmatch(body, -1)
+	// Use pre-compiled global regex
+	matches := linkRegex.FindAllStringSubmatch(body, -1)
 	var links []string
 	for _, match := range matches {
 		if len(match) > 1 {
@@ -120,9 +135,12 @@ func (s *Spider) extractLinks(body string) []string {
 
 func (s *Spider) resolveURL(href string) string {
 	href = strings.TrimSpace(href)
-	if strings.HasPrefix(href, "javascript") || strings.HasPrefix(href, "mailto") || strings.HasPrefix(href, "#") {
+	// Filter out non-http links (js, mailto, anchors)
+	if strings.HasPrefix(href, "javascript") || strings.HasPrefix(href, "mailto") || strings.HasPrefix(href, "#") || href == "" {
 		return ""
 	}
+
+	// Convert relative URLs to absolute URLs
 	u, err := url.Parse(href)
 	if err != nil {
 		return ""
@@ -143,26 +161,27 @@ func (p *SpiderPlugin) Run(target ScanTarget) *Vulnerability {
 		return nil
 	}
 
-	// Build URL
 	startURL := getURL(target, "/")
 
-	// Initialize Spider
+	// Debug output
+	fmt.Printf("[*] Starting Spider on %s\n", startURL)
+
 	spider, err := NewSpider(startURL)
 	if err != nil {
 		return nil
 	}
 
-	// Run the crawl
 	urls := spider.Crawl()
 
-	if len(urls) > 1 { // If found more than just the homepage
+	if len(urls) > 0 {
 		desc := fmt.Sprintf("Spider crawled the site map and discovered %d pages.\n", len(urls))
 
-		// Show first 10
-		limit := 10
-		if len(urls) < 10 {
+		// Show first 15 URLs
+		limit := 15
+		if len(urls) < 15 {
 			limit = len(urls)
 		}
+
 		for i := 0; i < limit; i++ {
 			desc += fmt.Sprintf("- %s\n", urls[i])
 		}
