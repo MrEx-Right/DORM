@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -159,6 +160,30 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 
 	targetHost := r.URL.Query().Get("target")
 	selectedPluginsStr := r.URL.Query().Get("plugins")
+
+	// ==========================================
+	// 🛠️ CRITICAL FIX: URL SANITIZATION
+	// ==========================================
+
+	if strings.Contains(targetHost, "://") {
+		u, err := url.Parse(targetHost)
+		if err == nil {
+			targetHost = u.Hostname()
+		}
+	} else {
+
+		parts := strings.Split(targetHost, "/")
+		if len(parts) > 0 {
+			targetHost = parts[0]
+		}
+	}
+
+	targetHost = strings.TrimPrefix(targetHost, "http://")
+	targetHost = strings.TrimPrefix(targetHost, "https://")
+	targetHost = strings.TrimRight(targetHost, "/")
+
+	fmt.Printf("[DEBUG] Sanitized Target Host: %s\n", targetHost)
+	// ==========================================
 
 	// --- UPDATE CLIENT SETTINGS (Located in client.go) ---
 
@@ -442,7 +467,7 @@ func main() {
 	url := "http://localhost" + port
 
 	fmt.Println("===========================================")
-	fmt.Println("       DORM SCANNER v1.3.1                 ")
+	fmt.Println("       DORM SCANNER v1.3.3                 ")
 	fmt.Println("===========================================")
 	fmt.Printf("[*] Server Active: %s\n", url)
 
