@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.3.3] - 2026-01-25
+### 🧠 Intelligent Engine & Core Refinements
+
+- **Online Plugin Suite (Updated):** Major updates to web-based attack vectors including SQLi, XSS, and IDOR. Detection algorithms have been strengthened against modern WAFs.
+- **Spider Engine (Optimized):** Crawler regex structure has been optimized. Enhanced capability to detect unquoted attributes and complex link structures.
+- **Smart EDB Search:** Exploit-DB module now uses "Smart Keyword Matching" logic for higher accuracy and fewer missed exploits.
+- **Shellshock (Advanced Detection):** Switched from static string reflection to mathematical execution verification ($((A+B))) to eliminate False Positives.
+- **General Improvements:** Various workflow optimizations and stability fixes were applied to the core engine.
+
 ## [v1.3.2] - 2026-01-22
 ### 🌪️ Advanced Fuzzer & Deep Anomaly Detection
 
