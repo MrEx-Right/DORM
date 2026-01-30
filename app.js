@@ -1,6 +1,8 @@
 // --- GLOBAL VARIABLES ---
 let timerInterval, timerSeconds = 0, vulnCount = 0, scanResults = [];
-let fuzzerPluginName = ""; // Fuzzer'ın tam adını backend'den yakalamak için
+let fuzzerPluginName = ""; // To capture the Fuzzer's exact name from backend
+let scanEventSource = null; // <--- MADE GLOBAL (To enable stopping)
+
 const ctx = document.getElementById('vulnChart').getContext('2d');
 
 // --- CHART CONFIG ---
@@ -18,13 +20,13 @@ window.onload = async () => {
     const grid = document.getElementById('pluginGrid');
     
     plugins.forEach(p => {
-        // ZEKİ FİLTRELEME:
-        // Eğer plugin adında "Fuzzer" geçiyorsa, onu grid'e ekleme.
-        // Onun yerine adını sakla ki Sidebar'dan tetikleyebilelim.
+        // SMART FILTERING:
+        // If the plugin name contains "Fuzzer", do not add it to grid.
+        // Store name instead to trigger via Sidebar.
         if (p.includes("Fuzzer")) {
             fuzzerPluginName = p;
         } else {
-            // Diğer standart pluginleri grid'e ekle
+            // Add other standard plugins to grid
             grid.innerHTML += `<label class="plugin-item"><input type="checkbox" class="plugin-check" value="${escapeHtml(p)}" checked> ${escapeHtml(p)}</label>`; 
         }
     });
@@ -122,15 +124,22 @@ async function deleteScan(id) {
 // --- SCANNER LOGIC ---
 function startScan() {
     const target = document.getElementById('targetInput').value;
+    const btn = document.getElementById('scanBtn');
+
+    // STOP LOGIC: If button is red (STOP mode), halt the scan.
+    if (btn.classList.contains('btn-danger')) {
+        stopScan();
+        return;
+    }
+
     const rotateUA = document.getElementById('uaToggle').checked;
     const speed = "300"; 
     const authHeader = document.getElementById('authInput').value;
 
-    // 1. Grid'deki seçili pluginleri al
+    // 1. Get selected plugins from grid
     const selected = Array.from(document.querySelectorAll('.plugin-check:checked')).map(c => c.value);
     
-    // 2. Sidebar'daki Fuzzer Toggle'ı kontrol et
-    // Eğer Sidebar'daki "Sledgehammer" açık ise ve Fuzzer adını backend'den aldıysak listeye ekle.
+    // 2. Check Sidebar Fuzzer Toggle
     const fuzzerEnabled = document.getElementById('sidebarFuzzerToggle').checked;
     if (fuzzerEnabled && fuzzerPluginName !== "") {
         selected.push(fuzzerPluginName);
@@ -143,8 +152,11 @@ function startScan() {
     vulnChart.data.datasets[0].data = [0,0,0,0,0];
     vulnChart.update();
     
-    const btn = document.getElementById('scanBtn');
-    btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> SCANNING...';
+    // UI: Switch to STOP SCAN Mode
+    btn.innerHTML = '<i class="fas fa-stop"></i> STOP SCAN';
+    btn.classList.remove('btn-success'); // Remove green class if exists
+    btn.classList.add('btn-danger');     // Add red class
+    btn.style.backgroundColor = '#da3633'; // Manual backup for color
 
     timerSeconds = 0; clearInterval(timerInterval);
     timerInterval = setInterval(() => {
@@ -154,17 +166,14 @@ function startScan() {
         document.getElementById('timerDisplay').innerText = `${m}:${s}`;
     }, 1000);
 
-    const eventSource = new EventSource(`/scan?target=${encodeURIComponent(target)}&plugins=${encodeURIComponent(selected.join(","))}&delay=${speed}&rotateUA=${rotateUA}&auth=${encodeURIComponent(authHeader)}`);
+    // Assign to global variable
+    scanEventSource = new EventSource(`/scan?target=${encodeURIComponent(target)}&plugins=${encodeURIComponent(selected.join(","))}&delay=${speed}&rotateUA=${rotateUA}&auth=${encodeURIComponent(authHeader)}`);
 
-    eventSource.onmessage = (e) => {
+    scanEventSource.onmessage = (e) => {
         const data = JSON.parse(e.data);
         
         if(data.Status === "DONE") { 
-            clearInterval(timerInterval); 
-            btn.disabled = false; 
-            btn.innerHTML = '<i class="fas fa-play"></i> START SCAN'; 
-            eventSource.close(); 
-            loadHistory(); 
+            finishScanUI(); // Reset UI
             return; 
         }
 
@@ -201,12 +210,41 @@ function startScan() {
         if(idx !== -1) { vulnChart.data.datasets[0].data[idx]++; vulnChart.update(); }
     };
     
-    eventSource.onerror = () => {
-        eventSource.close();
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-play"></i> START SCAN';
-        clearInterval(timerInterval);
+    scanEventSource.onerror = () => {
+        stopScan(); // Stop if error occurs
     };
+}
+
+// NEW: STOP SCAN FUNCTION
+async function stopScan() {
+    await fetch('/stop'); // Send signal to backend
+
+    if (scanEventSource) {
+        scanEventSource.close(); // Cut the connection
+        scanEventSource = null;
+    }
+
+    finishScanUI(); // Revert button
+    
+    document.getElementById('tableBody').insertAdjacentHTML('beforeend', 
+        '<tr><td colspan="6" style="text-align:center; color:#da3633; font-weight:bold; padding:20px;">⛔ SCAN ABORTED BY USER</td></tr>');
+}
+
+// NEW: UI RESET HELPER
+function finishScanUI() {
+    clearInterval(timerInterval);
+    const btn = document.getElementById('scanBtn');
+    
+    if (scanEventSource) {
+        scanEventSource.close();
+        scanEventSource = null;
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-play"></i> START SCAN';
+    btn.classList.remove('btn-danger');
+    btn.style.backgroundColor = ''; // Revert to CSS color
+    loadHistory();
 }
 
 function downloadReport() {
