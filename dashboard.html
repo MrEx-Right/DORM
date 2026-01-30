@@ -40,10 +40,10 @@
         .nav-item.active { background: var(--accent); color: #fff; }
         .nav-item i { width: 20px; text-align: center; }
 
-        /* FUZZER PANEL (YENİ) */
+        /* FUZZER PANEL (NEW) */
         .fuzzer-panel {
             margin-top: 20px;
-            background: rgba(218, 54, 51, 0.1); /* Hafif kırmızı */
+            background: rgba(218, 54, 51, 0.1); /* Light Red */
             border: 1px solid var(--danger);
             border-radius: 8px;
             padding: 15px;
@@ -77,7 +77,11 @@
         button:hover { filter: brightness(1.1); }
         button:disabled { background: var(--border); cursor: not-allowed; opacity: 0.6; }
         .btn-group { display: flex; gap: 10px; justify-content: flex-end; }
-        .btn-danger { background: var(--danger); }
+        
+        /* IMPORTANT: STYLE FOR STOP BUTTON */
+        .btn-danger { background: var(--danger) !important; color: white !important; }
+        .btn-danger:hover { background-color: #b62324 !important; }
+        
         .btn-icon { padding: 8px; aspect-ratio: 1; justify-content: center; }
 
         #plugin-section { display: none; background: var(--bg-dark); border: 1px solid var(--border); padding: 15px; border-radius: 6px; margin-top: 10px; }
@@ -143,7 +147,7 @@
         </div>
 
         <div style="margin-top:auto; font-size:11px; color:#30363d; text-align:center;">
-            v1.3.3
+            v1.3.4
         </div>
     </div>
 
