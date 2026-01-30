@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.3.4] - 2026-01-30
+### 🛑 Emergency Stop & Advanced Logic Attack Vectors
+
+- **Emergency Scan Abort (Context-Aware):** Implemented a global cancellation system allowing operators to instantly halt running scans. The engine now gracefully terminates all active goroutines and closes network connections upon receiving the "STOP" signal.
+- **HTTP Request Smuggling (The Ghost):** Added a high-criticality plugin to detect CL.TE and TE.CL desynchronization attacks. The module uses raw socket manipulation and interference techniques to identify "poisoned" backend sockets.
+- **Race Condition (Limit Breaker):** Introduced a state-mutation concurrency tester. Utilizing a "Gate" synchronization pattern, it fires simultaneous POST requests to critical endpoints and analyzes response anomalies for logical race conditions.
+- **Dangerous Methods (Smart Verify):** Upgraded the HTTP Method scanner to perform active verification. It now attempts a full lifecycle check (Upload -> Verify Content -> Delete) to confirm `PUT` method exposure, strictly eliminating false positives.
+
 ## [v1.3.3] - 2026-01-25
 ### 🧠 Intelligent Engine & Core Refinements
 
