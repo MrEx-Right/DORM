@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -11,11 +12,16 @@ import (
 	"strings"
 	"sync"
 	"time"
+	// IMPORTANT: Ensure this path matches your go.mod file
+	// "DORM/exploitdb"
 )
 
 // ==========================================
 // 1. STRUCTURAL DEFINITIONS
 // ==========================================
+
+// GLOBAL CANCEL FUNCTION (The "Emergency Brake" to stop the scan)
+var activeScanCancel context.CancelFunc
 
 type ScanTarget struct {
 	IP   string
@@ -46,6 +52,7 @@ type Engine struct {
 	mu             sync.Mutex
 	OnFind         func(v *Vulnerability)
 	AllowedPlugins map[string]bool
+	Ctx            context.Context // Context listener for cancellation signals
 }
 
 // ==========================================
@@ -92,38 +99,65 @@ func (e *Engine) Start() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for job := range jobs {
-				// FILTER CHECK
-				if len(e.AllowedPlugins) > 0 {
-					if !e.AllowedPlugins[job.Plugin.Name()] {
-						continue
+			for {
+				select {
+				// If "STOP" signal is received, drop the job and exit
+				case <-e.Ctx.Done():
+					return
+				// If there is a job, take it
+				case job, ok := <-jobs:
+					if !ok {
+						return
 					}
-				}
 
-				// --- [RATE LIMIT PROTECTION] ---
-				// 300ms Backend Delay to prevent DoS
-				time.Sleep(300 * time.Millisecond)
-				// -------------------------------
+					// Check context again before starting the heavy work
+					select {
+					case <-e.Ctx.Done():
+						return
+					default:
+					}
 
-				vuln := job.Plugin.Run(job.Target)
-				if vuln != nil {
-					e.mu.Lock()
-					e.Results = append(e.Results, *vuln)
-					e.mu.Unlock()
-					if e.OnFind != nil {
-						e.OnFind(vuln)
+					// FILTER CHECK
+					if len(e.AllowedPlugins) > 0 {
+						if !e.AllowedPlugins[job.Plugin.Name()] {
+							continue
+						}
+					}
+
+					// --- [RATE LIMIT PROTECTION] ---
+					// 300ms Backend Delay to prevent DoS
+					time.Sleep(300 * time.Millisecond)
+					// -------------------------------
+
+					vuln := job.Plugin.Run(job.Target)
+					if vuln != nil {
+						e.mu.Lock()
+						e.Results = append(e.Results, *vuln)
+						e.mu.Unlock()
+						if e.OnFind != nil {
+							e.OnFind(vuln)
+						}
 					}
 				}
 			}
 		}()
 	}
 
-	for _, target := range e.Targets {
-		for _, plugin := range e.Plugins {
-			jobs <- Job{Target: target, Plugin: plugin}
+	// Distribute Jobs (Break loop if context is cancelled)
+	go func() {
+		for _, target := range e.Targets {
+			for _, plugin := range e.Plugins {
+				select {
+				case <-e.Ctx.Done(): // If stop signal received, stop distribution
+					goto FINISH
+				case jobs <- Job{Target: target, Plugin: plugin}:
+				}
+			}
 		}
-	}
-	close(jobs)
+	FINISH:
+		close(jobs)
+	}()
+
 	wg.Wait()
 }
 
@@ -152,11 +186,35 @@ func handlePluginList(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(GetPluginInventory())
 }
 
+// NEW: STOP ENDPOINT
+func handleStop(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if activeScanCancel != nil {
+		fmt.Println("[!] USER ABORTED THE SCAN!")
+		activeScanCancel() // Hit the brakes!
+		activeScanCancel = nil
+		w.Write([]byte("Scan stopped"))
+	} else {
+		w.Write([]byte("No active scan"))
+	}
+}
+
 func handleScan(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// --- CONTEXT SETUP (FOR CANCELLATION) ---
+	// If a scan is already running, stop it first
+	if activeScanCancel != nil {
+		activeScanCancel()
+	}
+	// Create a new context and store the cancel function
+	ctx, cancel := context.WithCancel(context.Background())
+	activeScanCancel = cancel
+	// ----------------------------------------
 
 	targetHost := r.URL.Query().Get("target")
 	selectedPluginsStr := r.URL.Query().Get("plugins")
@@ -237,7 +295,17 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
+	// ADD CONTEXT CHECK TO PORT SCANNING AS WELL
 	for _, port := range commonPorts {
+		// If user cancels during port scan
+		select {
+		case <-ctx.Done():
+			fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
+			flusher.Flush()
+			return
+		default:
+		}
+
 		wg.Add(1)
 		go func(p int) {
 			defer wg.Done()
@@ -256,6 +324,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 
 	// STEP 2: PREPARE AND RUN ENGINE
 	engine := NewEngine(10) // Concurrency 10
+	engine.Ctx = ctx        // <--- PASS CONTEXT TO ENGINE
 
 	// PLUGINS REGISTRATION
 	engine.AddPlugin(&DOMScannerPlugin{})  //DOM Scanner
@@ -353,6 +422,9 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	engine.AddPlugin(&TeamCityPlugin{})
 	engine.AddPlugin(&ShadowAPIPlugin{})
 
+	engine.AddPlugin(&RequestSmugglingPlugin{})
+	engine.AddPlugin(&RaceConditionPlugin{})
+
 	// Apply User Filters
 	engine.SetFilter(selectedPluginsStr)
 
@@ -386,6 +458,8 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 
 	// --- STORAGE INTEGRATION START (2/2) ---
 	record.EndTime = time.Now()
+	// Even if stopped, we mark it as Completed for now or update logic later
+	// (It will reach here even if cancelled via context)
 	record.Status = "Completed"
 	record.Vulnerabilities = foundVulns
 	record.TotalVulns = len(foundVulns)
@@ -457,6 +531,7 @@ func main() {
 	})
 
 	http.HandleFunc("/scan", handleScan)
+	http.HandleFunc("/stop", handleStop) // <--- STOP ENDPOINT ADDED
 	http.HandleFunc("/plugins", handlePluginList)
 
 	// 2. Register History API Routes
@@ -467,7 +542,7 @@ func main() {
 	url := "http://localhost" + port
 
 	fmt.Println("===========================================")
-	fmt.Println("       DORM SCANNER v1.3.3                 ")
+	fmt.Println("       DORM SCANNER v1.3.4                 ")
 	fmt.Println("===========================================")
 	fmt.Printf("[*] Server Active: %s\n", url)
 
