@@ -542,7 +542,7 @@ func main() {
 	url := "http://localhost" + port
 
 	fmt.Println("===========================================")
-	fmt.Println("       DORM SCANNER v1.3.4                 ")
+	fmt.Println("       DORM SCANNER v1.3.5                 ")
 	fmt.Println("===========================================")
 	fmt.Printf("[*] Server Active: %s\n", url)
 
@@ -555,3 +555,4 @@ func main() {
 		fmt.Println("ERROR:", err)
 	}
 }
+
