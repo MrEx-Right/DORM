@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.3.5] - 2026-02-01
+### ☁️ Cloud Intelligence & Modern Protocol Update
+
+- **SSRF Omni-Hunter (Multi-Cloud):** Expanded detection capabilities to cover GCP, Azure, DigitalOcean, and Oracle Cloud metadata leaks. Implemented advanced WAF evasion via IP Obfuscation (Decimal/Hex) and Protocol Smuggling (`file://`, `gopher://`).
+- **NoSQL Hunter (Polyglot):** Replaced static analysis with **Time-Based** (JavaScript `sleep()`) and **Boolean-Based** blind injection techniques, enabling precise RCE verification on MongoDB and CouchDB.
+- **JWT Security Scanner (Pro):** Completely overhauled the engine to perform structural JSON analysis. Features now include **Weak Secret Brute-Force** (HMAC-SHA256) and active "None" algorithm bypass verification.
+- **CORS Misconfiguration (Enhanced):** Upgraded logic to detect **Cache Poisoning** risks via missing `Vary: Origin` headers and implemented browser-aware checks for "Wildcard + Credentials" combinations.
+- **ColdFusion Exposure (Content-Aware):** Integrated **Signature Verification** to eliminate false positives. The scanner now strictly validates response bodies for specific ColdFusion fingerprints before flagging Debug or Admin panels.
+
 ## [v1.3.4] - 2026-01-30
 ### 🛑 Emergency Stop & Advanced Logic Attack Vectors
 
