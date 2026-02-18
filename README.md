@@ -5,7 +5,6 @@ Modern, High-Performance Vulnerability Scanner. Features: Spider Crawler, Chaos 
 
 ![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)
 ![License](https://img.shields.io/badge/License-GPLv3-blue)
-![Status](https://img.shields.io/badge/Status-Beta-orange)
 ![Type](https://img.shields.io/badge/Type-Offensive%20Security-red)
 
 **DORM** is a high-performance, concurrent, and modular vulnerability scanner written in **Go**. Designed for Red Teams and Bug Bounty hunters, it combines passive reconnaissance with active, aggressive exploitation techniques.
