@@ -57,10 +57,30 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         .control-panel { background: var(--panel-bg); padding: 20px; border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); display: flex; flex-direction: column; gap: 15px; }
-        .input-group { display: flex; gap: 10px; align-items: center; }
+        .input-group { display: flex; gap: 10px; align-items: flex-start; } /* Changed to flex-start for textarea */
+        
         input[type="text"] { flex-grow: 1; padding: 12px; background: var(--bg-dark); border: 1px solid var(--border); color: #fff; border-radius: 6px; font-family: 'Consolas', monospace; outline: none; }
         input[type="text"]:focus { border-color: var(--accent); }
-        #timerDisplay { font-family: 'Consolas', monospace; font-size: 20px; color: var(--accent); font-weight: bold; width: 60px; text-align: center; }
+        
+        /* --- MULTI-TARGET TEXTAREA HACKER THEME --- */
+        #targetInput {
+            flex-grow: 1;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+            font-family: 'Consolas', monospace;
+            resize: vertical;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+            transition: border-color 0.2s, box-shadow 0.2s;
+            outline: none;
+            line-height: 1.5;
+        }
+        #targetInput:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2); }
+        #targetInput::placeholder { color: #484f58; }
+
+        #timerDisplay { font-family: 'Consolas', monospace; font-size: 20px; color: var(--accent); font-weight: bold; width: 60px; text-align: center; margin-top: 5px; }
 
         .settings-row { display: flex; align-items: center; gap: 20px; padding: 5px 0; }
         .toggle-label { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-main); user-select: none; }
@@ -73,7 +93,7 @@
         @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
         /* BUTTONS & PLUGINS */
-        button { padding: 12px 25px; background: var(--success); color: white; border: none; cursor: pointer; border-radius: 6px; font-weight: bold; transition: 0.2s; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        button { padding: 12px 25px; background: var(--success); color: white; border: none; cursor: pointer; border-radius: 6px; font-weight: bold; transition: 0.2s; display: flex; align-items: center; gap: 8px; font-size: 13px; white-space: nowrap; }
         button:hover { filter: brightness(1.1); }
         button:disabled { background: var(--border); cursor: not-allowed; opacity: 0.6; }
         .btn-group { display: flex; gap: 10px; justify-content: flex-end; }
@@ -147,7 +167,7 @@
         </div>
 
         <div style="margin-top:auto; font-size:11px; color:#30363d; text-align:center;">
-            v1.3.5
+            v1.4.0
         </div>
     </div>
 
@@ -157,7 +177,7 @@
             <div class="container">
                 <div class="control-panel">
                     <div class="input-group">
-                        <input type="text" id="targetInput" placeholder="Target URL or IP (e.g., example.com)">
+                        <textarea id="targetInput" rows="4" placeholder="http://site1.com&#10;192.168.1.10&#10;https://site3.com"></textarea>
                         <div id="timerDisplay">00:00</div>
                         <button onclick="startScan()" id="scanBtn"><i class="fas fa-play"></i> START SCAN</button>
                     </div>
@@ -170,7 +190,7 @@
                         <div id="authContainer" class="auth-content">
                             <div class="input-group" style="margin-top:10px;">
                                 <input type="text" id="authInput" placeholder='Paste Header e.g. "Cookie: PHPSESSID=xyz..." or "Authorization: Bearer..."' 
-                                       style="border-color:var(--border); font-size:13px; color:#aaffaa; font-family:'Consolas';">
+                                       style="border-color:var(--border); font-size:13px; color:#aaffaa; font-family:'Consolas'; width: 100%;">
                             </div>
                         </div>
                     </div>
@@ -239,4 +259,3 @@
 
 </body>
 </html>
-
