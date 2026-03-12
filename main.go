@@ -1,6 +1,7 @@
 package main
 
 import (
+	"DORM/dormdb"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -186,7 +187,7 @@ func handlePluginList(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(GetPluginInventory())
 }
 
-// NEW: STOP ENDPOINT
+// STOP ENDPOINT
 func handleStop(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
@@ -207,68 +208,85 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	// --- CONTEXT SETUP (FOR CANCELLATION) ---
-	// If a scan is already running, stop it first
 	if activeScanCancel != nil {
 		activeScanCancel()
 	}
-	// Create a new context and store the cancel function
 	ctx, cancel := context.WithCancel(context.Background())
 	activeScanCancel = cancel
 	// ----------------------------------------
 
-	targetHost := r.URL.Query().Get("target")
-	selectedPluginsStr := r.URL.Query().Get("plugins")
-
-	// ==========================================
-	// 🛠️ CRITICAL FIX: URL SANITIZATION
-	// ==========================================
-
-	if strings.Contains(targetHost, "://") {
-		u, err := url.Parse(targetHost)
-		if err == nil {
-			targetHost = u.Hostname()
-		}
-	} else {
-
-		parts := strings.Split(targetHost, "/")
-		if len(parts) > 0 {
-			targetHost = parts[0]
-		}
-	}
-
-	targetHost = strings.TrimPrefix(targetHost, "http://")
-	targetHost = strings.TrimPrefix(targetHost, "https://")
-	targetHost = strings.TrimRight(targetHost, "/")
-
-	fmt.Printf("[DEBUG] Sanitized Target Host: %s\n", targetHost)
-	// ==========================================
-
-	// --- UPDATE CLIENT SETTINGS (Located in client.go) ---
-
-	// 1. Chameleon Mode
-	rotateParam := r.URL.Query().Get("rotateUA")
-	if rotateParam == "true" {
-		GlobalRotateUA = true
-	} else {
-		GlobalRotateUA = false
-	}
-
-	// 2. Auth Header (Cookie/Token)
-	authParam := r.URL.Query().Get("auth")
-	GlobalAuthHeader = authParam
-	// ----------------------------------------------------
-
-	// 3. VALIDATION
-	if targetHost == "" {
-		return
-	}
+	// 🛠️ CRITICAL FIX 1: Keep SSE alive instantly!
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		return
 	}
+	w.WriteHeader(http.StatusOK)
+	flusher.Flush() // Tell the browser "I'm here, don't drop the connection!"
+
+	targetsParam := r.URL.Query().Get("targets") // Look for the new multi-target param
+	if targetsParam == "" {
+		targetsParam = r.URL.Query().Get("target") // Fallback: If old app.js is running, grab this!
+	}
+	selectedPluginsStr := r.URL.Query().Get("plugins")
+
+	// --- UPDATE CLIENT SETTINGS (Located in client.go) ---
+	if r.URL.Query().Get("rotateUA") == "true" {
+		GlobalRotateUA = true
+	} else {
+		GlobalRotateUA = false
+	}
+	GlobalAuthHeader = r.URL.Query().Get("auth")
+	// ----------------------------------------------------
+
+	if targetsParam == "" {
+		return
+	}
+
+	// ==========================================
+	// 🛠️ MULTI-TARGET PARSING & SANITIZATION
+	// ==========================================
+	rawTargets := strings.Split(targetsParam, ",")
+	var sanitizedTargets []string
+
+	for _, t := range rawTargets {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+
+		if strings.Contains(t, "://") {
+			if u, err := url.Parse(t); err == nil {
+				t = u.Hostname()
+			}
+		} else {
+			parts := strings.Split(t, "/")
+			if len(parts) > 0 {
+				t = parts[0]
+			}
+		}
+
+		t = strings.TrimPrefix(t, "http://")
+		t = strings.TrimPrefix(t, "https://")
+		t = strings.TrimRight(t, "/")
+
+		if t != "" {
+			sanitizedTargets = append(sanitizedTargets, t)
+		}
+	}
+
+	if len(sanitizedTargets) == 0 {
+		return
+	}
+
+	fmt.Printf("[DEBUG] Sanitized Targets: %v\n", sanitizedTargets)
 
 	// --- STORAGE INTEGRATION START (1/2) ---
-	record := NewScanRecord(targetHost)
+	// Create a single record for this batch scan
+	recordTitle := strings.Join(sanitizedTargets, ", ")
+	if len(recordTitle) > 50 {
+		recordTitle = recordTitle[:47] + "..."
+	}
+	record := NewScanRecord(recordTitle)
 	DB.SaveScan(record)
 
 	var foundVulns []*Vulnerability
@@ -276,55 +294,54 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	// --- STORAGE INTEGRATION END ---
 
 	// STEP 1: SMART PORT DISCOVERY (FAST PRE-SCAN)
-	fmt.Printf("[*] %s is being scanned...\n", targetHost)
+	fmt.Printf("[*] Discovered %d target(s) for scanning...\n", len(sanitizedTargets))
 
 	commonPorts := []int{
-		// --- WEB & PROXY ---
 		80, 443, 8080, 8443, 8000, 8001, 8081, 8888, 3000, 5000, 9000, 9090,
-		// --- REMOTE ACCESS & MGMT ---
 		22, 23, 3389, 5900, 5901, 20, 21,
-		// --- DATABASES ---
 		3306, 5432, 1433, 1434, 1521, 27017, 6379, 9200,
-		// --- DEV OPS & CLOUD & API ---
 		2375, 2376, 6443, 11211, 5672, 15672, 8500,
-		// --- SERVICES & OTHERS ---
 		25, 465, 587, 110, 995, 143, 993, 389, 636, 53, 161, 445,
 	}
 
-	var openPorts []int
+	type TargetPort struct {
+		Host string
+		Port int
+	}
+	var activeTargets []TargetPort
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
-	// ADD CONTEXT CHECK TO PORT SCANNING AS WELL
-	for _, port := range commonPorts {
-		// If user cancels during port scan
-		select {
-		case <-ctx.Done():
-			fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
-			flusher.Flush()
-			return
-		default:
-		}
-
-		wg.Add(1)
-		go func(p int) {
-			defer wg.Done()
-			address := net.JoinHostPort(targetHost, fmt.Sprintf("%d", p))
-			// Fast check: 1 second timeout
-			conn, err := net.DialTimeout("tcp", address, 1*time.Second)
-			if err == nil {
-				conn.Close()
-				mu.Lock()
-				openPorts = append(openPorts, p)
-				mu.Unlock()
+	// Scan all ports for ALL provided targets
+	for _, host := range sanitizedTargets {
+		for _, port := range commonPorts {
+			select {
+			case <-ctx.Done():
+				fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
+				flusher.Flush()
+				return
+			default:
 			}
-		}(port)
+
+			wg.Add(1)
+			go func(h string, p int) {
+				defer wg.Done()
+				address := net.JoinHostPort(h, fmt.Sprintf("%d", p))
+				conn, err := net.DialTimeout("tcp", address, 1*time.Second)
+				if err == nil {
+					conn.Close()
+					mu.Lock()
+					activeTargets = append(activeTargets, TargetPort{Host: h, Port: p})
+					mu.Unlock()
+				}
+			}(host, port)
+		}
 	}
 	wg.Wait()
 
 	// STEP 2: PREPARE AND RUN ENGINE
 	engine := NewEngine(10) // Concurrency 10
-	engine.Ctx = ctx        // <--- PASS CONTEXT TO ENGINE
+	engine.Ctx = ctx        // PASS CONTEXT TO ENGINE
 
 	// PLUGINS REGISTRATION
 	engine.AddPlugin(&DOMScannerPlugin{})  //DOM Scanner
@@ -333,6 +350,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	engine.AddPlugin(&BruteForcePlugin{})  //Brute Force
 	engine.AddPlugin(&SpiderPlugin{})      //Spider
 	engine.AddPlugin(&EDBPlugin{})         //Exploit DB
+	engine.AddPlugin(&PassiveCVEPlugin{})  //Passive CVE
 	engine.AddPlugin(&FuzzerPlugin{})      //Fuzzer
 
 	engine.AddPlugin(&BannerGrabPlugin{})
@@ -424,11 +442,12 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 
 	engine.AddPlugin(&RequestSmugglingPlugin{})
 	engine.AddPlugin(&RaceConditionPlugin{})
+	engine.AddPlugin(&WebCachePoisoningPlugin{})
 
 	// Apply User Filters
 	engine.SetFilter(selectedPluginsStr)
 
-	if len(openPorts) == 0 {
+	if len(activeTargets) == 0 {
 		fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
 		flusher.Flush()
 		record.Status = "Completed"
@@ -437,8 +456,9 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, p := range openPorts {
-		engine.AddTarget(targetHost, p)
+	// ADD ALL DISCOVERED TARGET/PORT COMBINATIONS TO ENGINE
+	for _, tp := range activeTargets {
+		engine.AddTarget(tp.Host, tp.Port)
 	}
 
 	// Capture and Stream Findings
@@ -458,20 +478,16 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 
 	// --- STORAGE INTEGRATION START (2/2) ---
 	record.EndTime = time.Now()
-	// Even if stopped, we mark it as Completed for now or update logic later
-	// (It will reach here even if cancelled via context)
 	record.Status = "Completed"
 	record.Vulnerabilities = foundVulns
 	record.TotalVulns = len(foundVulns)
 
-	// Calculate severity statistics
 	stats := make(map[string]int)
 	for _, v := range foundVulns {
 		stats[v.Severity]++
 	}
 	record.SeverityStats = stats
 
-	// Save final state to DB
 	DB.UpdateScan(record.ID, record)
 	// --- STORAGE INTEGRATION END ---
 
@@ -520,8 +536,8 @@ func handleDelete(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	// 1. Initialize the Database
-	InitDB("scans.json")
-
+	InitDB("dorm_engine.db")
+	dormdb.SyncCVEDatabase()
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "dashboard.html")
 	})
@@ -531,7 +547,7 @@ func main() {
 	})
 
 	http.HandleFunc("/scan", handleScan)
-	http.HandleFunc("/stop", handleStop) // <--- STOP ENDPOINT ADDED
+	http.HandleFunc("/stop", handleStop)
 	http.HandleFunc("/plugins", handlePluginList)
 
 	// 2. Register History API Routes
@@ -542,7 +558,7 @@ func main() {
 	url := "http://localhost" + port
 
 	fmt.Println("===========================================")
-	fmt.Println("       DORM SCANNER v1.3.5                 ")
+	fmt.Println("          DORM SCANNER v1.4.0 		 	    ")
 	fmt.Println("===========================================")
 	fmt.Printf("[*] Server Active: %s\n", url)
 
@@ -555,4 +571,3 @@ func main() {
 		fmt.Println("ERROR:", err)
 	}
 }
-
