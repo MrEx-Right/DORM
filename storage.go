@@ -3,15 +3,18 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"os"
+	"log"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 // ScanRecord represents a single execution of the scanner.
-// It stores metadata, status, and the list of findings.
+
 type ScanRecord struct {
 	ID              string           `json:"id"`
 	Target          string           `json:"target"`
@@ -23,125 +26,175 @@ type ScanRecord struct {
 	SeverityStats   map[string]int   `json:"severity_stats"` // e.g., {"CRITICAL": 2, "HIGH": 5}
 }
 
-// StorageManager handles thread-safe I/O operations for the scan history.
-// It uses a simple JSON flat-file database mechanism.
+
+type DBScanRecord struct {
+	ID              string `gorm:"primaryKey"`
+	Target          string
+	StartTime       time.Time
+	EndTime         time.Time
+	Status          string
+	TotalVulns      int
+	SeverityStats   []byte    
+	Vulnerabilities []byte    
+	CreatedAt       time.Time `gorm:"index"` 
+}
+
+// StorageManager handles thread-safe DB operations.
 type StorageManager struct {
-	FilePath string
-	Mutex    sync.RWMutex
+	db    *gorm.DB
+	Mutex sync.RWMutex
 }
 
 // DB is the global singleton instance of the StorageManager.
 var DB *StorageManager
 
-// InitDB initializes the storage engine and ensures the persistence file exists.
+// InitDB initializes the SQLite storage engine.
 func InitDB(path string) {
-	DB = &StorageManager{
-		FilePath: path,
+	
+	database, err := gorm.Open(sqlite.Open(path), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent), 
+	})
+	if err != nil {
+		log.Fatalf("[!] Failed to connect to database: %v", err)
 	}
-	// Check if the file exists; if not, create an empty JSON array.
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		DB.SaveAll([]ScanRecord{})
+
+	
+	err = database.AutoMigrate(&DBScanRecord{})
+	if err != nil {
+		log.Fatalf("[!] Database migration failed: %v", err)
+	}
+
+	DB = &StorageManager{
+		db: database,
 	}
 }
 
+
+
+func (r *DBScanRecord) toAppModel() ScanRecord {
+	var vulns []*Vulnerability
+	var stats map[string]int
+
+	if len(r.Vulnerabilities) > 0 {
+		json.Unmarshal(r.Vulnerabilities, &vulns)
+	}
+	if len(r.SeverityStats) > 0 {
+		json.Unmarshal(r.SeverityStats, &stats)
+	}
+
+	// Null pointer hatası almamak için boş initialize ediyoruz
+	if stats == nil {
+		stats = make(map[string]int)
+	}
+	if vulns == nil {
+		vulns = []*Vulnerability{}
+	}
+
+	return ScanRecord{
+		ID:              r.ID,
+		Target:          r.Target,
+		StartTime:       r.StartTime,
+		EndTime:         r.EndTime,
+		Status:          r.Status,
+		TotalVulns:      r.TotalVulns,
+		Vulnerabilities: vulns,
+		SeverityStats:   stats,
+	}
+}
+
+func fromAppModel(app ScanRecord) DBScanRecord {
+	vulnsJSON, _ := json.Marshal(app.Vulnerabilities)
+	statsJSON, _ := json.Marshal(app.SeverityStats)
+
+	return DBScanRecord{
+		ID:              app.ID,
+		Target:          app.Target,
+		StartTime:       app.StartTime,
+		EndTime:         app.EndTime,
+		Status:          app.Status,
+		TotalVulns:      app.TotalVulns,
+		SeverityStats:   statsJSON,
+		Vulnerabilities: vulnsJSON,
+		CreatedAt:       app.StartTime,
+	}
+}
+
+// --- STORAGE OPERATIONS ---
+
 // GetAll retrieves all scan records from the local storage.
-// It uses a read-lock to ensure concurrent safety.
 func (s *StorageManager) GetAll() ([]ScanRecord, error) {
 	s.Mutex.RLock()
 	defer s.Mutex.RUnlock()
 
-	file, err := os.ReadFile(s.FilePath)
-	if err != nil {
+	var dbRecords []DBScanRecord
+	
+	if err := s.db.Order("created_at desc").Find(&dbRecords).Error; err != nil {
 		return nil, err
 	}
 
 	var records []ScanRecord
-	if len(file) == 0 {
-		return []ScanRecord{}, nil
+	for _, r := range dbRecords {
+		records = append(records, r.toAppModel())
 	}
 
-	err = json.Unmarshal(file, &records)
-	return records, err
+	return records, nil
 }
 
 // GetByID retrieves a specific scan record by its unique ID.
 func (s *StorageManager) GetByID(id string) (*ScanRecord, error) {
-	records, err := s.GetAll()
-	if err != nil {
-		return nil, err
+	s.Mutex.RLock()
+	defer s.Mutex.RUnlock()
+
+	var dbRecord DBScanRecord
+	if err := s.db.First(&dbRecord, "id = ?", id).Error; err != nil {
+		return nil, fmt.Errorf("scan record not found for ID: %s", id)
 	}
 
-	for _, r := range records {
-		if r.ID == id {
-			return &r, nil
-		}
-	}
-	return nil, fmt.Errorf("scan record not found for ID: %s", id)
+	appModel := dbRecord.toAppModel()
+	return &appModel, nil
 }
 
 // SaveScan creates a new scan record and persists it to storage.
-// Newest scans are prepended to the list.
 func (s *StorageManager) SaveScan(record ScanRecord) error {
-	records, _ := s.GetAll()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 
-	// Prepend the new record so the history shows the latest first.
-	records = append([]ScanRecord{record}, records...)
-
-	return s.SaveAll(records)
+	dbRecord := fromAppModel(record)
+	return s.db.Create(&dbRecord).Error
 }
 
-// UpdateScan modifies an existing scan record (e.g., adding vulnerabilities or changing status).
+// UpdateScan modifies an existing scan record.
 func (s *StorageManager) UpdateScan(id string, updatedRecord ScanRecord) error {
-	records, _ := s.GetAll()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 
-	found := false
-	for i, r := range records {
-		if r.ID == id {
-			records[i] = updatedRecord
-			found = true
-			break
-		}
+	dbRecord := fromAppModel(updatedRecord)
+	dbRecord.ID = id 
+
+	result := s.db.Save(&dbRecord)
+	if result.Error != nil {
+		return result.Error
 	}
-
-	if !found {
+	if result.RowsAffected == 0 {
 		return fmt.Errorf("cannot update: scan ID %s not found", id)
 	}
-
-	return s.SaveAll(records)
+	return nil
 }
 
 // DeleteScan removes a scan record permanently from storage.
 func (s *StorageManager) DeleteScan(id string) error {
-	records, _ := s.GetAll()
-
-	var newRecords []ScanRecord
-	found := false
-	for _, r := range records {
-		if r.ID != id {
-			newRecords = append(newRecords, r)
-		} else {
-			found = true
-		}
-	}
-
-	if !found {
-		return fmt.Errorf("cannot delete: scan ID %s not found", id)
-	}
-
-	return s.SaveAll(newRecords)
-}
-
-// SaveAll writes the entire slice of records to the JSON file.
-// It uses a write-lock to prevent data corruption during concurrent writes.
-func (s *StorageManager) SaveAll(records []ScanRecord) error {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
-	data, err := json.MarshalIndent(records, "", "  ")
-	if err != nil {
-		return err
+	result := s.db.Where("id = ?", id).Delete(&DBScanRecord{})
+	if result.Error != nil {
+		return result.Error
 	}
-	return os.WriteFile(s.FilePath, data, 0644)
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("cannot delete: scan ID %s not found", id)
+	}
+
+	return nil
 }
 
 // NewScanRecord is a factory function to initialize a standard ScanRecord object.
@@ -155,4 +208,3 @@ func NewScanRecord(target string) ScanRecord {
 		Vulnerabilities: []*Vulnerability{},
 	}
 }
-
