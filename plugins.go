@@ -1,6 +1,7 @@
 package main
 
 import (
+	"DORM/dormdb"
 	"DORM/exploitdb"
 	"bufio"
 	"context"
@@ -32,7 +33,7 @@ import (
 // HELPER FUNCTIONS
 // ==========================================
 func isWebPort(port int) bool {
-	return port == 80 || port == 443 || port == 8080 || port == 8443 || port == 3000 || port == 5000
+	return port == 80 || port == 443 || port == 8080 || port == 8443 || port == 3000 || port == 5000 || port == 9090
 }
 
 func getURL(target ScanTarget, path string) string {
@@ -191,7 +192,7 @@ func (p *FingerprintPlugin) Run(target ScanTarget) *Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer conn.Close()
+	conn.Close()
 
 	// Banner Grabbing: Wait for service to introduce itself
 	// Send GET request for Web servers
@@ -233,6 +234,89 @@ func (p *FingerprintPlugin) Run(target ScanTarget) *Vulnerability {
 			Reference:   "CPE Dictionary",
 		}
 	}
+	return nil
+}
+
+// ==========================================
+// 93. OFFLINE CVE RADAR PLUGIN (PASSIVE)
+// ==========================================
+
+type PassiveCVEPlugin struct{}
+
+func (p *PassiveCVEPlugin) Name() string { return "Offline CVE Radar (Passive)" }
+
+func (p *PassiveCVEPlugin) Run(target ScanTarget) *Vulnerability {
+	if !isWebPort(target.Port) {
+		return nil
+	}
+
+	client := getClient()
+	targetURL := getURL(target, "")
+
+	resp, err := client.Get(targetURL)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	// 1. Banner Grabbing
+	var foundTechs []string
+	serverHeader := resp.Header.Get("Server")
+	poweredBy := resp.Header.Get("X-Powered-By")
+
+	if serverHeader != "" {
+		foundTechs = append(foundTechs, serverHeader)
+	}
+	if poweredBy != "" {
+		foundTechs = append(foundTechs, poweredBy)
+	}
+
+	re := regexp.MustCompile(`([a-zA-Z0-9\-]+)/([0-9\.]+)`)
+	var allFindings string
+	var highestCVSS float64 = 0.0
+	var severity string = "INFO"
+
+	// 2. Offline Database Search via dormdb
+	for _, techHeader := range foundTechs {
+		matches := re.FindAllStringSubmatch(techHeader, -1)
+		for _, m := range matches {
+			if len(m) > 2 {
+				product := m[1]
+				version := m[2]
+
+				// Querying the RAM Cache from dormdb package
+				cves := dormdb.SearchLocalCVEs(product, version)
+
+				for _, cve := range cves {
+					if cve.CVSS >= 7.0 {
+						allFindings += fmt.Sprintf("- [%s] %s v%s (CVSS: %.1f)\n  %s\n\n", cve.ID, product, version, cve.CVSS, cve.Description)
+						if cve.CVSS > highestCVSS {
+							highestCVSS = cve.CVSS
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if allFindings != "" {
+		if highestCVSS >= 9.0 {
+			severity = "CRITICAL"
+		} else if highestCVSS >= 7.0 {
+			severity = "HIGH"
+		}
+
+		return &Vulnerability{
+			Target:      target,
+			Name:        "Outdated Technology / Known CVEs",
+			Severity:    severity,
+			CVSS:        highestCVSS,
+			Description: fmt.Sprintf("Passive intelligence gathered from HTTP headers indicates the server is running outdated software with known high-impact vulnerabilities:\n\n%s", allFindings),
+			Solution:    "Review the listed CVEs and apply vendor patches, update the software, or implement WAF rules to mitigate the risks.",
+			Reference:   "https://nvd.nist.gov/",
+		}
+	}
+
 	return nil
 }
 
@@ -654,18 +738,64 @@ func (p *PHPInfoPlugin) Run(target ScanTarget) *Vulnerability {
 type WAFDetectorPlugin struct{}
 
 func (p *WAFDetectorPlugin) Name() string { return "WAF Detection" }
+
 func (p *WAFDetectorPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
+
 	resp, err := getClient().Get(getURL(target, ""))
 	if err != nil {
 		return nil
 	}
 	defer resp.Body.Close()
-	if strings.Contains(resp.Header.Get("Server"), "cloudflare") {
-		return &Vulnerability{Target: target, Name: "WAF (Cloudflare)", Severity: "INFO", CVSS: 0.0, Description: "Cloudflare protection detected.", Solution: "-", Reference: ""}
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	body := strings.ToLower(string(bodyBytes))
+
+	server := strings.ToLower(resp.Header.Get("Server"))
+	xPoweredBy := strings.ToLower(resp.Header.Get("X-Powered-By"))
+	via := strings.ToLower(resp.Header.Get("Via"))
+
+	wafName := ""
+
+	// --- WAF Signatures ---
+	if strings.Contains(server, "cloudflare") {
+		wafName = "Cloudflare"
+	} else if strings.Contains(server, "akamai") || strings.Contains(resp.Header.Get("X-Akamai-Transformed"), "") && resp.Header.Get("X-Akamai-Transformed") != "" {
+		wafName = "Akamai"
+	} else if strings.Contains(server, "imperva") || strings.Contains(xPoweredBy, "imperva") {
+		wafName = "Imperva (Incapsula)"
+	} else if strings.Contains(server, "barracuda") {
+		wafName = "Barracuda WAF"
+	} else if strings.Contains(server, "f5") || strings.Contains(resp.Header.Get("X-Cdn"), "f5") {
+		wafName = "F5 BIG-IP"
+	} else if strings.Contains(server, "sucuri") || strings.Contains(xPoweredBy, "sucuri") {
+		wafName = "Sucuri CloudProxy"
+	} else if strings.Contains(via, "cloudfront") || strings.Contains(server, "awswaf") {
+		wafName = "AWS WAF / CloudFront"
+	} else if strings.Contains(server, "microsoft-iis") && strings.Contains(body, "azure") {
+		wafName = "Azure WAF"
+	} else if strings.Contains(server, "denyall") {
+		wafName = "DenyAll WAF"
+	} else if strings.Contains(server, "fortiweb") {
+		wafName = "Fortinet FortiWeb"
+	} else if strings.Contains(body, "mod_security") || strings.Contains(server, "mod_security") {
+		wafName = "ModSecurity (Generic)"
 	}
+
+	if wafName != "" {
+		return &Vulnerability{
+			Target:      target,
+			Name:        fmt.Sprintf("WAF Detected: %s", wafName),
+			Severity:    "INFO",
+			CVSS:        0.0,
+			Description: fmt.Sprintf("Active Web Application Firewall (%s) detected on the target. This may filter common exploit payloads.", wafName),
+			Solution:    "Consider using WAF bypass techniques or testing from a whitelisted IP address if authorized.",
+			Reference:   "https://owasp.org/www-community/Web_Application_Firewall",
+		}
+	}
+
 	return nil
 }
 
@@ -888,7 +1018,7 @@ func (p *XSSPlugin) Run(target ScanTarget) *Vulnerability {
 
 				resp, err := client.Get(targetURL)
 				if err == nil {
-					defer resp.Body.Close()
+					resp.Body.Close()
 
 					// Read only first 10KB for performance
 					headerCheck := make([]byte, 10240)
@@ -931,13 +1061,11 @@ func (p *LFIPlugin) Run(target ScanTarget) *Vulnerability {
 	client := getClient()
 	baseURL := getURL(target, "")
 
-	// LFI genellikle bu dosyalarda olur
 	endpoints := []string{
 		"/", "/index.php", "/main.php", "/home.php", "/view.php",
 		"/preview.php", "/loader.php", "/include.php", "/content.php",
 	}
 
-	// LFI'a en açık parametreler
 	params := []string{"page", "file", "view", "include", "doc", "path", "load", "content", "lang"}
 
 	payloads := []string{
@@ -958,12 +1086,10 @@ func (p *LFIPlugin) Run(target ScanTarget) *Vulnerability {
 				if err == nil {
 					defer resp.Body.Close()
 
-					// Sadece ilk 5KB oku
 					buf := make([]byte, 5120)
 					n, _ := resp.Body.Read(buf)
 					content := string(buf[:n])
 
-					// İmza Kontrolü (Linux User, Windows Config, Base64 PHP)
 					if strings.Contains(content, "root:x:0:0") ||
 						strings.Contains(content, "[fonts]") ||
 						strings.Contains(content, "PD9waH") { // <?ph (Base64)
@@ -4198,6 +4324,138 @@ func (p *RaceConditionPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
+// 86. WEB CACHE POISONING HUNTER (CDN ASSASSIN)
+
+type WebCachePoisoningPlugin struct{}
+
+func (p *WebCachePoisoningPlugin) Name() string { return "Web Cache Poisoning (Smart Verification)" }
+
+func (p *WebCachePoisoningPlugin) Run(target ScanTarget) *Vulnerability {
+	// Cache poisoning attacks are strictly applicable to web services.
+	if !isWebPort(target.Port) {
+		return nil
+	}
+
+	client := getClient()
+	baseURL := getURL(target, "")
+
+	// Target common endpoints that are frequently cached by CDNs or reverse proxies.
+	endpoints := []string{"/", "/login", "/about", "/faq", "/assets/"}
+
+	// Unkeyed headers often used to manipulate cache keys or backend routing.
+	headersToTest := []string{
+		"X-Forwarded-Host",
+		"X-Host",
+		"X-Original-URL",
+		"X-Rewrite-URL",
+		"Forwarded",
+	}
+
+	// A unique, benign canary string to track reflection in the response body.
+	canary := "dorm-cache-test-1337.local"
+
+	for _, ep := range endpoints {
+		targetURL := baseURL + ep
+
+		for _, header := range headersToTest {
+
+			// ENTERPRISE APPROACH: Utilize a Cache-Buster.
+			// This ensures we do not poison live production pages for actual users.
+			// The CDN will treat this unique query string as a separate cache entry.
+			cacheBuster := fmt.Sprintf("?cb=%d", time.Now().UnixNano())
+
+			// ---------------------------------------------------------
+			// STEP 1: POISON REQUEST (Injecting the malicious unkeyed header)
+			// ---------------------------------------------------------
+			req1, _ := http.NewRequest("GET", targetURL+cacheBuster, nil)
+
+			// Inject the specific unkeyed header payload
+			switch header {
+			case "Forwarded":
+				req1.Header.Set(header, fmt.Sprintf("host=%s", canary))
+			case "X-Original-URL", "X-Rewrite-URL":
+				req1.Header.Set(header, "/dorm-poison-path")
+			default:
+				req1.Header.Set(header, canary)
+			}
+
+			resp1, err := client.Do(req1)
+			if err != nil {
+				continue
+			}
+
+			bodyBytes1, _ := io.ReadAll(resp1.Body)
+			bodyStr1 := string(bodyBytes1)
+			resp1.Body.Close()
+
+			// If the canary is not reflected, the header is either ignored or sanitized.
+			// No need to proceed with verification for this header.
+			if !strings.Contains(bodyStr1, canary) && !strings.Contains(bodyStr1, "dorm-poison-path") {
+				continue
+			}
+
+			// ---------------------------------------------------------
+			// STEP 2: VERIFICATION REQUEST (Confirming the cache hit)
+			// ---------------------------------------------------------
+			// Send a clean request to the exact same URL (with the cache buster).
+			// If the canary is still present, the CDN has cached our previous poisoned response.
+			req2, _ := http.NewRequest("GET", targetURL+cacheBuster, nil)
+			resp2, err := client.Do(req2)
+			if err != nil {
+				continue
+			}
+
+			bodyBytes2, _ := io.ReadAll(resp2.Body)
+			bodyStr2 := string(bodyBytes2)
+			resp2.Body.Close()
+
+			// Analyze response headers to confirm architectural caching behavior.
+			cacheHeaders := []string{"X-Cache", "CF-Cache-Status", "X-Varnish", "Age"}
+			isCached := false
+			cacheEvidence := ""
+			for _, ch := range cacheHeaders {
+				if val := resp2.Header.Get(ch); val != "" {
+					isCached = true
+					cacheEvidence = fmt.Sprintf("%s: %s", ch, val)
+					break
+				}
+			}
+
+			// ---------------------------------------------------------
+			// THE KILL SHOT: Reflection in the clean request confirms WCP.
+			// ---------------------------------------------------------
+			if strings.Contains(bodyStr2, canary) || strings.Contains(bodyStr2, "dorm-poison-path") {
+
+				severity := "HIGH"
+				cvss := 8.5
+				desc := fmt.Sprintf("Web Cache Poisoning detected!\nEndpoint: %s\nUnkeyed Header Injected: %s\n", ep, header)
+				desc += "The backend server reflected our payload, and a subsequent NORMAL request served the poisoned cached response."
+
+				if isCached {
+					// If explicit CDN cache headers are present, elevate severity.
+					desc += fmt.Sprintf("\n\nConfirmation: Explicit CDN Cache header found -> %s", cacheEvidence)
+					severity = "CRITICAL"
+					cvss = 9.1
+				} else {
+					desc += "\n\nNote: No explicit CDN cache headers found, but behavioral caching was successfully verified."
+				}
+
+				return &Vulnerability{
+					Target:      target,
+					Name:        "Web Cache Poisoning (Unkeyed Header)",
+					Severity:    severity,
+					CVSS:        cvss,
+					Description: desc,
+					Solution:    "Disable unkeyed headers if not strictly necessary. If they are required for routing, ensure they are explicitly added to the 'Vary' header (Cache-Key) to prevent caching malicious inputs.",
+					Reference:   "PortSwigger: Web Cache Poisoning / CWE-444",
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // ==========================================
 // HELPER FOR SQL INJECTION (POST)
 // ==========================================
@@ -4262,5 +4520,6 @@ func GetPluginInventory() []string {
 		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
 		"SSRF Cloud Metadata", "JWT None Algorithm", "Apache Struts RCE", "Citrix ADC Traversal", "NoSQL Injection (MongoDB)", "Atlassian Confluence RCE",
 		"Terraform State Exposure", "WebSocket Hijacking", "TeamCity Auth Bypass", "Shadow API Discovery", "Fuzzer", "HTTP Request Smuggling", "Race Condition Tester",
+		"Web Cache Poisoning", "Offline CVE Radar (Passive)",
 	}
 }
