@@ -123,7 +123,8 @@ async function deleteScan(id) {
 
 // --- SCANNER LOGIC ---
 function startScan() {
-    const target = document.getElementById('targetInput').value;
+    // 1. Get raw input from textarea
+    const rawTargets = document.getElementById('targetInput').value;
     const btn = document.getElementById('scanBtn');
 
     // STOP LOGIC: If button is red (STOP mode), halt the scan.
@@ -136,16 +137,21 @@ function startScan() {
     const speed = "300"; 
     const authHeader = document.getElementById('authInput').value;
 
-    // 1. Get selected plugins from grid
+    // 2. Get selected plugins from grid
     const selected = Array.from(document.querySelectorAll('.plugin-check:checked')).map(c => c.value);
     
-    // 2. Check Sidebar Fuzzer Toggle
+    // 3. Check Sidebar Fuzzer Toggle
     const fuzzerEnabled = document.getElementById('sidebarFuzzerToggle').checked;
     if (fuzzerEnabled && fuzzerPluginName !== "") {
         selected.push(fuzzerPluginName);
     }
 
-    if(!target) return alert("Please enter a target!");
+    // 4. MULTI-TARGET LOGIC: Split by newline, trim, and remove empty lines
+    const targetsArray = rawTargets.split('\n').map(t => t.trim()).filter(t => t !== '');
+    if (targetsArray.length === 0) return alert("Please enter at least one target!");
+    
+    // Join multiple targets with a comma to send via GET request
+    const targetString = targetsArray.join(',');
     
     document.getElementById('tableBody').innerHTML = '';
     vulnCount = 0; scanResults = [];
@@ -154,9 +160,9 @@ function startScan() {
     
     // UI: Switch to STOP SCAN Mode
     btn.innerHTML = '<i class="fas fa-stop"></i> STOP SCAN';
-    btn.classList.remove('btn-success'); // Remove green class if exists
-    btn.classList.add('btn-danger');     // Add red class
-    btn.style.backgroundColor = '#da3633'; // Manual backup for color
+    btn.classList.remove('btn-success'); 
+    btn.classList.add('btn-danger');     
+    btn.style.backgroundColor = '#da3633'; 
 
     timerSeconds = 0; clearInterval(timerInterval);
     timerInterval = setInterval(() => {
@@ -166,8 +172,8 @@ function startScan() {
         document.getElementById('timerDisplay').innerText = `${m}:${s}`;
     }, 1000);
 
-    // Assign to global variable
-    scanEventSource = new EventSource(`/scan?target=${encodeURIComponent(target)}&plugins=${encodeURIComponent(selected.join(","))}&delay=${speed}&rotateUA=${rotateUA}&auth=${encodeURIComponent(authHeader)}`);
+    // Assign to global variable (Notice: query param is now "targets")
+    scanEventSource = new EventSource(`/scan?targets=${encodeURIComponent(targetString)}&plugins=${encodeURIComponent(selected.join(","))}&delay=${speed}&rotateUA=${rotateUA}&auth=${encodeURIComponent(authHeader)}`);
 
     scanEventSource.onmessage = (e) => {
         const data = JSON.parse(e.data);
@@ -247,13 +253,21 @@ function finishScanUI() {
     loadHistory();
 }
 
+// --- REPORT HELPERS ---
+function getTargetDisplayString() {
+    const rawTargets = document.getElementById('targetInput').value;
+    const arr = rawTargets.split('\n').map(t => t.trim()).filter(t => t !== '');
+    if (arr.length > 3) return arr.slice(0, 3).join(', ') + ` (+${arr.length - 3} more)`;
+    return arr.join(', ');
+}
+
 function downloadReport() {
     if (scanResults.length === 0) return alert("No results to export!");
-    const target = document.getElementById('targetInput').value;
+    const targetDisplay = getTargetDisplayString();
     const date = new Date().toLocaleString();
     
     let html = `<html><head><title>DORM Report</title><style>body{font-family:sans-serif;padding:30px;color:#333}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ddd;padding:12px;text-align:left}th{background:#f4f4f4}.CRITICAL{color:#d32f2f;font-weight:bold}.HIGH{color:#f57c00;font-weight:bold}</style></head><body>`;
-    html += `<h1>DORM Security Report</h1><p>Target: ${escapeHtml(target)}<br>Date: ${date}</p><table><thead><tr><th>Sev</th><th>Vuln</th><th>Details</th></tr></thead><tbody>`;
+    html += `<h1>DORM Security Report</h1><p>Target(s): ${escapeHtml(targetDisplay)}<br>Date: ${date}</p><table><thead><tr><th>Sev</th><th>Vuln</th><th>Details</th></tr></thead><tbody>`;
     scanResults.forEach(r => html += `<tr><td class="${r.Severity}">${r.Severity}</td><td>${escapeHtml(r.Name)}</td><td>${escapeHtml(r.Description)}</td></tr>`);
     html += `</tbody></table></body></html>`;
     
@@ -267,13 +281,13 @@ function downloadPDF() {
     if (scanResults.length === 0) return alert("No results to export!");
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
-    const target = document.getElementById('targetInput').value;
+    const targetDisplay = getTargetDisplayString();
     const date = new Date().toLocaleString();
 
     doc.setFillColor(13, 17, 23); 
     doc.rect(0, 0, 210, 40, 'F'); 
     doc.setFontSize(22); doc.setTextColor(88, 166, 255); doc.text("DORM SECURITY REPORT", 14, 20);
-    doc.setFontSize(10); doc.setTextColor(201, 209, 217); doc.text(`Target: ${target}`, 14, 30); doc.text(`Date: ${date}`, 14, 35);
+    doc.setFontSize(10); doc.setTextColor(201, 209, 217); doc.text(`Target(s): ${targetDisplay}`, 14, 30); doc.text(`Date: ${date}`, 14, 35);
     
     const tableRows = scanResults.map(vuln => [
         vuln.Severity, vuln.CVSS.toFixed(1), vuln.Name,
