@@ -238,7 +238,7 @@ func (p *FingerprintPlugin) Run(target ScanTarget) *Vulnerability {
 }
 
 // ==========================================
-// 93. OFFLINE CVE RADAR PLUGIN (PASSIVE)
+// OFFLINE CVE RADAR PLUGIN (PASSIVE)
 // ==========================================
 
 type PassiveCVEPlugin struct{}
