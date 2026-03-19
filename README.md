@@ -1,6 +1,3 @@
-# DORM
-Modern, High-Performance Vulnerability Scanner. Features: Spider Crawler, Chaos Fuzzer, and RAM-based Exploit-DB integration.
-
 # 👁️ DORM - Next-Gen Vulnerability Scanner
 
 ![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)
