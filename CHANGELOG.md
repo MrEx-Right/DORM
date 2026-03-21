@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.4.3] - 2026-03-21
+### CVE Pattern List Update
+- The CVE pattern list has been updated, and critical CVEs have been added.
+
+
 ## [v1.4.2] - 2026-03-18
 ### CVE Pattern List Update
 - The CVE pattern list has been completely updated and now uses the official CISA patterns.
