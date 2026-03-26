@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.5.0] - 2026-03-26
+**Added:**
+- Arbitrary File Upload Scanner: Introduced active behavioral analysis with custom PHP payloads to validate and differentiate between stored files and critical Remote Code Execution (RCE).
+- WordPress Enumeration Engine: Added targeted reconnaissance for extracting Core and High-Value Plugin versions directly from static assets (`readme.html`, `readme.txt`) for instant CVE correlation.
+- Weak TLS Cipher Probing: Integrated active TLS handshake manipulation to expose legacy and vulnerable cryptographic algorithms (RC4, 3DES, SWEET32).
+
+**Changed:**
+- Deep Fingerprinting Architecture: Centralized technology stack profiling (headers, cookies, WAF routing) into a unified `DeepScanTarget` engine.
+- Request Optimization: Implemented zero-latency concurrent RAM caching (`sync.Map`) to eliminate redundant HTTP requests across multiple plugins, reducing target load by 66%.
+
+**Fixed:**
+- SemVer AI Logic: Resolved false negatives in vulnerability correlation by mathematically supporting inclusive boundary modifiers (e.g., "through", "up to", "<=") against CISA KEV datasets.
+
 ## [v1.4.3] - 2026-03-21
 ### CVE Pattern List Update
 - The CVE pattern list has been updated, and critical CVEs have been added.
