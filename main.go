@@ -443,6 +443,9 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	engine.AddPlugin(&RequestSmugglingPlugin{})
 	engine.AddPlugin(&RaceConditionPlugin{})
 	engine.AddPlugin(&WebCachePoisoningPlugin{})
+	engine.AddPlugin(&FileUploadPlugin{})
+	engine.AddPlugin(&WPEnumPlugin{})
+	engine.AddPlugin(&TLSCipherPlugin{})
 
 	// Apply User Filters
 	engine.SetFilter(selectedPluginsStr)
@@ -558,7 +561,7 @@ func main() {
 	url := "http://localhost" + port
 
 	fmt.Println("===========================================")
-	fmt.Println("          DORM SCANNER v1.4.1 		 	    ")
+	fmt.Println("          DORM SCANNER v1.5.0 		 	    ")
 	fmt.Println("===========================================")
 	fmt.Printf("[*] Server Active: %s\n", url)
 
