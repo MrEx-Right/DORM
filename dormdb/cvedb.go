@@ -29,11 +29,12 @@ const (
 // LocalCVE maintains backward compatibility with existing engine plugins
 // while serving as the normalized data structure for threat intelligence.
 type LocalCVE struct {
-	ID          string  `json:"id"`
-	Product     string  `json:"product"`
-	Version     string  `json:"version"`
-	CVSS        float64 `json:"cvss"`
-	Description string  `json:"description"`
+	ID            string  `json:"id"`
+	Product       string  `json:"product"`
+	Version       string  `json:"version"`
+	CVSS          float64 `json:"cvss"`
+	VendorProject string  `json:"vendorProject"`
+	Description   string  `json:"description"`
 }
 
 // CISACatalog represents the root JSON structure of the upstream authoritative feed.
