@@ -3,17 +3,13 @@
 All notable changes to this project will be documented in this file.
 
 ## [v1.5.0] - 2026-03-26
-**Added:**
-- Arbitrary File Upload Scanner: Introduced active behavioral analysis with custom PHP payloads to validate and differentiate between stored files and critical Remote Code Execution (RCE).
-- WordPress Enumeration Engine: Added targeted reconnaissance for extracting Core and High-Value Plugin versions directly from static assets (`readme.html`, `readme.txt`) for instant CVE correlation.
-- Weak TLS Cipher Probing: Integrated active TLS handshake manipulation to expose legacy and vulnerable cryptographic algorithms (RC4, 3DES, SWEET32).
+### 🎯 Precision Intelligence & Deep Fingerprinting Update
 
-**Changed:**
-- Deep Fingerprinting Architecture: Centralized technology stack profiling (headers, cookies, WAF routing) into a unified `DeepScanTarget` engine.
-- Request Optimization: Implemented zero-latency concurrent RAM caching (`sync.Map`) to eliminate redundant HTTP requests across multiple plugins, reducing target load by 66%.
-
-**Fixed:**
-- SemVer AI Logic: Resolved false negatives in vulnerability correlation by mathematically supporting inclusive boundary modifiers (e.g., "through", "up to", "<=") against CISA KEV datasets.
+- **Semantic Versioning (SemVer) AI Engine:** Completely re-engineered the CVE correlation logic. The new AI-driven engine mathematically parses complex boundary conditions (e.g., "through", "up to", "<=") from the CISA KEV catalog. This guarantees absolute precision and eliminates false negatives when evaluating exact boundary matches against outdated infrastructure.
+- **Zero-Latency Tech Stack Profiling:** Deprecated redundant network requests across multiple plugins. Introduced the `DeepScanTarget` engine powered by a concurrent RAM caching architecture (`sync.Map`). It utilizes advanced NLP regex and cookie-based extraction to parse headers and frameworks, serving sanitized `TechNode` intelligence to all plugins in $O(1)$ time complexity.
+- **Arbitrary File Upload (Active RCE Validation):** Introduced a highly sophisticated multipart/form-data payload delivery system. The module performs active behavioral analysis to differentiate between safely stored arbitrary files and highly critical Remote Code Execution (RCE) vectors by verifying custom PHP execution signatures.
+- **WordPress Infrastructure Enumeration:** Deployed a targeted reconnaissance module designed to extract Core and High-Value Plugin versions (e.g., WooCommerce, Elementor) directly from static assets and `readme` files. Findings are seamlessly piped into the local CVE AI for instant threat correlation.
+- **Weak TLS Cipher Suite Probing:** Upgraded the cryptographic analysis engine to perform active TLS handshake manipulation. DORM now forces connections using targeted legacy algorithms to expose servers vulnerable to devastating cryptographic attacks, including SWEET32 (3DES) and RC4 biases.
 
 ## [v1.4.3] - 2026-03-21
 ### CVE Pattern List Update
