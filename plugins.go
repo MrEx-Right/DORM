@@ -4,6 +4,7 @@ import (
 	"DORM/dormdb"
 	"DORM/exploitdb"
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -13,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
@@ -238,61 +240,40 @@ func (p *FingerprintPlugin) Run(target ScanTarget) *Vulnerability {
 }
 
 // ==========================================
-// OFFLINE CVE RADAR PLUGIN (PASSIVE)
+// OFFLINE CVE RADAR PLUGIN (PASSIVE) - v1.5.0
 // ==========================================
 
 type PassiveCVEPlugin struct{}
 
-func (p *PassiveCVEPlugin) Name() string { return "Offline CVE Radar (Passive)" }
+func (p *PassiveCVEPlugin) Name() string { return "Offline CVE Radar (Precision Mode)" }
 
 func (p *PassiveCVEPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
 
-	client := getClient()
-	targetURL := getURL(target, "")
+	profile := DeepScanTarget(getURL(target, ""))
 
-	resp, err := client.Get(targetURL)
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-
-	// 1. Banner Grabbing
-	var foundTechs []string
-	serverHeader := resp.Header.Get("Server")
-	poweredBy := resp.Header.Get("X-Powered-By")
-
-	if serverHeader != "" {
-		foundTechs = append(foundTechs, serverHeader)
-	}
-	if poweredBy != "" {
-		foundTechs = append(foundTechs, poweredBy)
-	}
-
-	re := regexp.MustCompile(`([a-zA-Z0-9\-]+)/([0-9\.]+)`)
 	var allFindings string
 	var highestCVSS float64 = 0.0
 	var severity string = "INFO"
 
-	// 2. Offline Database Search via dormdb
-	for _, techHeader := range foundTechs {
-		matches := re.FindAllStringSubmatch(techHeader, -1)
-		for _, m := range matches {
-			if len(m) > 2 {
-				product := m[1]
-				version := m[2]
+	for _, tech := range profile.Techs {
+		// Prevent false positives by ignoring empty or invalid version strings
+		if len(tech.Version) < 2 {
+			continue
+		}
 
-				// Querying the RAM Cache from dormdb package
-				cves := dormdb.SearchLocalCVEs(product, version)
+		// Retrieve all related CVEs from the in-memory database in O(1) time
+		cves := dormdb.SearchLocalCVEs(tech.Product, "Any")
 
-				for _, cve := range cves {
-					if cve.CVSS >= 7.0 {
-						allFindings += fmt.Sprintf("- [%s] %s v%s (CVSS: %.1f)\n  %s\n\n", cve.ID, product, version, cve.CVSS, cve.Description)
-						if cve.CVSS > highestCVSS {
-							highestCVSS = cve.CVSS
-						}
+		for _, cve := range cves {
+			// Leverage AI-driven SemVer logic to match target versions against CISA descriptors
+			if isVersionVulnerable(tech.Version, cve.Description) {
+				if cve.CVSS >= 7.0 {
+					allFindings += fmt.Sprintf("- [%s] %s v%s (CVSS: %.1f)\n  %s\n\n", cve.ID, strings.Title(tech.Product), tech.Version, cve.CVSS, cve.Description)
+					if cve.CVSS > highestCVSS {
+						highestCVSS = cve.CVSS
 					}
 				}
 			}
@@ -308,16 +289,89 @@ func (p *PassiveCVEPlugin) Run(target ScanTarget) *Vulnerability {
 
 		return &Vulnerability{
 			Target:      target,
-			Name:        "Outdated Technology / Known CVEs",
+			Name:        "Verified Outdated Technology / Known CVEs",
 			Severity:    severity,
 			CVSS:        highestCVSS,
-			Description: fmt.Sprintf("Passive intelligence gathered from HTTP headers indicates the server is running outdated software with known high-impact vulnerabilities:\n\n%s", allFindings),
-			Solution:    "Review the listed CVEs and apply vendor patches, update the software, or implement WAF rules to mitigate the risks.",
-			Reference:   "https://nvd.nist.gov/",
+			Description: fmt.Sprintf("Precision analysis confirmed the server is explicitly vulnerable:\n\n%s", allFindings),
+			Solution:    "Review the listed CVEs and apply vendor patches immediately.",
+			Reference:   "https://www.cisa.gov/known-exploited-vulnerabilities-catalog",
 		}
 	}
 
 	return nil
+}
+
+// ==========================================
+// DORM SEMANTIC VERSIONING (SemVer) AI ENGINE
+// ==========================================
+
+// isVersionVulnerable compares the target version against the CISA vulnerability description using NLP constraints.
+func isVersionVulnerable(targetVersion, description string) bool {
+	if targetVersion == "" {
+		return false
+	}
+
+	descLower := strings.ToLower(description)
+
+	// 1. Direct Match Verification (e.g., explicit mention of "2.4.49")
+	if strings.Contains(descLower, targetVersion) {
+		return true
+	}
+
+	// 2. Advanced NLP Regex for Version Boundaries
+	// Captures constraints such as "versions prior to 2.4.50", "before 1.2.3", "through 5.0"
+	re := regexp.MustCompile(`(?:prior to|before|through|up to|<|<=)\s*v?([0-9]+(?:\.[0-9]+)*)`)
+	matches := re.FindAllStringSubmatch(descLower, -1)
+
+	for _, m := range matches {
+		if len(m) > 1 {
+			limitVersion := m[1]
+
+			// Evaluate inclusive boundary modifiers
+			if strings.Contains(m[0], "through") || strings.Contains(m[0], "up to") || strings.Contains(m[0], "<=") {
+				// Trigger vulnerability if the target version is exactly equal to or less than the limit
+				if targetVersion == limitVersion || isVersionLessThan(targetVersion, limitVersion) {
+					return true
+				}
+			} else {
+				// Evaluate exclusive boundary modifiers (strict less-than condition)
+				if isVersionLessThan(targetVersion, limitVersion) {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// isVersionLessThan performs a mathematical comparison between two semantic versions.
+// Accurately evaluates constraints like "1.10.2 < 1.11.0" without lexicographical errors.
+func isVersionLessThan(v1, v2 string) bool {
+	parts1 := strings.Split(v1, ".")
+	parts2 := strings.Split(v2, ".")
+
+	maxLen := len(parts1)
+	if len(parts2) > maxLen {
+		maxLen = len(parts2)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		var n1, n2 int
+		if i < len(parts1) {
+			fmt.Sscanf(parts1[i], "%d", &n1)
+		}
+		if i < len(parts2) {
+			fmt.Sscanf(parts2[i], "%d", &n2)
+		}
+
+		if n1 < n2 {
+			return true
+		} else if n1 > n2 {
+			return false
+		}
+	}
+	return false
 }
 
 // ==========================================
@@ -734,7 +788,7 @@ func (p *PHPInfoPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 9. WAF DETECTOR
+// 9. WAF DETECTOR - v1.5.0 DEEP FINGERPRINT INTEGRATED
 type WAFDetectorPlugin struct{}
 
 func (p *WAFDetectorPlugin) Name() string { return "WAF Detection" }
@@ -744,53 +798,15 @@ func (p *WAFDetectorPlugin) Run(target ScanTarget) *Vulnerability {
 		return nil
 	}
 
-	resp, err := getClient().Get(getURL(target, ""))
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
+	profile := DeepScanTarget(getURL(target, ""))
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	body := strings.ToLower(string(bodyBytes))
-
-	server := strings.ToLower(resp.Header.Get("Server"))
-	xPoweredBy := strings.ToLower(resp.Header.Get("X-Powered-By"))
-	via := strings.ToLower(resp.Header.Get("Via"))
-
-	wafName := ""
-
-	// --- WAF Signatures ---
-	if strings.Contains(server, "cloudflare") {
-		wafName = "Cloudflare"
-	} else if strings.Contains(server, "akamai") || strings.Contains(resp.Header.Get("X-Akamai-Transformed"), "") && resp.Header.Get("X-Akamai-Transformed") != "" {
-		wafName = "Akamai"
-	} else if strings.Contains(server, "imperva") || strings.Contains(xPoweredBy, "imperva") {
-		wafName = "Imperva (Incapsula)"
-	} else if strings.Contains(server, "barracuda") {
-		wafName = "Barracuda WAF"
-	} else if strings.Contains(server, "f5") || strings.Contains(resp.Header.Get("X-Cdn"), "f5") {
-		wafName = "F5 BIG-IP"
-	} else if strings.Contains(server, "sucuri") || strings.Contains(xPoweredBy, "sucuri") {
-		wafName = "Sucuri CloudProxy"
-	} else if strings.Contains(via, "cloudfront") || strings.Contains(server, "awswaf") {
-		wafName = "AWS WAF / CloudFront"
-	} else if strings.Contains(server, "microsoft-iis") && strings.Contains(body, "azure") {
-		wafName = "Azure WAF"
-	} else if strings.Contains(server, "denyall") {
-		wafName = "DenyAll WAF"
-	} else if strings.Contains(server, "fortiweb") {
-		wafName = "Fortinet FortiWeb"
-	} else if strings.Contains(body, "mod_security") || strings.Contains(server, "mod_security") {
-		wafName = "ModSecurity (Generic)"
-	}
-
-	if wafName != "" {
+	if profile.WAF != "" {
 		return &Vulnerability{
 			Target:      target,
-			Name:        fmt.Sprintf("WAF Detected: %s", wafName),
+			Name:        fmt.Sprintf("WAF Detected: %s", profile.WAF),
 			Severity:    "INFO",
 			CVSS:        0.0,
-			Description: fmt.Sprintf("Active Web Application Firewall (%s) detected on the target. This may filter common exploit payloads.", wafName),
+			Description: fmt.Sprintf("Active Web Application Firewall (%s) detected on the target. This may filter common exploit payloads.", profile.WAF),
 			Solution:    "Consider using WAF bypass techniques or testing from a whitelisted IP address if authorized.",
 			Reference:   "https://owasp.org/www-community/Web_Application_Firewall",
 		}
@@ -1348,44 +1364,28 @@ func (p *EnvFilePlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
-// 21. CMS DETECTION (V2 - FINGERPRINT ANALYSIS)
+// 21. CMS DETECTION - v1.5.0 DEEP FINGERPRINT INTEGRATED
 type CMSTestPlugin struct{}
 
 func (p *CMSTestPlugin) Name() string { return "CMS & Technology Analysis" }
+
 func (p *CMSTestPlugin) Run(target ScanTarget) *Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	resp, err := getClient().Get(getURL(target, ""))
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	content := string(body)
 
-	foundCMS := ""
-	if strings.Contains(content, "wp-content") {
-		foundCMS = "WordPress"
-	}
-	if strings.Contains(content, "Joomla") {
-		foundCMS = "Joomla"
-	}
-	if strings.Contains(content, "Drupal") {
-		foundCMS = "Drupal"
-	}
-	if strings.Contains(content, "content=\"Ghost") {
-		foundCMS = "Ghost"
-	}
+	// İstihbarat motorundan profili çek
+	profile := DeepScanTarget(getURL(target, ""))
 
-	if foundCMS != "" {
+	if profile.CMS != "" {
 		return &Vulnerability{
 			Target:      target,
-			Name:        "CMS Detection: " + foundCMS,
+			Name:        "CMS Detection: " + profile.CMS,
 			Severity:    "INFO",
 			CVSS:        0.0,
-			Description: fmt.Sprintf("Target site is using %s CMS system.", foundCMS),
+			Description: fmt.Sprintf("Target site is using %s CMS system.", profile.CMS),
 			Solution:    "Hide version info and keep it updated.",
+			Reference:   "Wappalyzer Methodology",
 		}
 	}
 	return nil
@@ -4456,6 +4456,305 @@ func (p *WebCachePoisoningPlugin) Run(target ScanTarget) *Vulnerability {
 	return nil
 }
 
+// 87. ARBITRARY FILE UPLOAD SCANNER
+
+type FileUploadPlugin struct{}
+
+func (p *FileUploadPlugin) Name() string { return "Unrestricted File Upload (RCE)" }
+
+func (p *FileUploadPlugin) Run(target ScanTarget) *Vulnerability {
+	if !isWebPort(target.Port) {
+		return nil
+	}
+
+	client := getClient()
+	baseURL := getURL(target, "")
+
+	// 1. Target Endpoints and Probable Upload Directories
+	endpoints := []string{"/upload", "/upload.php", "/api/upload", "/fileupload", "/ajax_upload.php"}
+	uploadDirs := []string{"/uploads/", "/upload/", "/files/", "/images/", "/media/", "/"}
+
+	// 2. Dynamic Signature Generation and Payload Preparation
+	uniqueID := time.Now().Unix()
+	filename := fmt.Sprintf("dorm_test_%d.php", uniqueID)
+	signature := fmt.Sprintf("DORM_RCE_CONFIRMED_%d", uniqueID)
+
+	// Payload: A harmless PHP script that echoes our unique signature to confirm execution
+	fileContent := fmt.Sprintf("<?php echo '%s'; ?>", signature)
+
+	for _, ep := range endpoints {
+		targetURL := baseURL + ep
+
+		// 3. Construct Multipart Form-Data (Browser Simulation)
+		body := &bytes.Buffer{}
+		writer := multipart.NewWriter(body)
+
+		// Most backend systems expect form field names like "file", "upload", or "image"
+		part, err := writer.CreateFormFile("file", filename)
+		if err != nil {
+			continue
+		}
+		io.Copy(part, strings.NewReader(fileContent))
+
+		// Inject dummy submit button data to satisfy strict form handlers
+		writer.WriteField("submit", "Upload")
+		writer.Close()
+
+		req, _ := http.NewRequest("POST", targetURL, body)
+		req.Header.Set("Content-Type", writer.FormDataContentType())
+		req.Header.Set("User-Agent", "DORM-Enterprise-Scanner/1.5.0")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			continue
+		}
+		resp.Body.Close()
+
+		// 4. If upload appears successful (200 OK, 201 Created, or 3xx Redirect), initiate file hunting!
+		if resp.StatusCode == 200 || resp.StatusCode == 201 || resp.StatusCode == 302 || resp.StatusCode == 303 {
+
+			for _, dir := range uploadDirs {
+				checkURL := baseURL + dir + filename
+				checkReq, _ := http.NewRequest("GET", checkURL, nil)
+				checkResp, err := client.Do(checkReq)
+
+				if err == nil {
+					defer checkResp.Body.Close()
+					if checkResp.StatusCode == 200 {
+						// Optimization: Only read the first 2KB to prevent memory exhaustion on large files
+						respBytes, _ := io.ReadAll(io.LimitReader(checkResp.Body, 2048))
+						respStr := string(respBytes)
+
+						// 5. BEHAVIORAL ANALYSIS: Did the server execute the file (RCE) or just store it as plain text?
+						if strings.Contains(respStr, signature) && !strings.Contains(respStr, "<?php") {
+							return &Vulnerability{
+								Target:      target,
+								Name:        "Unrestricted File Upload (RCE Confirmed)",
+								Severity:    "CRITICAL",
+								CVSS:        9.8,
+								Description: fmt.Sprintf("Successfully uploaded and executed a PHP file!\nUpload Endpoint: %s\nExecuted File: %s\nSignature: %s", targetURL, checkURL, signature),
+								Solution:    "Implement strict file extension whitelisting, remove execute permissions on upload directories, and store files outside the web root.",
+								Reference:   "OWASP Unrestricted File Upload / CWE-434",
+							}
+						} else if strings.Contains(respStr, "<?php") && strings.Contains(respStr, signature) {
+							return &Vulnerability{
+								Target:      target,
+								Name:        "Arbitrary File Upload (Stored)",
+								Severity:    "HIGH",
+								CVSS:        7.5,
+								Description: fmt.Sprintf("Successfully uploaded a PHP file, but server did not execute it (Source code returned).\nUpload Endpoint: %s\nFile Location: %s", targetURL, checkURL),
+								Solution:    "Implement strict file extension whitelisting.",
+								Reference:   "CWE-434: Unrestricted Upload of File with Dangerous Type",
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// 88. WORDPRESS ENUMERATION & CVE SCANNER
+
+type WPEnumPlugin struct{}
+
+func (p *WPEnumPlugin) Name() string { return "WordPress Enumeration & CVE Radar" }
+
+func (p *WPEnumPlugin) Run(target ScanTarget) *Vulnerability {
+	if !isWebPort(target.Port) {
+		return nil
+	}
+
+	client := getClient()
+	baseURL := getURL(target, "")
+
+	// 1. Initial Verification: Is it a WordPress site?
+	// A quick passive check on the default login page.
+	resp, err := client.Get(baseURL + "/wp-login.php")
+	if err != nil {
+		return nil
+	}
+	resp.Body.Close()
+
+	// If it's not 200 (OK) or 403 (Forbidden due to WAF), it's likely not WordPress.
+	if resp.StatusCode != 200 && resp.StatusCode != 403 {
+		return nil
+	}
+
+	var findings []string
+	var highestCVSS float64 = 0.0
+	var severity string = "INFO"
+
+	// ---------------------------------------------------------
+	// HELPER: CVE CORRELATION ENGINE
+	// Interrogates the in-memory CISA database using SemVer logic.
+	// ---------------------------------------------------------
+	checkCVEs := func(product string, version string) {
+		if version == "" {
+			return
+		}
+		// Retrieve all CISA exploits for the given product
+		cves := dormdb.SearchLocalCVEs(product, "Any")
+		for _, cve := range cves {
+			// Leverage our advanced NLP version comparison engine
+			if isVersionVulnerable(version, cve.Description) {
+				if cve.CVSS >= 7.0 {
+					findings = append(findings, fmt.Sprintf("- [%s] %s v%s (CVSS: %.1f)\n  %s", cve.ID, strings.Title(product), version, cve.CVSS, cve.Description))
+					if cve.CVSS > highestCVSS {
+						highestCVSS = cve.CVSS
+					}
+				}
+			}
+		}
+	}
+
+	// ---------------------------------------------------------
+	// 2. CORE WORDPRESS VERSION DETECTION
+	// ---------------------------------------------------------
+	wpVersion := ""
+	req1, _ := http.NewRequest("GET", baseURL+"/readme.html", nil)
+	resp1, err1 := client.Do(req1)
+
+	if err1 == nil && resp1.StatusCode == 200 {
+		// Read a small chunk to prevent memory exhaustion
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp1.Body, 2048))
+		resp1.Body.Close()
+
+		// Regex to parse: <br /> Version 5.8.1
+		re := regexp.MustCompile(`(?i)Version\s+([0-9\.]+)`)
+		m := re.FindStringSubmatch(string(bodyBytes))
+
+		if len(m) > 1 {
+			wpVersion = m[1]
+			findings = append(findings, fmt.Sprintf("[+] Core: WordPress v%s (Disclosed via readme.html)", wpVersion))
+			checkCVEs("wordpress", wpVersion)
+		}
+	}
+
+	// ---------------------------------------------------------
+	// 3. PLUGIN ENUMERATION (High-Value Targets)
+	// ---------------------------------------------------------
+	// A curated list of widely-used plugins with a history of critical CVEs.
+	plugins := []string{
+		"akismet", "contact-form-7", "woocommerce", "elementor",
+		"revslider", "wp-file-manager", "duplicator", "updraftplus",
+		"wordfence", "wp-mail-smtp", "jetpack", "yoast-seo",
+	}
+
+	for _, plugin := range plugins {
+		pluginURL := fmt.Sprintf("%s/wp-content/plugins/%s/readme.txt", baseURL, plugin)
+		reqP, _ := http.NewRequest("GET", pluginURL, nil)
+		respP, errP := client.Do(reqP)
+
+		if errP == nil && respP.StatusCode == 200 {
+			bodyBytes, _ := io.ReadAll(io.LimitReader(respP.Body, 2048))
+			respP.Body.Close()
+
+			// Extract "Stable tag: X.Y.Z" from the plugin's readme.txt
+			reStable := regexp.MustCompile(`(?i)Stable tag:\s*([0-9\.]+)`)
+			m := reStable.FindStringSubmatch(string(bodyBytes))
+
+			pluginVersion := "Unknown"
+			if len(m) > 1 {
+				pluginVersion = m[1]
+			}
+
+			findings = append(findings, fmt.Sprintf("[+] Plugin: %s v%s", plugin, pluginVersion))
+
+			// Correlate plugin version with CISA Known Exploited Vulnerabilities
+			if pluginVersion != "Unknown" {
+				checkCVEs(plugin, pluginVersion)
+			}
+		}
+	}
+
+	// ---------------------------------------------------------
+	// 4. REPORT GENERATION
+	// ---------------------------------------------------------
+	if len(findings) > 0 {
+		if highestCVSS >= 9.0 {
+			severity = "CRITICAL"
+		} else if highestCVSS >= 7.0 {
+			severity = "HIGH"
+		} else {
+			severity = "MEDIUM" // Baseline severity for information disclosure
+		}
+
+		return &Vulnerability{
+			Target:      target,
+			Name:        "WordPress Enumeration & Known CVEs",
+			Severity:    severity,
+			CVSS:        highestCVSS,
+			Description: fmt.Sprintf("WordPress infrastructure enumeration revealed the following components and associated vulnerabilities:\n\n%s", strings.Join(findings, "\n\n")),
+			Solution:    "Restrict access to readme.html, disable directory listing, and update all themes/plugins to their latest stable versions.",
+			Reference:   "OWASP Vulnerable and Outdated Components",
+		}
+	}
+
+	return nil
+}
+
+// 89. WEAK TLS CIPHER SUITES SCANNER
+
+type TLSCipherPlugin struct{}
+
+func (p *TLSCipherPlugin) Name() string { return "Weak TLS Cipher Suites Scanner" }
+
+func (p *TLSCipherPlugin) Run(target ScanTarget) *Vulnerability {
+	// Restrict to standard SSL/TLS ports to optimize scan times
+	if target.Port != 443 && target.Port != 8443 {
+		return nil
+	}
+
+	address := fmt.Sprintf("%s:%d", target.IP, target.Port)
+
+	// 1. Define a curated dictionary of notoriously weak or deprecated cipher suites
+	// This targets algorithms vulnerable to attacks like SWEET32 (3DES) and biases (RC4).
+	weakCiphers := map[uint16]string{
+		tls.TLS_RSA_WITH_RC4_128_SHA:         "TLS_RSA_WITH_RC4_128_SHA (RC4 - Deprecated)",
+		tls.TLS_RSA_WITH_3DES_EDE_CBC_SHA:    "TLS_RSA_WITH_3DES_EDE_CBC_SHA (3DES - SWEET32 Vulnerable)",
+		tls.TLS_ECDHE_RSA_WITH_RC4_128_SHA:   "TLS_ECDHE_RSA_WITH_RC4_128_SHA (RC4 - Deprecated)",
+		tls.TLS_ECDHE_ECDSA_WITH_RC4_128_SHA: "TLS_ECDHE_ECDSA_WITH_RC4_128_SHA (RC4 - Deprecated)",
+	}
+
+	var supportedWeakCiphers []string
+
+	// 2. Probing Engine: Iteratively attempt TLS handshakes forcing specific weak ciphers
+	for cipherID, cipherName := range weakCiphers {
+		config := &tls.Config{
+			InsecureSkipVerify: true,
+			CipherSuites:       []uint16{cipherID},
+			MaxVersion:         tls.VersionTLS12, // Weak ciphers are strictly prohibited in TLS 1.3
+		}
+
+		// Implement a strict timeout to prevent hanging on unresponsive sockets
+		dialer := &net.Dialer{Timeout: 3 * time.Second}
+		conn, err := tls.DialWithDialer(dialer, "tcp", address, config)
+
+		if err == nil {
+			// Handshake succeeded! The server actively supports this weak cipher.
+			supportedWeakCiphers = append(supportedWeakCiphers, cipherName)
+			conn.Close()
+		}
+	}
+
+	// 3. Vulnerability Correlation & Report Generation
+	if len(supportedWeakCiphers) > 0 {
+		return &Vulnerability{
+			Target:      target,
+			Name:        "Weak TLS Cipher Suites Enabled",
+			Severity:    "MEDIUM",
+			CVSS:        5.9,
+			Description: fmt.Sprintf("Cryptographic analysis revealed the server accepts connections using weak, legacy encryption algorithms.\n\nSupported Weak Ciphers:\n- %s", strings.Join(supportedWeakCiphers, "\n- ")),
+			Solution:    "Reconfigure the web server (Nginx/Apache/IIS) to explicitly disable RC4, 3DES, and other legacy cipher suites. Enforce modern cryptographic standards (e.g., AES-GCM, ChaCha20).",
+			Reference:   "OWASP Transport Layer Protection / SWEET32 (CVE-2016-2183)",
+		}
+	}
+
+	return nil
+}
+
 // ==========================================
 // HELPER FOR SQL INJECTION (POST)
 // ==========================================
@@ -4520,6 +4819,7 @@ func GetPluginInventory() []string {
 		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
 		"SSRF Cloud Metadata", "JWT None Algorithm", "Apache Struts RCE", "Citrix ADC Traversal", "NoSQL Injection (MongoDB)", "Atlassian Confluence RCE",
 		"Terraform State Exposure", "WebSocket Hijacking", "TeamCity Auth Bypass", "Shadow API Discovery", "Fuzzer", "HTTP Request Smuggling", "Race Condition Tester",
-		"Web Cache Poisoning", "Offline CVE Radar (Passive)",
+		"Web Cache Poisoning", "Offline CVE Radar (Passive)", "Arbitrary File Upload (RCE)", "WordPress Enumeration & CVE Scanner",
+		"Weak TLS Cipher Suites Scanner",
 	}
 }
