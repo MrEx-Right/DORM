@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.5.1] - 2026-04-3
+### CVE Pattern List Update
+- The CVE pattern list has been updated, and critical CVEs have been added.
+
 ## [v1.5.0] - 2026-03-26
 ### 🎯 Precision Intelligence & Deep Fingerprinting Update
 
