@@ -1,0 +1,11 @@
+DORM/
+├── main.go          # Sadece main() fonksiyonu ve server başlatma
+├── engine.go        # Engine struct'ı, Start(), NewEngine() ve temel tipler
+├── handlers.go      # handleScan, handleStop, handleHistory vb. API işleri
+├── plugins.go       # (DOKUNULMAZ) Tüm o 90 plugin ve yardımcılar burada kalıyor
+├── storage.go       # (VAR) Veritabanı işlemleri
+├── client.go        # (VAR) HTTP Client ve Stealth ayarları
+├── fuzzer.go        # (VAR) Fuzzer plugin kodları
+├── spider.go        # (VAR) Spider plugin kodları
+├── /web/            # dashboard.html ve app.js (Kök klasörden buraya taşı)
+└── /wordlists/      # Devasa wordlist dosyalarını buraya topla
