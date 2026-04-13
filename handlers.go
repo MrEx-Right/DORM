@@ -202,10 +202,9 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	engine.AddPlugin(&plugins.FingerprintPlugin{}) //Fingerprinting
 	engine.AddPlugin(&plugins.TLSCheckPlugin{})    //TLS Check
 	engine.AddPlugin(&plugins.BruteForcePlugin{})  //Brute Force
-	engine.AddPlugin(&SpiderPlugin{})      //Spider
+	engine.AddPlugin(&SpiderPlugin{})              //Spider
 	engine.AddPlugin(&plugins.EDBPlugin{})         //Exploit DB
 	engine.AddPlugin(&plugins.PassiveCVEPlugin{})  //Passive CVE
-	engine.AddPlugin(&FuzzerPlugin{})      //Fuzzer
 
 	engine.AddPlugin(&plugins.BannerGrabPlugin{})
 	engine.AddPlugin(&plugins.HTTPHeaderPlugin{})

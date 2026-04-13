@@ -206,27 +206,46 @@ func getPostResponseLength(client *http.Client, urlStr, user, pass string) (int,
 // ==========================================
 // INVENTORY LIST FOR UI
 // ==========================================
-func GetPluginInventory() []string {
-	return []string{
-		"Open Port Detection", "Service Banner Info", "Security Headers Analysis", "SSL Certificate Check", "Basic File Scan",
-		"CORS Misconfiguration", "WordPress User Disclosure", "PHP Info Check", "WAF Detection", "Open Redirect",
-		"SQL Injection Scanner", "XSS (Cross-Site Scripting)", "LFI (Local File Inclusion)", "Spring Boot Actuator",
-		"Git Configuration", "Backup File", "Apache Server Status", "DS_Store Disclosure", "HTTP TRACE Method",
-		"ENV File Disclosure", "CMS Detection", "Admin Panel Finder", "Shellshock models.Vulnerability", "Laravel Debug Mode",
-		"Docker API Exposure", "Cookie Security", "Security.txt File", "WebDAV Methods", "Email Disclosure", "S3 Bucket Detection",
-		"Clickjacking Check", "GraphQL Schema Disclosure", "Swagger UI Detection", "Host Header Injection",
-		"System Metrics Exposure", "SSTI Test", "HSTS (HTTPS Enforcement)", "Tomcat Manager Panel",
-		"Editor/Config File Disclosure", "Open Directory Listing", "Blind Command Injection (Time)",
-		"XXE Injection", "Admin Panel Bypass (IP Spoof)", "CRLF Injection", "Dangerous HTTP Methods",
-		"Java Deserialization Risk", "Node.js Prototype Pollution", "Directory Traversal", "Config.json Disclosure",
-		"IDOR / Unauthorized Access Test", "Log4Shell (CVE-2021-44228)", "Kubernetes Kubelet API", "Docker Registry Exposure", "Spring Cloud Gateway RCE",
-		"F5 BIG-IP TMUI RCE", "Jenkins Script Console", "Redis Unauthorized Access", "MongoDB Unauthorized Access", "Elasticsearch Disclosure",
-		"Memcached Stats", "Anonymous FTP", "SMTP Open Relay", "API Key in JS Files", "Subdomain Takeover Risk",
-		"ASP.NET ViewState Encryption", "Laravel .env Disclosure", "ColdFusion Debugging", "Drupalgeddon2 RCE", "GitLab User Enum", "Nginx Alias Traversal",
-		"SSRF Cloud Metadata", "JWT None Algorithm", "Apache Struts RCE", "Citrix ADC Traversal", "NoSQL Injection (MongoDB)", "Atlassian Confluence RCE",
-		"Terraform State Exposure", "WebSocket Hijacking", "TeamCity Auth Bypass", "Shadow API Discovery", "Fuzzer", "HTTP Request Smuggling", "Race Condition Tester",
-		"Web Cache Poisoning", "Offline CVE Radar (Passive)", "Arbitrary File Upload (RCE)", "WordPress Enumeration & CVE Scanner",
-		"Weak TLS Cipher Suites Scanner",
+func GetPluginInventory() map[string][]string {
+	return map[string][]string{
+		"Recon & Info Gathering": {
+			"Open Port Detection", "Service Banner Info", "Basic File Scan", "PHP Info Check", "WAF Detection",
+			"CMS Detection", "Security.txt File", "Email Disclosure", "System Metrics Exposure", "Open Directory Listing",
+		},
+		"Injection Vulnerabilities": {
+			"SQL Injection Scanner", "XSS (Cross-Site Scripting)", "LFI (Local File Inclusion)", "Blind Command Injection (Time)",
+			"XXE Injection", "CRLF Injection", "Java Deserialization Risk", "Node.js Prototype Pollution", "Directory Traversal",
+			"Log4Shell (CVE-2021-44228)", "Spring Cloud Gateway RCE", "F5 BIG-IP TMUI RCE", "Shellshock models.Vulnerability",
+			"Drupalgeddon2 RCE", "Apache Struts RCE", "Citrix ADC Traversal", "NoSQL Injection (MongoDB)", "Atlassian Confluence RCE",
+		},
+		"Misconfiguration & Exposure": {
+			"Security Headers Analysis", "SSL Certificate Check", "CORS Misconfiguration", "Spring Boot Actuator",
+			"Git Configuration", "Backup File", "Apache Server Status", "DS_Store Disclosure", "HTTP TRACE Method",
+			"ENV File Disclosure", "Laravel Debug Mode", "Docker API Exposure", "WebDAV Methods", "Clickjacking Check",
+			"GraphQL Schema Disclosure", "Swagger UI Detection", "Host Header Injection", "HSTS (HTTPS Enforcement)",
+			"Editor/Config File Disclosure", "Config.json Disclosure", "Laravel .env Disclosure", "ColdFusion Debugging",
+			"Nginx Alias Traversal", "Terraform State Exposure",
+		},
+		"Cloud & Infrastructure": {
+			"S3 Bucket Detection", "Kubernetes Kubelet API", "Docker Registry Exposure", "Redis Unauthorized Access",
+			"MongoDB Unauthorized Access", "Elasticsearch Disclosure", "Memcached Stats", "Anonymous FTP", "SMTP Open Relay",
+			"SSRF Cloud Metadata",
+		},
+		"Authentication & Sessions": {
+			"WordPress User Disclosure", "Open Redirect", "Cookie Security", "Tomcat Manager Panel", "Admin Panel Bypass (IP Spoof)",
+			"IDOR / Unauthorized Access Test", "Jenkins Script Console", "Subdomain Takeover Risk", "ASP.NET ViewState Encryption",
+			"GitLab User Enum", "JWT None Algorithm", "TeamCity Auth Bypass", "Shadow API Discovery", "Admin Panel Finder",
+		},
+		"Advanced Logic": {
+			"SSTI Test", "Dangerous HTTP Methods", "HTTP Request Smuggling", "Race Condition Tester", "Web Cache Poisoning",
+			"Arbitrary File Upload (RCE)",
+		},
+		"Vulnerability Checks": {
+			"API Key in JS Files", "Weak TLS Cipher Suites Scanner", "WordPress Enumeration & CVE Scanner", "Offline CVE Radar (Passive)",
+		},
+		"Fuzzing Engine": {
+			"Fuzzer",
+		},
 	}
 }
 

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.7.0] - 2026-04-13
+### 🎨 Dashboard Overhaul & Fuzzer Engine Removal
+
+- **Luxury Dark UI Redesign:** Completely rebuilt the web dashboard from the ground up with a premium glassmorphism aesthetic. The new interface features a deep cool-dark base (`#0B0F19`), radial ambient gradients, a persistent sidebar layout with animated navigation items, and smooth `fadeUp` transitions on all view switches — replacing the previous minimal layout entirely.
+- **Category-Based Plugin Grid (UX):** Overhauled the plugin selection panel into a dynamic, categorized grid populated via the `/plugins` API. Each category renders a group header with a "Select/Deselect All" toggle, and every plugin entry features a custom-styled checkbox that toggles an `active-plugin` highlight state — eliminating the previously broken toggle logic.
+- **Fuzzer Engine Removal:** Completely excised the Fuzzer from the active scanning pipeline. The fuzzer plugin registration in `handlers.go` and the "Fuzzer Control Panel" sidebar block have been removed. The `fuzzing.txt` payload file has also been permanently removed. This reduces the attack surface, eliminates a dead code path, and tightens the overall engine surface area.
+
 ## [v1.6.0] - 2026-04-10
 ### 🏗️ Architectural Refactoring & Modular Engine Overhaul
 

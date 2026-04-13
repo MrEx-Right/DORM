@@ -4,30 +4,43 @@
 <head>
     <meta charset="UTF-8">
     <title>DORM SCANNER</title>
+    <!-- Modern Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
 
     <style>
-        /* CORE VARIABLES */
+        /* LUXURY DARK THEME VARIABLES */
         :root {
-            --bg-dark: #0d1117;
-            --panel-bg: #161b22;
-            --border: #30363d;
-            --text-main: #c9d1d9;
-            --text-dim: #8b949e;
-            --accent: #58a6ff;
-            --success: #238636;
-            --danger: #da3633;
-            --warning: #d29922;
+            --bg-base: #0B0F19;
+            /* Deep cool dark */
+            --panel-bg: rgba(22, 27, 34, 0.65);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --text-main: #E2E8F0;
+            --text-dim: #94A3B8;
+            --accent: #3B82F6;
+            /* Vibrant Blue */
+            --accent-glow: rgba(59, 130, 246, 0.4);
+            --success: #10B981;
+            --danger: #EF4444;
+            --warning: #F59E0B;
+            --glass-blur: blur(16px);
+        }
+
+        * {
+            box-sizing: border-box;
+            transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
         }
 
         body {
-            background-color: var(--bg-dark);
+            background-color: var(--bg-base);
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.05), transparent 25%);
             color: var(--text-main);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Inter', sans-serif;
             margin: 0;
             padding: 0;
             display: flex;
@@ -35,125 +48,116 @@
             overflow: hidden;
         }
 
-        /* SIDEBAR */
+        /* PREMIUM SIDEBAR */
         .sidebar {
-            width: 240px;
-            background: var(--panel-bg);
-            border-right: 1px solid var(--border);
+            width: 260px;
+            background: rgba(11, 15, 25, 0.8);
+            backdrop-filter: var(--glass-blur);
+            border-right: 1px solid var(--panel-border);
             display: flex;
             flex-direction: column;
-            padding: 20px;
+            padding: 25px 20px;
             flex-shrink: 0;
+            z-index: 10;
+            box-shadow: 5px 0 30px rgba(0, 0, 0, 0.2);
         }
 
         .main-content {
             flex-grow: 1;
-            padding: 30px;
+            padding: 35px 40px;
             overflow-y: auto;
             position: relative;
+            z-index: 1;
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
         }
 
-        /* BRAND */
+        /* LOGO & BRANDING */
         .brand {
-            margin-bottom: 40px;
+            margin-bottom: 45px;
             text-align: center;
+            position: relative;
+        }
+
+        .brand img {
+            display: none;
+            /* Logo removed per user request */
         }
 
         .brand h1 {
-            color: var(--accent);
-            letter-spacing: 4px;
+            color: #fff;
+            letter-spacing: 3px;
             font-weight: 800;
             margin: 0;
-            font-size: 28px;
+            font-size: 26px;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, #fff, #94A3B8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
 
         .brand span {
-            font-size: 10px;
-            color: var(--text-dim);
+            font-size: 11px;
+            color: var(--accent);
             letter-spacing: 2px;
             display: block;
-            margin-top: 5px;
+            margin-top: 6px;
+            font-weight: 600;
+            text-transform: uppercase;
         }
 
-        /* NAVIGATION */
+        /* MODERN NAVIGATION */
         .nav-item {
-            padding: 12px 15px;
-            margin-bottom: 8px;
-            border-radius: 6px;
+            padding: 14px 18px;
+            margin-bottom: 10px;
+            border-radius: 10px;
             cursor: pointer;
             color: var(--text-dim);
             display: flex;
             align-items: center;
-            gap: 10px;
-            transition: 0.2s;
+            gap: 12px;
             font-weight: 600;
             font-size: 14px;
+            position: relative;
+            overflow: hidden;
         }
 
         .nav-item:hover {
-            background: rgba(88, 166, 255, 0.1);
-            color: var(--accent);
+            color: #fff;
+            background: rgba(255, 255, 255, 0.03);
+            transform: translateX(4px);
         }
 
         .nav-item.active {
-            background: var(--accent);
+            background: linear-gradient(90deg, var(--accent) 0%, rgba(59, 130, 246, 0.6) 100%);
             color: #fff;
+            box-shadow: 0 4px 15px var(--accent-glow);
         }
 
         .nav-item i {
             width: 20px;
             text-align: center;
-        }
-
-        /* FUZZER PANEL (NEW) */
-        .fuzzer-panel {
-            margin-top: 20px;
-            background: rgba(218, 54, 51, 0.1);
-            /* Light Red */
-            border: 1px solid var(--danger);
-            border-radius: 8px;
-            padding: 15px;
-        }
-
-        .fuzzer-header {
-            color: var(--danger);
-            font-size: 11px;
-            font-weight: 800;
-            letter-spacing: 1px;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .fuzzer-status {
-            font-size: 10px;
-            color: var(--text-dim);
-            margin-top: 5px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
+            font-size: 16px;
         }
 
         /* VIEW & CONTROLS */
         .view-section {
             display: none;
-            animation: fadeIn 0.3s ease;
+            animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .view-section.active {
             display: block;
         }
 
-        @keyframes fadeIn {
+        @keyframes fadeUp {
             from {
                 opacity: 0;
-                transform: translateY(10px);
+                transform: translateY(20px);
             }
 
             to {
@@ -162,316 +166,425 @@
             }
         }
 
+        /* GLASS CONTROL PANEL */
         .control-panel {
             background: var(--panel-bg);
-            padding: 20px;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            backdrop-filter: var(--glass-blur);
+            padding: 25px 30px;
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            gap: 20px;
         }
 
         .input-group {
             display: flex;
-            gap: 10px;
+            gap: 15px;
             align-items: flex-start;
         }
 
-        /* Changed to flex-start for textarea */
-
-        input[type="text"] {
-            flex-grow: 1;
-            padding: 12px;
-            background: var(--bg-dark);
-            border: 1px solid var(--border);
-            color: #fff;
-            border-radius: 6px;
-            font-family: 'Consolas', monospace;
-            outline: none;
-        }
-
-        input[type="text"]:focus {
-            border-color: var(--accent);
-        }
-
-        /* --- MULTI-TARGET TEXTAREA HACKER THEME --- */
+        /* MULTI-TARGET TEXTAREA */
         #targetInput {
             flex-grow: 1;
-            background-color: var(--bg-dark);
-            color: var(--text-main);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 12px;
-            font-family: 'Consolas', monospace;
+            background-color: rgba(0, 0, 0, 0.2);
+            color: #fff;
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
             resize: vertical;
-            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
-            transition: border-color 0.2s, box-shadow 0.2s;
             outline: none;
-            line-height: 1.5;
+            line-height: 1.6;
         }
 
         #targetInput:focus {
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+            background-color: rgba(0, 0, 0, 0.3);
         }
 
         #targetInput::placeholder {
-            color: #484f58;
+            color: #475569;
         }
 
         #timerDisplay {
             font-family: 'Consolas', monospace;
-            font-size: 20px;
+            font-size: 24px;
             color: var(--accent);
             font-weight: bold;
-            width: 60px;
+            width: 80px;
             text-align: center;
-            margin-top: 5px;
+            margin-top: 10px;
+            text-shadow: 0 0 15px var(--accent-glow);
         }
 
         .settings-row {
             display: flex;
             align-items: center;
-            gap: 20px;
-            padding: 5px 0;
+            gap: 25px;
         }
 
         .toggle-label {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             cursor: pointer;
             font-size: 13px;
             font-weight: 600;
             color: var(--text-main);
             user-select: none;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid transparent;
+            background: rgba(255, 255, 255, 0.02);
         }
 
-        .toggle-label input {
-            accent-color: var(--accent);
-            width: 16px;
-            height: 16px;
+        .toggle-label:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--panel-border);
         }
 
-        /* AUTH */
+        .toggle-label input[type="checkbox"] {
+            /* allow custom-checkbox appearance logic instead of display: none */
+            margin: 0;
+        }
+
+        /* AUTH (Glassmorphic input) */
         .auth-trigger {
             cursor: pointer;
             color: var(--text-dim);
             font-size: 13px;
             font-weight: 600;
-            display: flex;
+            display: inline-flex;
             align-items: center;
             gap: 8px;
             user-select: none;
-            transition: 0.2s;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid transparent;
         }
 
         .auth-trigger:hover {
             color: var(--accent);
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--panel-border);
         }
 
         .auth-content {
             display: none;
-            padding-left: 10px;
-            border-left: 2px solid var(--border);
-            margin-top: 5px;
-            animation: slideDown 0.2s ease;
+            margin-top: 10px;
+            animation: slideDown 0.3s ease;
         }
 
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-5px);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        .auth-content input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--panel-border);
+            padding: 14px;
+            color: #4ADE80;
+            font-family: 'Consolas', monospace;
+            border-radius: 8px;
+            outline: none;
+            font-size: 13px;
         }
 
-        /* BUTTONS & PLUGINS */
+        .auth-content input:focus {
+            border-color: #4ADE80;
+            box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.1);
+        }
+
+        /* MODERN BUTTONS */
         button {
-            padding: 12px 25px;
-            background: var(--success);
+            padding: 12px 24px;
             color: white;
             border: none;
             cursor: pointer;
-            border-radius: 6px;
-            font-weight: bold;
-            transition: 0.2s;
+            border-radius: 8px;
+            font-weight: 800;
+            font-family: 'Inter', sans-serif;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
             font-size: 13px;
-            white-space: nowrap;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        button i {
+            font-size: 14px;
         }
 
         button:hover {
-            filter: brightness(1.1);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+            filter: brightness(1.15);
+        }
+
+        button:active {
+            transform: translateY(1px);
         }
 
         button:disabled {
-            background: var(--border);
+            background: var(--panel-border);
             cursor: not-allowed;
-            opacity: 0.6;
+            opacity: 0.5;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        #scanBtn {
+            background: linear-gradient(135deg, var(--success), #059669);
+            font-size: 14px;
+            padding: 14px 28px;
         }
 
         .btn-group {
             display: flex;
-            gap: 10px;
-            justify-content: flex-end;
+            gap: 12px;
+            flex-wrap: wrap;
         }
 
-        /* IMPORTANT: STYLE FOR STOP BUTTON */
         .btn-danger {
-            background: var(--danger) !important;
-            color: white !important;
-        }
-
-        .btn-danger:hover {
-            background-color: #b62324 !important;
+            background: linear-gradient(135deg, var(--danger), #B91C1C) !important;
         }
 
         .btn-icon {
-            padding: 8px;
+            padding: 10px;
             aspect-ratio: 1;
             justify-content: center;
         }
 
+        /* --- OVERHAULED PLUGIN AREA --- */
         #plugin-section {
             display: none;
-            background: var(--bg-dark);
-            border: 1px solid var(--border);
-            padding: 15px;
-            border-radius: 6px;
-            margin-top: 10px;
+            background: rgba(15, 23, 42, 0.7);
+            border: 1px solid var(--accent);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3), inset 0 0 30px rgba(59, 130, 246, 0.05);
+            padding: 25px;
+            border-radius: 12px;
+            margin-top: 15px;
+            position: relative;
+            animation: fadeUp 0.3s ease;
+        }
+
+        .plugin-header-tools {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--panel-border);
+        }
+
+        .plugin-header-tools h3 {
+            margin: 0;
+            color: #fff;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .plugin-quick-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .plugin-quick-actions button {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 6px 12px;
+            font-size: 11px;
+            box-shadow: none;
+            border: 1px solid var(--panel-border);
+        }
+
+        .plugin-quick-actions button:hover {
+            background: rgba(255, 255, 255, 0.1);
         }
 
         .plugin-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 8px;
-            max-height: 200px;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 12px;
+            max-height: 280px;
             overflow-y: auto;
+            padding-right: 10px;
         }
 
         .plugin-item {
             display: flex;
             align-items: center;
-            gap: 8px;
-            padding: 6px;
-            background: #21262d;
-            border-radius: 4px;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 12px;
-            border: 1px solid transparent;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s;
         }
 
         .plugin-item:hover {
-            border-color: var(--text-dim);
+            border-color: rgba(255, 255, 255, 0.2);
+            background: rgba(51, 65, 85, 0.8);
+            transform: translateY(-2px);
         }
 
-        /* CHART & TABLES */
+        .plugin-checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+        }
+
+        .plugin-item.active-plugin {
+            border-color: var(--accent);
+            background: rgba(59, 130, 246, 0.1);
+            box-shadow: inset 0 0 0 1px var(--accent);
+        }
+
+        /* CUSTOM CHECKBOXES FOR PLUGINS */
+        .custom-checkbox {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #475569;
+            border-radius: 4px;
+            background: transparent;
+            cursor: pointer;
+            position: relative;
+            outline: none;
+            flex-shrink: 0;
+            transition: all 0.2s;
+            display: inline-block;
+        }
+
+        .custom-checkbox:checked {
+            background-color: var(--accent);
+            border-color: var(--accent);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='4 8 7 11 12 4'/%3E%3C/svg%3E");
+            background-size: 70%;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+
+        /* CHART & DATA DISPLAY */
         .chart-container {
             background: var(--panel-bg);
-            padding: 15px;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            margin-top: 20px;
-            height: 220px;
+            backdrop-filter: var(--glass-blur);
+            padding: 20px;
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            margin-top: 25px;
+            height: 250px;
             display: flex;
             justify-content: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
         }
 
         table {
             width: 100%;
-            margin-top: 20px;
+            margin-top: 25px;
             border-collapse: separate;
-            border-spacing: 0 5px;
+            border-spacing: 0 8px;
         }
 
         th {
             text-align: left;
-            padding: 12px;
+            padding: 15px 20px;
             color: var(--text-dim);
             text-transform: uppercase;
-            font-size: 0.85em;
-            letter-spacing: 1px;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
         }
 
         .vuln-row {
-            background: var(--panel-bg);
+            background: rgba(30, 41, 59, 0.5);
+            backdrop-filter: blur(8px);
             cursor: pointer;
-            transition: background 0.2s;
+            border: 1px solid transparent;
+            border-radius: 8px;
         }
 
         .vuln-row:hover {
-            background: #21262d;
-            transform: translateX(2px);
+            background: rgba(51, 65, 85, 0.6);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
         }
 
         td {
-            padding: 12px;
-            border-top: 1px solid var(--border);
-            border-bottom: 1px solid var(--border);
-            font-size: 14px;
+            padding: 16px 20px;
+            font-size: 13.5px;
         }
 
-        td:first-child {
-            border-left: 1px solid var(--border);
-            border-radius: 6px 0 0 6px;
+        /* Apply border rendering for rows */
+        .vuln-row td {
+            border-top: 1px solid var(--panel-border);
+            border-bottom: 1px solid var(--panel-border);
         }
 
-        td:last-child {
-            border-right: 1px solid var(--border);
-            border-radius: 0 6px 6px 0;
+        .vuln-row td:first-child {
+            border-left: 1px solid var(--panel-border);
+            border-radius: 10px 0 0 10px;
         }
 
+        .vuln-row td:last-child {
+            border-right: 1px solid var(--panel-border);
+            border-radius: 0 10px 10px 0;
+        }
+
+        /* BADGES */
         .badge {
-            padding: 4px 10px;
+            padding: 6px 14px;
             border-radius: 20px;
             font-size: 11px;
-            font-weight: bold;
+            font-weight: 800;
             color: #000;
             text-transform: uppercase;
             display: inline-block;
-            min-width: 60px;
+            min-width: 80px;
             text-align: center;
+            letter-spacing: 0.5px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
         }
 
         .sev-CRITICAL {
-            background: #ff7b72;
-            box-shadow: 0 0 8px rgba(255, 123, 114, 0.4);
+            background: #F87171;
+            box-shadow: 0 0 12px rgba(248, 113, 113, 0.5);
         }
 
         .sev-HIGH {
-            background: #ff9b5e;
+            background: #FB923C;
         }
 
         .sev-MEDIUM {
-            background: #d29922;
+            background: #FBBF24;
         }
 
         .sev-LOW {
-            background: #e3b341;
+            background: #FCD34D;
         }
 
         .sev-INFO {
-            background: #58a6ff;
+            background: #60A5FA;
         }
 
         .status-running {
             color: var(--accent);
-            font-weight: bold;
+            font-weight: 800;
             animation: pulse 1.5s infinite;
         }
 
         .status-completed {
             color: var(--success);
-            font-weight: bold;
+            font-weight: 800;
         }
 
         @keyframes pulse {
@@ -488,43 +601,51 @@
             }
         }
 
+        /* ACCORDION DETAILS */
         .detail-row {
             display: none;
         }
 
         .detail-content {
-            background: var(--bg-dark);
-            padding: 20px;
-            border: 1px solid var(--border);
+            background: rgba(15, 23, 42, 0.8);
+            padding: 25px;
+            border: 1px solid var(--panel-border);
             border-top: none;
-            color: var(--text-dim);
-            margin: 0 10px 10px 10px;
-            border-radius: 0 0 8px 8px;
-            font-size: 13px;
-            line-height: 1.6;
+            color: #CBD5E1;
+            margin: -4px 10px 15px 10px;
+            border-radius: 0 0 10px 10px;
+            font-size: 14px;
+            line-height: 1.7;
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.2);
         }
 
         .arrow {
-            font-size: 12px;
+            font-size: 14px;
             color: var(--accent);
-            transition: transform 0.2s;
+            transition: transform 0.3s;
         }
 
         .vuln-row.open .arrow {
             transform: rotate(180deg);
         }
 
+        /* NICE SCROLLBARS */
         ::-webkit-scrollbar {
             width: 8px;
+            height: 8px;
         }
 
         ::-webkit-scrollbar-track {
-            background: var(--bg-dark);
+            background: transparent;
         }
 
         ::-webkit-scrollbar-thumb {
-            background: var(--border);
+            background: rgba(148, 163, 184, 0.3);
             border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(148, 163, 184, 0.5);
         }
     </style>
 </head>
@@ -534,30 +655,20 @@
     <div class="sidebar">
         <div class="brand">
             <h1>DORM</h1>
-            <span>ENTERPRISE SCANNER</span>
-        </div>
-        <div class="nav-item active" onclick="switchView('scanner')">
-            <i class="fas fa-radar"></i> New Scan
-        </div>
-        <div class="nav-item" onclick="switchView('history')">
-            <i class="fas fa-history"></i> Scan History
+            <span>Security Engine</span>
         </div>
 
-        <div class="fuzzer-panel">
-            <div class="fuzzer-header">
-                <i class="fas fa-hammer"></i> FUZZER ENGINE
+        <div style="margin-bottom: 20px;">
+            <div class="nav-item active" onclick="switchView('scanner')">
+                <i class="fas fa-radar"></i> New Scan
             </div>
-            <label class="toggle-label" style="color:#c9d1d9;">
-                <input type="checkbox" id="sidebarFuzzerToggle">
-                Enable Fuzzing
-            </label>
-            <div class="fuzzer-status">
-                <i class="fas fa-file-alt"></i> payloads/fuzzing.txt
+            <div class="nav-item" onclick="switchView('history')">
+                <i class="fas fa-history"></i> Scan History
             </div>
         </div>
 
-        <div style="margin-top:auto; font-size:11px; color:#30363d; text-align:center;">
-            v1.6.0
+        <div style="margin-top:auto; font-size:12px; color:rgba(255,255,255,0.3); text-align:center; font-weight: 600;">
+            v1.7.0
         </div>
     </div>
 
@@ -566,45 +677,70 @@
         <div id="view-scanner" class="view-section active">
             <div class="container">
                 <div class="control-panel">
-                    <div class="input-group">
-                        <textarea id="targetInput" rows="4"
-                            placeholder="http://site1.com&#10;192.168.1.10&#10;https://site3.com"></textarea>
+
+                    <div style="display:flex; justify-content: space-between; align-items:flex-end;">
+                        <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #fff;">Scan Configuration</h2>
                         <div id="timerDisplay">00:00</div>
-                        <button onclick="startScan()" id="scanBtn"><i class="fas fa-play"></i> START SCAN</button>
                     </div>
 
-                    <div style="margin-top: 15px;">
-                        <div class="auth-trigger" onclick="toggleAuth()">
+                    <div class="input-group">
+                        <textarea id="targetInput" rows="3"
+                            placeholder="Domain, IP, or CIDR...&#10;e.g. http://site1.com&#10;192.168.1.10"></textarea>
+                        <button onclick="startScan()" id="scanBtn"
+                            style="height: auto; align-self: stretch; min-width: 160px; justify-content: center; font-size: 16px;">
+                            <i class="fas fa-play"></i> START SCAN
+                        </button>
+                    </div>
+
+                    <div style="display:flex; gap: 30px; align-items:center;">
+                        <span class="auth-trigger" onclick="toggleAuth()">
                             <i class="fas fa-chevron-right" id="authArrow"></i>
-                            <i class="fas fa-key"></i> Authentication Options (Optional)
-                        </div>
-                        <div id="authContainer" class="auth-content">
-                            <div class="input-group" style="margin-top:10px;">
-                                <input type="text" id="authInput"
-                                    placeholder='Paste Header e.g. "Cookie: PHPSESSID=xyz..." or "Authorization: Bearer..."'
-                                    style="border-color:var(--border); font-size:13px; color:#aaffaa; font-family:'Consolas'; width: 100%;">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="settings-row">
+                            <i class="fas fa-key" style="color: #FBBF24;"></i> Auth Options
+                        </span>
                         <label class="toggle-label">
-                            <input type="checkbox" id="uaToggle">
-                            🦎 Chameleon Mode (Rotate User-Agent)
+                            <input type="checkbox" id="uaToggle" class="custom-checkbox">
+                            <span style="color:#E2E8F0;"><i class="fas fa-mask"
+                                    style="color: var(--accent); margin-right: 6px;"></i> Rotate User-Agent</span>
                         </label>
                     </div>
 
-                    <div class="btn-group">
-                        <button onclick="togglePlugins()" style="background:#1f6feb"><i class="fas fa-cogs"></i>
-                            PLUGINS</button>
-                        <button onclick="downloadReport()" style="background:#8957e5"><i class="fas fa-file-code"></i>
-                            HTML</button>
-                        <button onclick="downloadPDF()" style="background:#da3633"><i class="fas fa-file-pdf"></i>
-                            PDF</button>
+                    <div id="authContainer" class="auth-content">
+                        <input type="text" id="authInput"
+                            placeholder='Header -> "Cookie: session=xyz..." or "Authorization: Bearer..."'>
+                    </div>
+
+                    <!-- PLUGIN CONTROLS AND EXPORTS -->
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 20px;">
+                        <button onclick="togglePlugins()"
+                            style="background: linear-gradient(135deg, #1E3A8A, #3B82F6);">
+                            <i class="fas fa-layer-group"></i> PLUGINS
+                        </button>
+
+                        <div class="btn-group">
+                            <button onclick="downloadReport()"
+                                style="background: linear-gradient(135deg, #6B21A8, #9333EA);">
+                                <i class="fas fa-file-code"></i> HTML REPORT
+                            </button>
+                            <button onclick="downloadPDF()"
+                                style="background: linear-gradient(135deg, #991B1B, #DC2626);">
+                                <i class="fas fa-file-pdf"></i> PDF REPORT
+                            </button>
+                        </div>
                     </div>
 
                     <div id="plugin-section">
-                        <div class="plugin-grid" id="pluginGrid"></div>
+                        <div class="plugin-header-tools">
+                            <h3><i class="fas fa-plug" style="color:var(--accent);"></i> Selected Modules</h3>
+                            <div class="plugin-quick-actions">
+                                <button onclick="checkAllPlugins(true)"><i class="fas fa-check-double"></i> Select
+                                    All</button>
+                                <button onclick="checkAllPlugins(false)"><i class="fas fa-times"></i> Clear All</button>
+                            </div>
+                        </div>
+                        <div class="plugin-grid" id="pluginGrid">
+                            <!-- Populated by JS -->
+                        </div>
                     </div>
                 </div>
 
@@ -613,12 +749,12 @@
                 <table id="resultsTable">
                     <thead>
                         <tr>
-                            <th width="100">SEVERITY</th>
-                            <th width="60">CVSS</th>
+                            <th width="120">SEVERITY</th>
+                            <th width="70">CVSS</th>
                             <th>VULNERABILITY NAME</th>
-                            <th>ENGINE</th>
-                            <th>TARGET</th>
-                            <th width="30"></th>
+                            <th width="150">ENGINE</th>
+                            <th width="200">TARGET</th>
+                            <th width="40"></th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
@@ -628,22 +764,24 @@
 
         <div id="view-history" class="view-section">
             <div class="container">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                    <h2 style="margin:0; color:var(--text-main);">Scan History</h2>
+                <div class="control-panel"
+                    style="flex-direction: row; justify-content: space-between; align-items:center; padding: 20px 30px;">
+                    <h2 style="margin:0; color:#fff; font-size: 20px;">Execution History</h2>
                     <button onclick="loadHistory()"
-                        style="background:var(--panel-bg); border:1px solid var(--border); color:var(--text-main);"><i
-                            class="fas fa-sync"></i> Refresh</button>
+                        style="background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color:#fff; box-shadow:none;">
+                        <i class="fas fa-sync-alt"></i> REFRESH
+                    </button>
                 </div>
 
                 <table>
                     <thead>
                         <tr>
-                            <th>STATUS</th>
-                            <th>TARGET</th>
-                            <th>DATE</th>
-                            <th>DURATION</th>
-                            <th>TOTAL VULNS</th>
-                            <th style="text-align:right">ACTIONS</th>
+                            <th width="150">STATUS</th>
+                            <th>TARGET GROUP</th>
+                            <th width="200">DATE</th>
+                            <th width="100">TIME</th>
+                            <th width="150">VULNS</th>
+                            <th width="80" style="text-align:right">DELETE</th>
                         </tr>
                     </thead>
                     <tbody id="historyBody"></tbody>
