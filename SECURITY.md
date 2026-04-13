@@ -6,8 +6,8 @@ Since DORM is an actively developed security tool, we strictly support the lates
 
 | Version | Supported          |
 | :-----: | :----------------: |
-| 1.x     | :white_check_mark: |
-| < 1.0   | :x:                |
+| 1.5 >=     | :white_check_mark: |
+| < 1.5   | :x:                |
 
 ---
 
