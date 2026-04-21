@@ -299,6 +299,9 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	engine.AddPlugin(&plugins.FileUploadPlugin{})
 	engine.AddPlugin(&plugins.WPEnumPlugin{})
 	engine.AddPlugin(&plugins.TLSCipherPlugin{})
+	
+	engine.AddPlugin(&plugins.Bypass403Plugin{})
+	engine.AddPlugin(&plugins.PromptInjectionPlugin{})
 
 	// Apply User Filters
 	engine.SetFilter(selectedPluginsStr)

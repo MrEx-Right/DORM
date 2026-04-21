@@ -1,9 +1,281 @@
 {
     "title": "CISA Catalog of Known Exploited Vulnerabilities",
-    "catalogVersion": "2026.04.08",
-    "dateReleased": "2026-04-08T16:59:09.3378Z",
-    "count": 1559,
+    "catalogVersion": "2026.04.20",
+    "dateReleased": "2026-04-20T19:01:09.3195Z",
+    "count": 1577,
     "vulnerabilities": [
+        {
+            "cveID": "CVE-2026-20122",
+            "vendorProject": "Cisco",
+            "product": "Catalyst SD-WAN Manger",
+            "vulnerabilityName": "Cisco Catalyst SD-WAN Manager Incorrect Use of Privileged APIs Vulnerability",
+            "dateAdded": "2026-04-20",
+            "shortDescription": "Cisco Catalyst SD-WAN Manager contains an incorrect use of privileged APIs vulnerability due to improper file handling on the API interface of an affected system. An attacker could exploit this vulnerability by uploading a malicious file on the local file system. A successful exploit could allow the attacker to overwrite arbitrary files on the affected system and gain vmanage user privileges.",
+            "requiredAction": "Please adhere to CISA\u2019s guidelines to assess exposure and mitigate risks associated with Cisco SD-WAN devices as outlines in CISA\u2019s Emergency Directive 26-03 (URL listed below in Notes) and CISA\u2019s \u201cHunt & Hardening Guidance for Cisco SD-WAN Devices (URL listed below in Notes). Adhere to the applicable BOD 22-01 guidance for cloud services or discontinue use of the product if mitigations are not available.",
+            "dueDate": "2026-04-23",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "CISA Mitigation Instructions: https:\/\/www.cisa.gov\/news-events\/directives\/ed-26-03-mitigate-vulnerabilities-cisco-sd-wan-systems ; https:\/\/www.cisa.gov\/news-events\/directives\/supplemental-direction-ed-26-03-hunt-and-hardening-guidance-cisco-sd-wan-systems ; https:\/\/sec.cloudapps.cisco.com\/security\/center\/content\/CiscoSecurityAdvisory\/cisco-sa-sdwan-authbp-qwCX8D4v ; https:\/\/nvd.nist.gov\/vuln\/detail\/ CVE-2026-20122",
+            "cwes": [
+                "CWE-648"
+            ]
+        },
+        {
+            "cveID": "CVE-2026-20133",
+            "vendorProject": "Cisco",
+            "product": "Catalyst SD-WAN Manager",
+            "vulnerabilityName": "Cisco Catalyst SD-WAN Manager Exposure of Sensitive Information to an Unauthorized Actor Vulnerability",
+            "dateAdded": "2026-04-20",
+            "shortDescription": "Cisco Catalyst SD-WAN Manager contains an exposure of sensitive information to an unauthorized actor vulnerability that could allow remote attackers to view sensitive information on affected systems.",
+            "requiredAction": "Please adhere to CISA\u2019s guidelines to assess exposure and mitigate risks associated with Cisco SD-WAN devices as outlines in CISA\u2019s Emergency Directive 26-03 (URL listed below in Notes) and CISA\u2019s \u201cHunt & Hardening Guidance for Cisco SD-WAN Devices (URL listed below in Notes). Adhere to the applicable BOD 22-01 guidance for cloud services or discontinue use of the product if mitigations are not available.",
+            "dueDate": "2026-04-23",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "CISA Mitigation Instructions: https:\/\/www.cisa.gov\/news-events\/directives\/ed-26-03-mitigate-vulnerabilities-cisco-sd-wan-systems ; https:\/\/www.cisa.gov\/news-events\/directives\/supplemental-direction-ed-26-03-hunt-and-hardening-guidance-cisco-sd-wan-systems ; https:\/\/sec.cloudapps.cisco.com\/security\/center\/content\/CiscoSecurityAdvisory\/cisco-sa-sdwan-authbp-qwCX8D4v ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2026-20133",
+            "cwes": [
+                "CWE-200"
+            ]
+        },
+        {
+            "cveID": "CVE-2025-2749",
+            "vendorProject": "Kentico",
+            "product": "Kentico Xperience",
+            "vulnerabilityName": "Kentico Xperience Path Traversal Vulnerability",
+            "dateAdded": "2026-04-20",
+            "shortDescription": "Kentico Xperience contains a path traversal vulnerability that could allow an authenticated user's Staging Sync Server to upload arbitrary data to path relative locations.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-05-04",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/devnet.kentico.com\/download\/hotfixes ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2025-2749",
+            "cwes": [
+                "CWE-22",
+                "CWE-434"
+            ]
+        },
+        {
+            "cveID": "CVE-2023-27351",
+            "vendorProject": "PaperCut",
+            "product": "NG\/MF",
+            "vulnerabilityName": "PaperCut NG\/MF Improper Authentication Vulnerability",
+            "dateAdded": "2026-04-20",
+            "shortDescription": "PaperCut NG\/MF contains an improper authentication vulnerability that could allow remote attackers to bypass authentication on affected installations via the SecurityRequestFilter class.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-05-04",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/www.papercut.com\/kb\/Main\/PO-1216-and-PO-1219 ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2023-27351",
+            "cwes": [
+                "CWE-287"
+            ]
+        },
+        {
+            "cveID": "CVE-2025-48700",
+            "vendorProject": "Synacor",
+            "product": "Zimbra Collaboration Suite (ZCS)",
+            "vulnerabilityName": "Synacor Zimbra Collaboration Suite (ZCS) Cross-site Scripting Vulnerability",
+            "dateAdded": "2026-04-20",
+            "shortDescription": "Synacor Zimbra Collaboration Suite (ZCS) contains a cross-site scripting vulnerability that could allow attackers to execute arbitrary JavaScript within the user's session, potentially leading to unauthorized access to sensitive information.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-04-23",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/wiki.zimbra.com\/wiki\/Zimbra_Security_Advisories ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2025-48700",
+            "cwes": [
+                "CWE-79"
+            ]
+        },
+        {
+            "cveID": "CVE-2026-20128",
+            "vendorProject": "Cisco",
+            "product": "Catalyst SD-WAN Manager",
+            "vulnerabilityName": "Cisco Catalyst SD-WAN Manager Storing Passwords in a Recoverable Format Vulnerability",
+            "dateAdded": "2026-04-20",
+            "shortDescription": "Cisco Catalyst SD-WAN Manager contains a storing passwords in a recoverable format vulnerability that allows an authenticated, local attacker to gain DCA user privileges by accessing a credential file for the DCA user on the filesystem as a low-privileged user.",
+            "requiredAction": "Please adhere to CISA\u2019s guidelines to assess exposure and mitigate risks associated with Cisco SD-WAN devices as outlines in CISA\u2019s Emergency Directive 26-03 (URL listed below in Notes) and CISA\u2019s \u201cHunt & Hardening Guidance for Cisco SD-WAN Devices (URL listed below in Notes). Adhere to the applicable BOD 22-01 guidance for cloud services or discontinue use of the product if mitigations are not available.",
+            "dueDate": "2026-04-23",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "CISA Mitigation Instructions: https:\/\/www.cisa.gov\/news-events\/directives\/ed-26-03-mitigate-vulnerabilities-cisco-sd-wan-systems ; https:\/\/www.cisa.gov\/news-events\/directives\/supplemental-direction-ed-26-03-hunt-and-hardening-guidance-cisco-sd-wan-systems ; https:\/\/sec.cloudapps.cisco.com\/security\/center\/content\/CiscoSecurityAdvisory\/cisco-sa-sdwan-authbp-qwCX8D4v ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2026-20128",
+            "cwes": [
+                "CWE-257"
+            ]
+        },
+        {
+            "cveID": "CVE-2025-32975",
+            "vendorProject": "Quest",
+            "product": "KACE Systems Management Appliance (SMA)",
+            "vulnerabilityName": "Quest KACE Systems Management Appliance (SMA) Improper Authentication Vulnerability",
+            "dateAdded": "2026-04-20",
+            "shortDescription": "Quest KACE Systems Management Appliance (SMA) contains an improper authentication vulnerability that could allow attackers to impersonate legitimate users without valid credentials.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-05-04",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/support.quest.com\/kb\/4379499\/quest-response-to-kace-sma-vulnerabilities-cve-2025-32975-cve-2025-32976-cve-2025-32977-cve-2025-32978 ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2025-32975",
+            "cwes": [
+                "CWE-287"
+            ]
+        },
+        {
+            "cveID": "CVE-2024-27199",
+            "vendorProject": "JetBrains",
+            "product": "TeamCity",
+            "vulnerabilityName": "JetBrains TeamCity Relative Path Traversal Vulnerability",
+            "dateAdded": "2026-04-20",
+            "shortDescription": "JetBrains TeamCity contains a relative path traversal vulnerability that could allow limited admin actions to be performed.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-05-04",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/www.jetbrains.com\/privacy-security\/issues-fixed\/ ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2024-27199",
+            "cwes": [
+                "CWE-23"
+            ]
+        },
+        {
+            "cveID": "CVE-2026-34197",
+            "vendorProject": "Apache",
+            "product": "ActiveMQ",
+            "vulnerabilityName": "Apache ActiveMQ Improper Input Validation Vulnerability",
+            "dateAdded": "2026-04-16",
+            "shortDescription": "Apache ActiveMQ contains an improper input validation vulnerability that allows for code injection.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-04-30",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/activemq.apache.org\/security-advisories.data\/CVE-2026-34197-announcement.txt ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2026-34197",
+            "cwes": [
+                "CWE-20",
+                "CWE-94"
+            ]
+        },
+        {
+            "cveID": "CVE-2009-0238",
+            "vendorProject": "Microsoft",
+            "product": "Office",
+            "vulnerabilityName": "Microsoft Office Remote Code Execution",
+            "dateAdded": "2026-04-14",
+            "shortDescription": "Microsoft Office Excel contains a remote code execution vulnerability that could allow an attacker to take complete control of an affected system if a user opens a specially crafted Excel file that includes a malformed object.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-04-28",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/learn.microsoft.com\/en-us\/security-updates\/securitybulletins\/2009\/ms09-009 ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2009-0238",
+            "cwes": [
+                "CWE-94"
+            ]
+        },
+        {
+            "cveID": "CVE-2026-32201",
+            "vendorProject": "Microsoft",
+            "product": "SharePoint Server",
+            "vulnerabilityName": "Microsoft SharePoint Server Improper Input Validation Vulnerability",
+            "dateAdded": "2026-04-14",
+            "shortDescription": "Microsoft SharePoint Server contains an improper input validation vulnerability that allows an unauthorized attacker to perform spoofing over a network.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-04-28",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/msrc.microsoft.com\/update-guide\/en-US\/vulnerability\/CVE-2026-32201 ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2026-32201",
+            "cwes": [
+                "CWE-20"
+            ]
+        },
+        {
+            "cveID": "CVE-2012-1854",
+            "vendorProject": "Microsoft",
+            "product": "Visual Basic for Applications (VBA)",
+            "vulnerabilityName": "Microsoft Visual Basic for Applications Insecure Library Loading Vulnerability",
+            "dateAdded": "2026-04-13",
+            "shortDescription": "Microsoft Visual Basic for Applications (VBA) contains an insecure library loading vulnerability that could allow for remote code execution.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-04-27",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/learn.microsoft.com\/en-us\/security-updates\/securitybulletins\/2012\/ms12-046 ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2012-1854",
+            "cwes": [
+                "CWE-426"
+            ]
+        },
+        {
+            "cveID": "CVE-2025-60710",
+            "vendorProject": "Microsoft",
+            "product": "Windows",
+            "vulnerabilityName": "Microsoft Windows Link Following Vulnerability",
+            "dateAdded": "2026-04-13",
+            "shortDescription": "Microsoft Windows contains a link following vulnerability that allows for privilege escalation",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-04-27",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/msrc.microsoft.com\/update-guide\/vulnerability\/CVE-2025-60710 ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2025-60710",
+            "cwes": [
+                "CWE-59"
+            ]
+        },
+        {
+            "cveID": "CVE-2023-21529",
+            "vendorProject": "Microsoft",
+            "product": "Exchange Server",
+            "vulnerabilityName": "Microsoft Exchange Server Deserialization of Untrusted Data Vulnerability",
+            "dateAdded": "2026-04-13",
+            "shortDescription": "Microsoft Exchange Server contains a deserialization of untrusted data that allows an authenticated attacker to achieve remote code execution.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-04-27",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/msrc.microsoft.com\/update-guide\/vulnerability\/CVE-2023-21529 ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2023-21529",
+            "cwes": [
+                "CWE-502"
+            ]
+        },
+        {
+            "cveID": "CVE-2023-36424",
+            "vendorProject": "Microsoft",
+            "product": "Windows",
+            "vulnerabilityName": "Microsoft Windows Out-of-Bounds Read Vulnerability",
+            "dateAdded": "2026-04-13",
+            "shortDescription": "Microsoft Windows Common Log File System Driver contains an out-of-bounds read vulnerability that could allow a threat actor for privileges escalation",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-04-27",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/msrc.microsoft.com\/update-guide\/en-US\/advisory\/CVE-2023-36424 ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2023-36424",
+            "cwes": [
+                "CWE-125"
+            ]
+        },
+        {
+            "cveID": "CVE-2020-9715",
+            "vendorProject": "Adobe",
+            "product": "Acrobat",
+            "vulnerabilityName": "Adobe Acrobat Use-After-Free Vulnerability",
+            "dateAdded": "2026-04-13",
+            "shortDescription": "Adobe Acrobat contains a use-after-free vulnerability that allows for code execution",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-04-27",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/helpx.adobe.com\/security\/products\/acrobat\/apsb20-48.html ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2020-9715",
+            "cwes": [
+                "CWE-416"
+            ]
+        },
+        {
+            "cveID": "CVE-2026-21643",
+            "vendorProject": "Fortinet",
+            "product": "FortiClient EMS",
+            "vulnerabilityName": "Fortinet FortiClient EMS SQL Injection Vulnerability",
+            "dateAdded": "2026-04-13",
+            "shortDescription": "Fortinet FortiClient EMS contains a SQL injection vulnerability that may allow an unauthenticated attacker to execute unauthorized code or commands via specifically crafted HTTP requests.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-04-16",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/fortiguard.fortinet.com\/psirt\/FG-IR-25-1142 ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2026-21643",
+            "cwes": [
+                "CWE-89"
+            ]
+        },
+        {
+            "cveID": "CVE-2026-34621",
+            "vendorProject": "Adobe",
+            "product": "Acrobat and Reader",
+            "vulnerabilityName": "Adobe Acrobat and Reader Prototype Pollution Vulnerability",
+            "dateAdded": "2026-04-13",
+            "shortDescription": "Adobe Acrobat and Reader contain a prototype pollution vulnerability that allows for arbitrary code execution.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-04-27",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/helpx.adobe.com\/security\/products\/acrobat\/apsb26-43.html ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2026-34621",
+            "cwes": [
+                "CWE-1321"
+            ]
+        },
         {
             "cveID": "CVE-2026-1340",
             "vendorProject": "Ivanti",

@@ -118,6 +118,31 @@ func (s *Spider) fetchBody(target string) (string, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 400 { // 400 is sometimes used by WAFs
+		u, _ := url.Parse(target)
+		if u != nil {
+			key := "forbidden_" + s.BaseURL.Hostname()
+			existing, ok := models.SharedData.Load(key)
+			var paths []string
+			if ok {
+				paths = existing.([]string)
+			}
+			
+			// Avoid duplicates
+			found := false
+			for _, p := range paths {
+				if p == u.Path {
+					found = true
+					break
+				}
+			}
+			if !found {
+				paths = append(paths, u.Path)
+				models.SharedData.Store(key, paths)
+			}
+		}
+	}
+
 	// Memory Protection: Limit read size to Max 5MB
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 	return string(body), nil

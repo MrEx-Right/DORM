@@ -39,11 +39,10 @@ func (p *XSSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 				resp, err := client.Get(targetURL)
 				if err == nil {
-					resp.Body.Close()
-
 					headerCheck := make([]byte, 10240)
 					n, _ := resp.Body.Read(headerCheck)
 					bodyString := string(headerCheck[:n])
+					resp.Body.Close()
 
 					if strings.Contains(bodyString, canary) {
 

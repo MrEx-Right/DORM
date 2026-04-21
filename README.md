@@ -37,7 +37,6 @@ Unlike traditional scanners, DORM features a hybrid engine that utilizes **Headl
 
 ### 🧠 Advanced Capabilities
 - **🕷️ Web Spider:** Recursively crawls the target to map the attack surface.
-- **💣 Smart Fuzzer:** Mutation-based fuzzer to detect 0-Day anomalies (DoS/SQLi).
 - **🕸️ DOM XSS Scanner:** Uses **Headless Chrome** to detect JavaScript-based vulnerabilities in SPA (React/Vue).
 - **📚 Exploit-DB Integration:** Loads the entire Exploit Database into RAM for instant service version matching.
 - **🔓 Brute Force (Mini-Hydra):** Supports dictionary attacks on SSH and FTP.

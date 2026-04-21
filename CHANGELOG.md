@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.8.0] - 2026-04-21
+### 🧠 Advanced Evasion & AI Scanner Integrations
+
+- **Spider & 403 Coordination (New Feature):** Upgraded the Spider crawler to capture and export `401 Unauthorized` and `403 Forbidden` response paths into a newly localized state cache (`SharedData`). This creates an asynchronous, dynamic target feed for downstream evasion plugins.
+- **403/401 Authorization Bypass (New Plugin):** Engineered a high-impact evasion scanner that consumes forbidden endpoints from the Spider. Evaluates access control logic flaws using header manipulation (`X-Forwarded-For`, `X-Rewrite-URL`, etc.) and path normalization exploits (`/%2e/`, `//`).
+- **AI/LLM Prompt Injection Scanner (New Plugin):** Introduced a dedicated vulnerability checker targeting modern AI Chat application interfaces (`/chat`, `/api/completions`). It systematically deploys system override and guardrail subversion payloads (e.g. `Ignore all previous instructions...`) to confirm autonomous behavior hijacking.
+- **XSS Engine (Critical Bug Fix):** Fixed a severe structural bug in the `XSS (Reflected - Smart)` engine where the HTTP response body was mistakenly closed prior to being read, rendering the canary checks blind. The module now successfully processes response reflections.
+
 ## [v1.7.0] - 2026-04-13
 ### 🎨 Dashboard Overhaul & Fuzzer Engine Removal
 

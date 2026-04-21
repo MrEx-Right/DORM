@@ -235,10 +235,11 @@ func GetPluginInventory() map[string][]string {
 			"WordPress User Disclosure", "Open Redirect", "Cookie Security", "Tomcat Manager Panel", "Admin Panel Bypass (IP Spoof)",
 			"IDOR / Unauthorized Access Test", "Jenkins Script Console", "Subdomain Takeover Risk", "ASP.NET ViewState Encryption",
 			"GitLab User Enum", "JWT None Algorithm", "TeamCity Auth Bypass", "Shadow API Discovery", "Admin Panel Finder",
+			"403/401 Authorization Bypass",
 		},
 		"Advanced Logic": {
 			"SSTI Test", "Dangerous HTTP Methods", "HTTP Request Smuggling", "Race Condition Tester", "Web Cache Poisoning",
-			"Arbitrary File Upload (RCE)",
+			"Arbitrary File Upload (RCE)", "AI/LLM Prompt Injection Scanner",
 		},
 		"Vulnerability Checks": {
 			"API Key in JS Files", "Weak TLS Cipher Suites Scanner", "WordPress Enumeration & CVE Scanner", "Offline CVE Radar (Passive)",

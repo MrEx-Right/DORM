@@ -1,6 +1,12 @@
 package models
 
-import "net/http"
+import (
+	"net/http"
+	"sync"
+)
+
+// SharedData is a global concurrent map for sharing data between plugins
+var SharedData sync.Map
 
 type ScanTarget struct {
 	IP   string
