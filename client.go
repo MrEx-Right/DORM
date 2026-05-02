@@ -1,9 +1,12 @@
 package main
 
 import (
+	"crypto/tls"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -14,6 +17,40 @@ import (
 // Global Variables (Controlled by main.go/handleScan)
 var GlobalRotateUA bool = false
 var GlobalAuthHeader string = ""
+var GlobalProxyEnabled bool = false
+var GlobalProxyURL string = "http://127.0.0.1:8080"
+
+var (
+	baseTransport http.RoundTripper
+	transportOnce sync.Once
+)
+
+// InitTransport updates the global baseTransport, avoiding race conditions and connection pool exhaustion
+func InitTransport() {
+	var proxyFunc func(*http.Request) (*url.URL, error) = nil
+
+	if GlobalProxyEnabled {
+		// Parse proxy
+		proxyURL, err := url.Parse(GlobalProxyURL)
+		if err != nil || GlobalProxyURL == "" {
+			// Fallback to default if somehow broken
+			proxyURL, _ = url.Parse("http://127.0.0.1:8080")
+		}
+		proxyFunc = http.ProxyURL(proxyURL)
+	}
+
+	// Create custom transport with Proxy and disabled TLS verify (useful for intercepts)
+	customTransport := &http.Transport{
+		Proxy: proxyFunc,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true, // Always skip verify for intercepts
+		},
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 100,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	baseTransport = customTransport
+}
 
 // User Agent List
 var userAgents = []string{
@@ -55,8 +92,13 @@ func (urt *UARoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 
 // Client Helper (Used by Plugins)
 func getClient() *http.Client {
+	// Fallback in case InitTransport wasn't called yet
+	if baseTransport == nil {
+		InitTransport()
+	}
+
 	return &http.Client{
-		Transport: &UARoundTripper{Proxied: http.DefaultTransport},
+		Transport: &UARoundTripper{Proxied: baseTransport},
 		Timeout:   10 * time.Second,
 	}
 }

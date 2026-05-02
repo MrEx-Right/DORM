@@ -62,5 +62,51 @@ func (p *XSSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 			}
 		}
 	}
+
+	// === SPIDER ENDPOINT INTEGRATION ===
+	key := "endpoints_" + target.IP
+	existing, ok := models.SharedData.Load(key)
+	if ok {
+		spiderEndpoints := existing.([]models.Endpoint)
+		for _, ep := range spiderEndpoints {
+			if ep.Method == "GET" && len(ep.Params) > 0 {
+				for _, param := range ep.Params {
+					for _, payload := range payloads {
+						u, err := url.Parse(ep.URL)
+						if err != nil {
+							continue
+						}
+						q := u.Query()
+						q.Set(param, payload)
+						u.RawQuery = q.Encode()
+
+						targetURL := u.String()
+						resp, err := client.Get(targetURL)
+						if err == nil {
+							headerCheck := make([]byte, 10240)
+							n, _ := resp.Body.Read(headerCheck)
+							bodyString := string(headerCheck[:n])
+							resp.Body.Close()
+
+							if strings.Contains(bodyString, canary) {
+								if strings.Contains(bodyString, "<script>") || strings.Contains(bodyString, "<img") || strings.Contains(bodyString, "javascript:") {
+									return &models.Vulnerability{
+										Target:      target,
+										Name:        "Reflected XSS (Spider-Discovered)",
+										Severity:    "HIGH",
+										CVSS:        7.2,
+										Description: fmt.Sprintf("XSS Payload reflected on a parameter discovered by Spider.\nURL: %s\nParameter: %s\nPayload: %s", targetURL, param, payload),
+										Solution:    "Implement Context-Aware Output Encoding (HTML Entity Encode).",
+										Reference:   "OWASP Cross Site Scripting (XSS)",
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	// ===================================
 	return nil
 }

@@ -8,7 +8,34 @@ const ctx = document.getElementById('vulnChart').getContext('2d');
 let vulnChart = new Chart(ctx, {
     type: 'doughnut',
     data: { labels: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'], datasets: [{ data: [0,0,0,0,0], backgroundColor: ['#ff7b72', '#ff9b5e', '#d29922', '#e3b341', '#58a6ff'], borderWidth: 0 }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#c9d1d9', font: {family: 'Segoe UI'} } } } }
+    options: { 
+        responsive: true, 
+        maintainAspectRatio: false, 
+        plugins: { 
+            legend: { 
+                position: 'right', 
+                labels: { color: '#c9d1d9', font: {family: 'Segoe UI'} },
+                onClick: function(e, legendItem, legend) {
+                    Chart.defaults.plugins.legend.onClick.call(this, e, legendItem, legend);
+                    
+                    const index = legendItem.index;
+                    const meta = vulnChart.getDatasetMeta(0);
+                    const isHidden = meta.data[index].hidden; // Chart.js 3+
+                    const severity = vulnChart.data.labels[index];
+                    
+                    const rows = document.querySelectorAll('.vuln-row[data-severity="'+severity+'"]');
+                    const detailRows = document.querySelectorAll('.detail-row[data-severity="'+severity+'"]');
+                    
+                    rows.forEach(r => { r.style.display = isHidden ? 'none' : 'table-row'; });
+                    // Close details if hidden
+                    detailRows.forEach(r => { r.style.display = 'none'; });
+                    if(isHidden) {
+                        rows.forEach(r => r.classList.remove('open'));
+                    }
+                }
+            } 
+        } 
+    }
 });
 
 // --- INITIALIZATION ---
@@ -188,8 +215,12 @@ function startScan() {
         document.getElementById('timerDisplay').innerText = `${m}:${s}`;
     }, 1000);
 
+    // Get Proxy URL and state from the Proxy Settings view
+    const proxyEnabled = document.getElementById('proxyToggle').checked;
+    const proxyUrl = document.getElementById('proxyUrlInput').value || "http://127.0.0.1:8081";
+
     // Assign to global variable (Notice: query param is now "targets")
-    scanEventSource = new EventSource(`/scan?targets=${encodeURIComponent(targetString)}&plugins=${encodeURIComponent(selected.join(","))}&delay=${speed}&rotateUA=${rotateUA}&auth=${encodeURIComponent(authHeader)}`);
+    scanEventSource = new EventSource(`/scan?targets=${encodeURIComponent(targetString)}&plugins=${encodeURIComponent(selected.join(","))}&delay=${speed}&rotateUA=${rotateUA}&auth=${encodeURIComponent(authHeader)}&proxyEnabled=${proxyEnabled}&proxyUrl=${encodeURIComponent(proxyUrl)}`);
 
     scanEventSource.onmessage = (e) => {
         const data = JSON.parse(e.data);
@@ -207,7 +238,7 @@ function startScan() {
         else if (data.Name.includes("Spider")) engineLabel = 'Spider';
 
         const html = `
-            <tr class="vuln-row" id="row-${vulnCount}" onclick="toggleDetail(${vulnCount})">
+            <tr class="vuln-row" data-severity="${escapeHtml(data.Severity.toUpperCase())}" id="row-${vulnCount}" onclick="toggleDetail(${vulnCount})">
                 <td><span class="badge ${badgeClass}">${escapeHtml(data.Severity)}</span></td>
                 <td style="font-weight:bold; color:#fff;">${data.CVSS.toFixed(1)}</td>
                 <td style="color:#fff;">${escapeHtml(data.Name)}</td>
@@ -215,7 +246,7 @@ function startScan() {
                 <td>${escapeHtml(data.Target.IP)}:${data.Target.Port}</td>
                 <td class="arrow"><i class="fas fa-chevron-down"></i></td>
             </tr>
-            <tr class="detail-row" id="detail-${vulnCount}">
+            <tr class="detail-row" data-severity="${escapeHtml(data.Severity.toUpperCase())}" id="detail-${vulnCount}">
                 <td colspan="6" style="padding:0; border:none;">
                     <div class="detail-content">
                         <strong style="color:var(--accent)">ANALYSIS:</strong><br>${escapeHtml(data.Description).replace(/\n/g, '<br>')}<br><br>
@@ -231,8 +262,10 @@ function startScan() {
         if(idx !== -1) { vulnChart.data.datasets[0].data[idx]++; vulnChart.update(); }
     };
     
-    scanEventSource.onerror = () => {
-        stopScan(); // Stop if error occurs
+    scanEventSource.onerror = (err) => {
+        console.error("SSE Connection Error:", err);
+        // Do not call stopScan() here, because EventSource auto-reconnects on temporary network drops.
+        // Calling stopScan() was aborting the entire scan incorrectly.
     };
 }
 

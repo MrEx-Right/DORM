@@ -1,6 +1,7 @@
 package main
 
 import (
+	"DORM/analyzer"
 	"DORM/models"
 	"DORM/plugins"
 	"context"
@@ -90,6 +91,13 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		GlobalRotateUA = false
 	}
 	GlobalAuthHeader = r.URL.Query().Get("auth")
+	
+	// Proxy Setup
+	GlobalProxyEnabled = r.URL.Query().Get("proxyEnabled") == "true"
+	if proxyUrl := r.URL.Query().Get("proxyUrl"); proxyUrl != "" {
+		GlobalProxyURL = proxyUrl
+	}
+	InitTransport() // Initialize proxy transport and connection pool safely
 	// ----------------------------------------------------
 
 	if targetsParam == "" {
@@ -332,6 +340,9 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		foundVulns = append(foundVulns, v)
 		muVulns.Unlock()
 	}
+
+	// Link Analyzer's passive findings to the main engine output
+	analyzer.OnVulnFound = engine.OnFind
 
 	engine.Start()
 

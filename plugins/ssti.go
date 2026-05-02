@@ -60,5 +60,50 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 			}
 		}
 	}
+
+	// === SPIDER ENDPOINT INTEGRATION ===
+	key := "endpoints_" + target.IP
+	existing, ok := models.SharedData.Load(key)
+	if ok {
+		spiderEndpoints := existing.([]models.Endpoint)
+		for _, ep := range spiderEndpoints {
+			if ep.Method == "GET" && len(ep.Params) > 0 {
+				for _, param := range ep.Params {
+					for _, payload := range payloads {
+						parsedUrl, err := url.Parse(ep.URL)
+						if err != nil {
+							continue
+						}
+						q := parsedUrl.Query()
+						q.Set(param, payload)
+						parsedUrl.RawQuery = q.Encode()
+						
+						targetURL := parsedUrl.String()
+
+						resp, err := client.Get(targetURL)
+						if err == nil {
+							buf := make([]byte, 4096)
+							n, _ := resp.Body.Read(buf)
+							body := string(buf[:n])
+							resp.Body.Close()
+
+							if strings.Contains(body, expectedResult) && !strings.Contains(body, payload) {
+								return &models.Vulnerability{
+									Target:      target,
+									Name:        "SSTI (Spider-Discovered)",
+									Severity:    "CRITICAL",
+									CVSS:        9.9,
+									Description: fmt.Sprintf("Template engine executed code on parameter discovered by Spider.\nURL: %s\nParameter: %s\nPayload: %s\nResult: %s", targetURL, param, payload, expectedResult),
+									Solution:    "Sanitize inputs before passing to template engine.",
+									Reference:   "OWASP SSTI",
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	// ===================================
 	return nil
 }

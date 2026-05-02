@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.9.0] - 2026-05-02
+### 🕷️ Native Analyzer & Smart Spider (Active Fuzzer)
+
+- **Native Proxy Analyzer (New Architecture):** DORM has evolved from a traditional scanner into a full-fledged Dynamic Application Security Testing (DAST) proxy. An internal HTTP Proxy Server (`analyzer` package) now spins up on port `8081` alongside the main engine, intercepting all internal HTTP traffic to perform passive vulnerability analysis without the need for external tools like Burp Suite.
+- **Passive Vulnerability Sensors:** The newly integrated `responser.go` module performs real-time, memory-safe (5MB limit) inspection of all proxy traffic. It automatically detects critical Information Leakage (AWS API Keys, Private Keys) and broadcasts findings directly to the DORM dashboard via SSE.
+- **Smart Spider (Active Fuzzing Engine):** The Spider module has been completely re-engineered from a simple link crawler into an intelligent endpoint discovery tool. It now performs "Deep Parsing" on HTML `<form>` inputs, POST actions, and dynamically extracts API endpoints hidden within `.js` files using advanced Regex.
+- **Shared Endpoint Intelligence:** Spider no longer attacks blindly. It extracts specific URL parameters (e.g., `?id=1`) and stores them in a shared state pool (`models.SharedData`). This prevents rate-limit bans and allows the Spider to act as a recon agent for the rest of the DORM ecosystem.
+- **Surgical Exploitation (Plugin Integration):** Four critical, input-dependent plugins—**SQLi, XSS, LFI, and SSTI**—along with **Open Redirect** and **Blind RCE**, have been structurally updated to consume the Spider's intelligence pool. Instead of attacking base URLs, these plugins now execute precision, surgical payload injections directly into the exact endpoints and parameters discovered by the Spider.
+
 ## [v1.8.0] - 2026-04-21
 ### 🧠 Advanced Evasion & AI Scanner Integrations
 

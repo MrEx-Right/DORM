@@ -1,6 +1,7 @@
 package main
 
 import (
+	"DORM/analyzer"
 	"DORM/models"
 	"fmt"
 	"net/http"
@@ -38,13 +39,20 @@ func main() {
 	url := "http://localhost" + port
 
 	fmt.Println("===========================================")
-	fmt.Println("          DORM SCANNER v1.8.0 		 	    ")
+	fmt.Println("          DORM SCANNER v1.9.0 		 	    ")
 	fmt.Println("===========================================")
 	fmt.Printf("[*] Server Active: %s\n", url)
 
 	go func() {
 		time.Sleep(1 * time.Second)
 		openBrowser(url)
+	}()
+
+	// 3. Start Native Analyzer Proxy in background
+	go func() {
+		if err := analyzer.StartAnalyzer("8081"); err != nil {
+			fmt.Println("Analyzer Error:", err)
+		}
 	}()
 
 	if err := http.ListenAndServe(port, nil); err != nil {

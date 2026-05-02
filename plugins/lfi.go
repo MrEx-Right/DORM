@@ -3,6 +3,7 @@ package plugins
 import (
 	"DORM/models"
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -66,5 +67,54 @@ func (p *LFIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 			}
 		}
 	}
+
+	// === SPIDER ENDPOINT INTEGRATION ===
+	key := "endpoints_" + target.IP
+	existing, ok := models.SharedData.Load(key)
+	if ok {
+		spiderEndpoints := existing.([]models.Endpoint)
+		for _, ep := range spiderEndpoints {
+			if ep.Method == "GET" && len(ep.Params) > 0 {
+				for _, param := range ep.Params {
+					for _, payload := range payloads {
+						// better URL parsing
+						parsedUrl, err := url.Parse(ep.URL)
+						if err != nil {
+							continue
+						}
+						q := parsedUrl.Query()
+						q.Set(param, payload)
+						parsedUrl.RawQuery = q.Encode()
+						
+						targetURL := parsedUrl.String()
+
+						resp, err := client.Get(targetURL)
+						if err == nil {
+							buf := make([]byte, 5120)
+							n, _ := resp.Body.Read(buf)
+							content := string(buf[:n])
+							resp.Body.Close()
+
+							if strings.Contains(content, "root:x:0:0") ||
+								strings.Contains(content, "[fonts]") ||
+								strings.Contains(content, "PD9waH") {
+
+								return &models.Vulnerability{
+									Target:      target,
+									Name:        "Local File Inclusion (Spider-Discovered)",
+									Severity:    "CRITICAL",
+									CVSS:        8.5,
+									Description: fmt.Sprintf("Critical system file read successfully on parameter discovered by Spider.\nURL: %s\nParameter: %s\nPayload: %s", targetURL, param, payload),
+									Solution:    "Restrict file paths using a whitelist or disable dynamic file inclusion.",
+									Reference:   "OWASP LFI",
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	// ===================================
 	return nil
 }

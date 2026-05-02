@@ -13,6 +13,12 @@ type ScanTarget struct {
 	Port int
 }
 
+type Endpoint struct {
+	URL    string
+	Method string
+	Params []string
+}
+
 type Vulnerability struct {
 	Target      ScanTarget
 	Name        string

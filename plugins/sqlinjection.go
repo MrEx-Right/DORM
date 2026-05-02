@@ -78,6 +78,54 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 		}
 	}
 
+	// === SPIDER ENDPOINT INTEGRATION ===
+	key := "endpoints_" + target.IP
+	existing, ok := models.SharedData.Load(key)
+	if ok {
+		spiderEndpoints := existing.([]models.Endpoint)
+		for _, ep := range spiderEndpoints {
+			if ep.Method == "GET" && len(ep.Params) > 0 {
+				for _, param := range ep.Params {
+					for _, payload := range errorPayloads {
+						// Parse the URL to append the payload to the specific param
+						u, err := url.Parse(ep.URL)
+						if err != nil {
+							continue
+						}
+						q := u.Query()
+						q.Set(param, payload)
+						u.RawQuery = q.Encode()
+
+						targetURL := u.String()
+						resp, err := client.Get(targetURL)
+						if err != nil {
+							continue
+						}
+
+						bodyBytes, _ := io.ReadAll(resp.Body)
+						resp.Body.Close()
+						bodyStr := string(bodyBytes)
+
+						for _, errMsg := range dbErrors {
+							if strings.Contains(bodyStr, errMsg) {
+								return &models.Vulnerability{
+									Target:      target,
+									Name:        "SQL Injection (Spider-Discovered)",
+									Severity:    "CRITICAL",
+									CVSS:        9.8,
+									Description: fmt.Sprintf("Database error triggered on a parameter discovered by Spider.\nURL: %s\nParameter: %s\nPayload: %s\nMatch: %s", targetURL, param, payload, errMsg),
+									Solution:    "Use Prepared Statements (Parameterized Queries).",
+									Reference:   "OWASP A03:Injection",
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	// ===================================
+
 	sleepSeconds := 5
 	timePayloads := map[string]string{
 		"MySQL/MariaDB": fmt.Sprintf("' AND SLEEP(%d)--", sleepSeconds),

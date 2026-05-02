@@ -3,7 +3,6 @@ package main
 import (
 	"DORM/models"
 	"DORM/plugins"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,23 +10,27 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 )
 
 // ==========================
-// SPIDER ENGINE (OPTIMIZED)
+// SPIDER ENGINE v2
 // ==========================
 
 // Global Regex compilation for performance.
-// Improved pattern to catch unquoted attributes and handle spaces.
-var linkRegex = regexp.MustCompile(`(?i)href\s*=\s*["']?([^"'\s>]+)["']?`)
+var (
+	linkRegex     = regexp.MustCompile(`(?i)href\s*=\s*["']?([^"'\s>]+)["']?`)
+	formRegex     = regexp.MustCompile(`(?i)<form[^>]*action\s*=\s*["']?([^"'\s>]+)["']?[^>]*>`)
+	inputRegex    = regexp.MustCompile(`(?i)<input[^>]*name\s*=\s*["']?([^"'\s>]+)["']?[^>]*>`)
+	jsPathRegex   = regexp.MustCompile(`(?i)["'](\/[a-zA-Z0-9_\-\/\.]+)["']`)
+)
 
 type Spider struct {
 	BaseURL   *url.URL
 	MaxDepth  int
 	Visited   sync.Map
 	FoundURLs []string
-	Client    *http.Client // Persistent HTTP Client
+	Endpoints []models.Endpoint
+	Client    *http.Client // Persistent HTTP Client (Proxy aware)
 	mu        sync.Mutex
 }
 
@@ -37,32 +40,17 @@ func NewSpider(targetURL string) (*Spider, error) {
 		return nil, err
 	}
 
-	// Initialize Client once and reuse (Performance Boost)
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 20,
-		},
-		// Redirect Policy (Stay within domain scope)
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if len(via) >= 10 {
-				return http.ErrUseLastResponse
-			}
-			initialHost := via[0].URL.Hostname()
-			newHost := req.URL.Hostname()
-			if !strings.Contains(newHost, initialHost) {
-				return http.ErrUseLastResponse
-			}
-			return nil
-		},
-	}
+	// Use the global proxy-aware client
+	client := models.GetClient()
+	
+	// Temporarily update CheckRedirect for spider scope, but standard client doesn't expose it easily.
+	// That's fine, we will just handle scope manually during crawling.
 
 	return &Spider{
 		BaseURL:   u,
-		MaxDepth:  3, // Increased depth to 3 for better coverage
+		MaxDepth:  3, // Depth 3 for deep crawling
 		FoundURLs: []string{},
+		Endpoints: []models.Endpoint{},
 		Client:    client,
 	}, nil
 }
@@ -70,6 +58,20 @@ func NewSpider(targetURL string) (*Spider, error) {
 func (s *Spider) Crawl() []string {
 	// Add start URL to the queue to begin crawling
 	s.crawlRecursive(s.BaseURL.String(), 0)
+
+	// Save the endpoints to SharedData for other plugins (SQLi, XSS) to use
+	if len(s.Endpoints) > 0 {
+		key := "endpoints_" + s.BaseURL.Hostname()
+		existing, ok := models.SharedData.Load(key)
+		var eps []models.Endpoint
+		if ok {
+			eps = existing.([]models.Endpoint)
+		}
+		eps = append(eps, s.Endpoints...)
+		models.SharedData.Store(key, eps)
+		fmt.Printf("[*] Spider saved %d endpoints to SharedData for target %s\n", len(eps), s.BaseURL.Hostname())
+	}
+
 	return s.FoundURLs
 }
 
@@ -85,12 +87,21 @@ func (s *Spider) crawlRecursive(currentURL string, depth int) {
 
 	s.mu.Lock()
 	// Hard limit check to prevent memory bloat
-	if len(s.FoundURLs) > 100 {
+	if len(s.FoundURLs) > 150 {
 		s.mu.Unlock()
 		return
 	}
 	s.FoundURLs = append(s.FoundURLs, currentURL)
 	s.mu.Unlock()
+
+	// Parse parameters from current URL and add to endpoints
+	if u, err := url.Parse(currentURL); err == nil && len(u.Query()) > 0 {
+		var params []string
+		for k := range u.Query() {
+			params = append(params, k)
+		}
+		s.addEndpoint(currentURL, "GET", params)
+	}
 
 	// Fetch page content
 	body, err := s.fetchBody(currentURL)
@@ -98,27 +109,54 @@ func (s *Spider) crawlRecursive(currentURL string, depth int) {
 		return
 	}
 
-	// Extract and traverse links
-	links := s.extractLinks(body)
+	// Extract and traverse links, forms, and JS paths
+	links := s.extractLinks(body, currentURL)
 	for _, link := range links {
 		absURL := s.resolveURL(link)
-
-		// Scope check: Stay within the same domain (including subdomains)
 		if absURL != "" && strings.Contains(absURL, s.BaseURL.Hostname()) {
 			s.crawlRecursive(absURL, depth+1)
 		}
 	}
 }
 
+func (s *Spider) addEndpoint(epUrl, method string, params []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	
+	// Deduplicate endpoints based on URL path and Method
+	u, err := url.Parse(epUrl)
+	if err != nil {
+		return
+	}
+	basePath := u.Scheme + "://" + u.Host + u.Path
+	
+	for _, e := range s.Endpoints {
+		eu, _ := url.Parse(e.URL)
+		if eu != nil && (eu.Scheme + "://" + eu.Host + eu.Path) == basePath && e.Method == method {
+			return // Already exists
+		}
+	}
+	
+	s.Endpoints = append(s.Endpoints, models.Endpoint{
+		URL:    epUrl,
+		Method: method,
+		Params: params,
+	})
+}
+
 func (s *Spider) fetchBody(target string) (string, error) {
-	// Reuse existing client
-	resp, err := s.Client.Get(target)
+	req, err := http.NewRequest("GET", target, nil)
+	if err != nil {
+		return "", err
+	}
+	
+	resp, err := s.Client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 400 { // 400 is sometimes used by WAFs
+	if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 400 {
 		u, _ := url.Parse(target)
 		if u != nil {
 			key := "forbidden_" + s.BaseURL.Hostname()
@@ -127,8 +165,6 @@ func (s *Spider) fetchBody(target string) (string, error) {
 			if ok {
 				paths = existing.([]string)
 			}
-			
-			// Avoid duplicates
 			found := false
 			for _, p := range paths {
 				if p == u.Path {
@@ -143,31 +179,71 @@ func (s *Spider) fetchBody(target string) (string, error) {
 		}
 	}
 
-	// Memory Protection: Limit read size to Max 5MB
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 	return string(body), nil
 }
 
-func (s *Spider) extractLinks(body string) []string {
-	// Use pre-compiled global regex
-	matches := linkRegex.FindAllStringSubmatch(body, -1)
+func (s *Spider) extractLinks(body string, currentURL string) []string {
 	var links []string
+	
+	// 1. HREF Links
+	matches := linkRegex.FindAllStringSubmatch(body, -1)
 	for _, match := range matches {
 		if len(match) > 1 {
 			links = append(links, match[1])
 		}
 	}
+
+	// 2. JS Paths (API Endpoints)
+	jsMatches := jsPathRegex.FindAllStringSubmatch(body, -1)
+	for _, match := range jsMatches {
+		if len(match) > 1 {
+			links = append(links, match[1])
+			s.addEndpoint(s.resolveURL(match[1]), "GET", []string{})
+		}
+	}
+
+	// 3. Form Extraction (POST Endpoints)
+	// This splits body by <form> tags roughly
+	formBlocks := strings.Split(strings.ToLower(body), "<form")
+	for i := 1; i < len(formBlocks); i++ {
+		block := "<form" + formBlocks[i]
+		
+		// Find Action
+		action := ""
+		actionMatch := formRegex.FindStringSubmatch(block)
+		if len(actionMatch) > 1 {
+			action = actionMatch[1]
+		} else {
+			action = currentURL
+		}
+		
+		// Find Inputs
+		var inputs []string
+		inputMatches := inputRegex.FindAllStringSubmatch(block, -1)
+		for _, im := range inputMatches {
+			if len(im) > 1 {
+				inputs = append(inputs, im[1])
+			}
+		}
+
+		if len(inputs) > 0 {
+			resolvedAction := s.resolveURL(action)
+			if resolvedAction != "" {
+				s.addEndpoint(resolvedAction, "POST", inputs)
+			}
+		}
+	}
+
 	return links
 }
 
 func (s *Spider) resolveURL(href string) string {
 	href = strings.TrimSpace(href)
-	// Filter out non-http links (js, mailto, anchors)
 	if strings.HasPrefix(href, "javascript") || strings.HasPrefix(href, "mailto") || strings.HasPrefix(href, "#") || href == "" {
 		return ""
 	}
 
-	// Convert relative URLs to absolute URLs
 	u, err := url.Parse(href)
 	if err != nil {
 		return ""
