@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.10.0] - 2026-05-08
+### 📂 History Archival & Global Management
+
+- **History Archival & Detail Viewer (v2.0):** Completely decoupled scan history from the active dashboard. Past scan records are now loaded into a dedicated, high-end "Detail View" section, preserving the integrity and state of the main scanner while allowing for deep retrospective analysis.
+- **Enhanced History Arsenal:** Overhauled the history management table with an elegant, side-by-side action button layout. Introduced a "Global Purge" (Delete All) functionality with a critical confirmation modal for secure bulk data management.
+- **Archived Report Generation:** Extended the report engine to support full HTML and PDF export functionality directly from archived history records. Users can now generate professional security reports for any past scan without re-executing the engine.
+
 ## [v1.9.0] - 2026-05-02
 ### 🕷️ Native Analyzer & Smart Spider (Active Fuzzer)
 

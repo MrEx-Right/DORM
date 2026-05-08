@@ -647,10 +647,181 @@
         ::-webkit-scrollbar-thumb:hover {
             background: rgba(148, 163, 184, 0.5);
         }
+
+        /* ADVANCED LOADING SCREEN */
+        #dorm-loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #05080f;
+            background-image: 
+                radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.1), transparent 50%),
+                linear-gradient(0deg, #020408 0%, rgba(5,8,15,0.95) 100%);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 1s ease-in-out, visibility 1s, transform 1s ease-in-out;
+        }
+
+        .loader-content {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 40px;
+            position: relative;
+        }
+
+        /* CYBER RINGS */
+        .cyber-rings {
+            position: relative;
+            width: 140px;
+            height: 140px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 2px solid transparent;
+        }
+
+        .ring-1 {
+            width: 140px;
+            height: 140px;
+            border-top: 2px solid rgba(59, 130, 246, 0.8);
+            border-right: 2px solid rgba(59, 130, 246, 0.8);
+            animation: spin1 2s linear infinite;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
+        }
+
+        .ring-2 {
+            width: 110px;
+            height: 110px;
+            border-bottom: 2px solid #10B981; /* Success green */
+            border-left: 2px solid #10B981;
+            animation: spin2 1.5s linear infinite;
+        }
+
+        .ring-3 {
+            width: 80px;
+            height: 80px;
+            border: 2px dashed rgba(255, 255, 255, 0.5);
+            animation: spin1 4s linear infinite reverse;
+        }
+        
+        .core {
+            width: 40px;
+            height: 40px;
+            background: var(--accent);
+            border-radius: 50%;
+            box-shadow: 0 0 30px var(--accent-glow), 0 0 60px var(--accent-glow);
+            animation: pulseCore 1.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes spin1 {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        @keyframes spin2 {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(-360deg); }
+        }
+
+        @keyframes pulseCore {
+            0% { transform: scale(0.8); opacity: 0.8; }
+            100% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 40px var(--accent), 0 0 80px rgba(59, 130, 246, 0.6); }
+        }
+
+        .loader-brand {
+            color: #fff;
+            letter-spacing: 8px;
+            font-weight: 800;
+            margin: 0;
+            font-size: 36px;
+            text-transform: uppercase;
+            background: linear-gradient(90deg, #ffffff, #94A3B8, #3B82F6);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: shineText 3s linear infinite;
+        }
+
+        @keyframes shineText {
+            to { background-position: 200% center; }
+        }
+
+        .loader-brand span {
+            font-size: 15px;
+            color: #94A3B8;
+            letter-spacing: 6px;
+            display: block;
+            margin-top: 12px;
+            font-weight: 600;
+            -webkit-text-fill-color: #94A3B8;
+        }
+
+        .loader-text {
+            color: var(--accent);
+            font-size: 14px;
+            letter-spacing: 4px;
+            font-weight: 600;
+            margin: 0;
+            font-family: 'Consolas', monospace;
+            position: relative;
+            overflow: hidden;
+            white-space: nowrap;
+            border-right: 2px solid var(--accent);
+            animation: typing 2s steps(40, end), blink-caret .75s step-end infinite;
+        }
+
+        @keyframes typing {
+            from { width: 0 }
+            to { width: 100% }
+        }
+
+        @keyframes blink-caret {
+            from, to { border-color: transparent }
+            50% { border-color: var(--accent); }
+        }
+
+        .loader-hidden {
+            opacity: 0 !important;
+            visibility: hidden !important;
+            transform: scale(1.1);
+        }
     </style>
 </head>
 
 <body>
+
+    <!-- INLINE SCRIPT TO HIDE LOADER ON REFRESH -->
+    <script>
+        if (sessionStorage.getItem('dorm_loader_shown')) {
+            document.write('<style>#dorm-loader { display: none !important; }</style>');
+        }
+    </script>
+
+    <!-- ADVANCED LOADING SCREEN -->
+    <div id="dorm-loader">
+        <div class="loader-content">
+            <div class="cyber-rings">
+                <div class="ring ring-1"></div>
+                <div class="ring ring-2"></div>
+                <div class="ring ring-3"></div>
+                <div class="core"></div>
+            </div>
+            <h1 class="loader-brand">DORM<span>SECURITY ENGINE</span></h1>
+            <p class="loader-text">INITIALIZING CORE SYSTEMS...</p>
+        </div>
+    </div>
 
     <div class="sidebar">
         <div class="brand">
@@ -671,7 +842,7 @@
         </div>
 
         <div style="margin-top:auto; font-size:12px; color:rgba(255,255,255,0.3); text-align:center; font-weight: 600;">
-            v1.9.0
+            v1.10.0
         </div>
     </div>
 
@@ -795,10 +966,15 @@
                 <div class="control-panel"
                     style="flex-direction: row; justify-content: space-between; align-items:center; padding: 20px 30px;">
                     <h2 style="margin:0; color:#fff; font-size: 20px;">Execution History</h2>
-                    <button onclick="loadHistory()"
-                        style="background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color:#fff; box-shadow:none;">
-                        <i class="fas fa-sync-alt"></i> REFRESH
-                    </button>
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="deleteAllHistory()" class="btn-danger" style="box-shadow: none; padding: 10px 18px;">
+                            <i class="fas fa-trash-sweep"></i> DELETE ALL
+                        </button>
+                        <button onclick="loadHistory()"
+                            style="background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color:#fff; box-shadow:none; padding: 10px 18px;">
+                            <i class="fas fa-sync-alt"></i> REFRESH
+                        </button>
+                    </div>
                 </div>
 
                 <table>
@@ -809,10 +985,53 @@
                             <th width="200">DATE</th>
                             <th width="100">TIME</th>
                             <th width="150">VULNS</th>
-                            <th width="80" style="text-align:right">DELETE</th>
+                            <th width="120" style="text-align:right">ACTIONS</th>
                         </tr>
                     </thead>
                     <tbody id="historyBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="view-history-detail" class="view-section">
+            <div class="container">
+                <div class="control-panel" style="margin-bottom: 25px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <button onclick="switchView('history')" style="background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color: #94A3B8; padding: 8px 16px; margin-bottom: 15px; box-shadow: none;">
+                                <i class="fas fa-arrow-left"></i> BACK TO HISTORY
+                            </button>
+                            <h2 style="margin: 0; font-size: 24px; font-weight: 800; color: #fff;" id="detailTarget">Target</h2>
+                            <p style="margin: 5px 0 0 0; color: var(--text-dim); font-size: 14px;" id="detailDate">Date</p>
+                        </div>
+                        <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 10px;">
+                            <div class="btn-group">
+                                <button onclick="downloadDetailReport()" style="background: linear-gradient(135deg, #1E3A8A, #3B82F6); padding: 8px 16px; font-size: 12px;">
+                                    <i class="fas fa-file-code"></i> HTML EXPORT
+                                </button>
+                                <button onclick="downloadDetailPDF()" style="background: linear-gradient(135deg, #991B1B, #DC2626); padding: 8px 16px; font-size: 12px;">
+                                    <i class="fas fa-file-pdf"></i> PDF EXPORT
+                                </button>
+                            </div>
+                            <div style="font-family: 'Consolas', monospace; color: var(--accent); font-size: 18px; font-weight: bold; text-shadow: 0 0 10px var(--accent-glow);" id="detailTimer">00:00</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-container"><canvas id="detailVulnChart"></canvas></div>
+
+                <table style="margin-top: 25px;">
+                    <thead>
+                        <tr>
+                            <th width="120">SEVERITY</th>
+                            <th width="70">CVSS</th>
+                            <th>VULNERABILITY NAME</th>
+                            <th width="150">ENGINE</th>
+                            <th width="200">TARGET</th>
+                            <th width="40"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="detailTableBody"></tbody>
                 </table>
             </div>
         </div>

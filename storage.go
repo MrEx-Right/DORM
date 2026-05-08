@@ -193,6 +193,13 @@ func (s *StorageManager) DeleteScan(id string) error {
 	return nil
 }
 
+func (s *StorageManager) DeleteAllScans() error {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	return s.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&DBScanRecord{}).Error
+}
+
 func NewScanRecord(target string) ScanRecord {
 	return ScanRecord{
 		ID:              uuid.New().String(),

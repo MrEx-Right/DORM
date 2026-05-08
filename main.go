@@ -34,12 +34,13 @@ func main() {
 	// 2. Register History API Routes
 	http.HandleFunc("/api/history", handleHistory)
 	http.HandleFunc("/api/history/delete", handleDelete)
+	http.HandleFunc("/api/history/delete_all", handleDeleteAll)
 
 	port := ":8080"
 	url := "http://localhost" + port
 
 	fmt.Println("===========================================")
-	fmt.Println("          DORM SCANNER v1.9.0 		 	    ")
+	fmt.Println("          DORM SCANNER v1.10.0 		 	    ")
 	fmt.Println("===========================================")
 	fmt.Printf("[*] Server Active: %s\n", url)
 
