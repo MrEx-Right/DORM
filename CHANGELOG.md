@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.10.1] - 2026-05-10
+### 🪟 Windows Build Tooling & Installation Overhaul
+
+- **Windows Build Script (`build_windows.bat`):** Introduced a dedicated Windows build pipeline. The script validates the Go toolchain (enforcing a minimum of v1.21), fetches all module dependencies via `go mod download`, and compiles a native `DORM.exe` binary in a single execution. Eliminates the need for manual `go get` invocations or `go mod init` on fresh clones.
+- **Smart Rebuild Logic:** The build script performs a binary existence check before initiating compilation. If `DORM.exe` is already present, the build phase is skipped entirely, reducing subsequent launch overhead to zero.
+- **Process Lifecycle Management:** Prior to each launch, the script issues a `taskkill` against any lingering `DORM.exe` instance, guaranteeing port `8080` is free and preventing socket bind conflicts on repeated invocations.
+- **Installation Documentation (README):** Restructured the Installation section into separate Linux/macOS and Windows tracks. The Linux path is reduced to three commands (`git clone` → `go mod download` → `go run .`); the Windows path documents the `build_windows.bat` → `.\DORM.exe` workflow without redundant dependency management steps.
+- **`.gitignore` Correction:** Replaced the stale `dorm_engine.exe` entry with the canonical `DORM.exe` artifact name to prevent accidental binary commits.
+
+
 ## [v1.10.0] - 2026-05-08
 ### 📂 History Archival & Global Management
 

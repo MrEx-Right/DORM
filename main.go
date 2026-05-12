@@ -40,7 +40,7 @@ func main() {
 	url := "http://localhost" + port
 
 	fmt.Println("===========================================")
-	fmt.Println("          DORM SCANNER v1.10.0 		 	    ")
+	fmt.Println("          DORM SCANNER v1.10.1 		 	    ")
 	fmt.Println("===========================================")
 	fmt.Printf("[*] Server Active: %s\n", url)
 

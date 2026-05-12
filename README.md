@@ -54,19 +54,43 @@ DORM comes with over 80 specialized plugins including:
 
 DORM requires **Go 1.21+** and **Google Chrome** (for DOM Scanner).
 
+---
+
+### 🐧 Linux / macOS
+
 ```bash
 # 1. Clone the repository
 git clone https://github.com/MrEx-Right/DORM.git
 cd DORM
 
-# 2. Initialize the module
-go mod init DORM
+# 2. Download dependencies (single command — no manual go get needed)
+go mod download
 
-# 3. Install dependencies
-go get [github.com/chromedp/chromedp](https://github.com/chromedp/chromedp)
-go get [github.com/jlaffaye/ftp](https://github.com/jlaffaye/ftp)
-go get golang.org/x/crypto/ssh
-go get github.com/google/uuid
-
-# 4. Run DORM
+# 3. Run DORM
 go run .
+```
+
+---
+
+### 🪟 Windows
+
+**Step 1 — Build** (one-time only):
+
+```bash
+git clone https://github.com/MrEx-Right/DORM.git
+cd DORM
+
+# Double-click build_windows.bat  — or run it from a terminal:
+build_windows.bat
+```
+
+The script will:
+- ✅ Verify your Go installation (1.21+ required)
+- ✅ Download all dependencies via `go mod download`
+- ✅ Compile `DORM.exe` in the project folder
+
+**Step 2 — Run:**
+
+Double-click `DORM.exe`. A console window opens showing DORM's output. **Close that window to stop DORM.**
+
+> To rebuild (e.g. after pulling updates), delete `DORM.exe` and run `build_windows.bat` again.
