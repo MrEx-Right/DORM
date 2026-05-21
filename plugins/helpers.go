@@ -242,7 +242,7 @@ func GetPluginInventory() map[string][]string {
 			"Arbitrary File Upload (RCE)", "AI/LLM Prompt Injection Scanner",
 		},
 		"Vulnerability Checks": {
-			"API Key in JS Files", "Weak TLS Cipher Suites Scanner", "WordPress Enumeration & CVE Scanner", "Offline CVE Radar (Passive)",
+			"API Key in JS Files", "Weak TLS Cipher Suites Scanner", "WordPress Enumeration & CVE Scanner",
 		},
 		"Fuzzing Engine": {
 			"Fuzzer",

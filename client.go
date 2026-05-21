@@ -78,7 +78,7 @@ func (urt *UARoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 
 	// 2. Auth Injection (Cookie/Token)
 	if GlobalAuthHeader != "" {
-		// "Cookie: SESSID=..." şeklinde gelen veriyi böler
+		// Splits the incoming data formatted as "Cookie: SESSID=..."
 		parts := strings.SplitN(GlobalAuthHeader, ":", 2)
 		if len(parts) == 2 {
 			key := strings.TrimSpace(parts[0])

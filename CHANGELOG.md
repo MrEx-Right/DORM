@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.11.0] - 2026-05-21
+### 🛡️ Local CVE Database Segregation & UI Refinement
+
+- **Dedicated CVE Database View (Sidebar Integration):** Completely decoupled the "Offline CVE Radar" from the general plugin pool. Removed it from the `/plugins` dynamic inventory and introduced a premium, high-fidelity **"CVE Veritabanı"** (CVE Database) section directly in the persistent sidebar.
+- **Optimized Local DB Search & API Integration:** Created new `/api/cvedb` and `/api/cvedb/search` endpoints on the Go backend to stream memory-cached CISA KEV entries. Built a zero-latency, client-side search engine with dynamic CVSS-based color-coded badges (Critical/High/Medium/Low) and search metrics.
+- **Engine Query Routing (`cveRadar`):** Updated the active scan orchestration engine to read the `cveRadar` parameter state on target initialization, dynamically mounting or bypassing the passive CVE signature parser.
+
 ## [v1.10.1] - 2026-05-10
 ### 🪟 Windows Build Tooling & Installation Overhaul
 

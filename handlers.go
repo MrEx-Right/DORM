@@ -56,6 +56,34 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// List CVE Database
+func handleCVEDatabase(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+	
+	// Limit if the database is too large (first 500 records)
+	limit := 500
+	if len(CVEMemoryDB) < limit {
+		limit = len(CVEMemoryDB)
+	}
+	json.NewEncoder(w).Encode(CVEMemoryDB[:limit])
+}
+
+// CVE Arama
+func handleCVESearch(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		json.NewEncoder(w).Encode([]models.LocalCVE{})
+		return
+	}
+
+	results := SearchLocalCVEs(query, "Any")
+	json.NewEncoder(w).Encode(results)
+}
+
 func handleScan(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -103,6 +131,8 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	if targetsParam == "" {
 		return
 	}
+
+	cveRadarEnabled := r.URL.Query().Get("cveRadar") == "true"
 
 	// ==========================================
 	// 🛠️ MULTI-TARGET PARSING & SANITIZATION
@@ -212,7 +242,10 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	engine.AddPlugin(&plugins.BruteForcePlugin{})  //Brute Force
 	engine.AddPlugin(&SpiderPlugin{})              //Spider
 	engine.AddPlugin(&plugins.EDBPlugin{})         //Exploit DB
-	engine.AddPlugin(&plugins.PassiveCVEPlugin{})  //Passive CVE
+
+	if cveRadarEnabled {
+		engine.AddPlugin(&plugins.PassiveCVEPlugin{}) // Passive CVE (Only if selected)
+	}
 
 	engine.AddPlugin(&plugins.BannerGrabPlugin{})
 	engine.AddPlugin(&plugins.HTTPHeaderPlugin{})

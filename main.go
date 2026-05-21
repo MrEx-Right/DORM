@@ -36,11 +36,15 @@ func main() {
 	http.HandleFunc("/api/history/delete", handleDelete)
 	http.HandleFunc("/api/history/delete_all", handleDeleteAll)
 
+	// CVE DB API Routes
+	http.HandleFunc("/api/cvedb", handleCVEDatabase)
+	http.HandleFunc("/api/cvedb/search", handleCVESearch)
+
 	port := ":8080"
 	url := "http://localhost" + port
 
 	fmt.Println("===========================================")
-	fmt.Println("          DORM SCANNER v1.10.1 		 	    ")
+	fmt.Println("          DORM SCANNER v1.11.0 		 	    ")
 	fmt.Println("===========================================")
 	fmt.Printf("[*] Server Active: %s\n", url)
 

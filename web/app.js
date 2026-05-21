@@ -91,7 +91,7 @@ window.onload = async () => {
                 <div style="grid-column: 1 / -1; margin-top: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center;">
                     <h4 style="margin:0; color: var(--accent); font-size: 13px; text-transform: uppercase; letter-spacing: 1px;">${escapeHtml(category)}</h4>
                     <label style="font-size: 11px; color: var(--text-dim); cursor: pointer; display: flex; align-items: center; gap: 4px;">
-                        <input type="checkbox" checked onchange="toggleCategory(this, '${catClass}')" style="margin:0;"> Grup Seç / Bırak
+                        <input type="checkbox" checked onchange="toggleCategory(this, '${catClass}')" style="margin:0;"> Select/deselect Group
                     </label>
                 </div>
             `;
@@ -148,6 +148,7 @@ function switchView(viewName) {
     document.getElementById('view-' + viewName).classList.add('active');
     document.querySelector('.main-content').scrollTop = 0; // Reset scroll position
     if (viewName === 'history') loadHistory();
+    if (viewName === 'cvedb') loadCVEDatabase();
 }
 
 // --- HELPER FUNCTIONS ---
@@ -366,8 +367,10 @@ function startScan() {
     const proxyEnabled = document.getElementById('proxyToggle').checked;
     const proxyUrl = document.getElementById('proxyUrlInput').value || "http://127.0.0.1:8081";
 
+    const cveRadar = document.getElementById('cveRadarToggle').checked;
+
     // Assign to global variable (Notice: query param is now "targets")
-    scanEventSource = new EventSource(`/scan?targets=${encodeURIComponent(targetString)}&plugins=${encodeURIComponent(selected.join(","))}&delay=${speed}&rotateUA=${rotateUA}&auth=${encodeURIComponent(authHeader)}&proxyEnabled=${proxyEnabled}&proxyUrl=${encodeURIComponent(proxyUrl)}`);
+    scanEventSource = new EventSource(`/scan?targets=${encodeURIComponent(targetString)}&plugins=${encodeURIComponent(selected.join(","))}&delay=${speed}&rotateUA=${rotateUA}&auth=${encodeURIComponent(authHeader)}&proxyEnabled=${proxyEnabled}&proxyUrl=${encodeURIComponent(proxyUrl)}&cveRadar=${cveRadar}`);
 
     scanEventSource.onmessage = (e) => {
         const data = JSON.parse(e.data);
@@ -584,5 +587,71 @@ function checkAllPlugins(state) {
     document.querySelectorAll('.plugin-check').forEach(cb => {
         cb.checked = state;
         cb.closest('.plugin-item').classList.toggle('active-plugin', state);
+    });
+}
+
+// --- CVE DB LOGIC ---
+async function loadCVEDatabase() {
+    const tbody = document.getElementById('cveTableBody');
+    const stats = document.getElementById('cveStats');
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:40px; color:var(--accent);">Loading CVE records...</td></tr>';
+    
+    try {
+        const resp = await fetch('/api/cvedb');
+        const cves = await resp.json();
+        
+        stats.innerText = `Total Records: ${cves.length}+`;
+        
+        tbody.innerHTML = '';
+        if (cves.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:40px; color:var(--text-dim);">No records found in local database.</td></tr>';
+            return;
+        }
+        
+        renderCVELines(cves);
+    } catch(e) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:red; padding:40px;">Error: ${e}</td></tr>`;
+    }
+}
+
+async function searchCVEs() {
+    const query = document.getElementById('cveSearchInput').value.trim();
+    if (!query) {
+        loadCVEDatabase();
+        return;
+    }
+    
+    const tbody = document.getElementById('cveTableBody');
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:40px; color:var(--accent);">Searching...</td></tr>';
+    
+    try {
+        const resp = await fetch(`/api/cvedb/search?q=${encodeURIComponent(query)}`);
+        const cves = await resp.json();
+        
+        tbody.innerHTML = '';
+        if (!cves || cves.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:40px; color:var(--text-dim);">No matching vulnerability records found.</td></tr>';
+            return;
+        }
+        
+        renderCVELines(cves);
+    } catch(e) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:red; padding:40px;">Error: ${e}</td></tr>`;
+    }
+}
+
+function renderCVELines(cves) {
+    const tbody = document.getElementById('cveTableBody');
+    cves.forEach(c => {
+        const badgeClass = c.cvss >= 9.0 ? 'sev-CRITICAL' : (c.cvss >= 7.0 ? 'sev-HIGH' : 'sev-MEDIUM');
+        const html = `
+            <tr class="vuln-row">
+                <td style="font-weight:bold; color:var(--accent);">${escapeHtml(c.id)}</td>
+                <td style="color:#fff; font-weight:600;">${escapeHtml(c.product)}</td>
+                <td style="color:var(--text-main); font-size:13px;">${escapeHtml(c.description)}</td>
+                <td><span class="badge ${badgeClass}">${c.cvss.toFixed(1)}</span></td>
+            </tr>
+        `;
+        tbody.insertAdjacentHTML('beforeend', html);
     });
 }

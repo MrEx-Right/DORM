@@ -1,16 +1,46 @@
 {
     "title": "CISA Catalog of Known Exploited Vulnerabilities",
-    "catalogVersion": "2026.05.08",
-    "dateReleased": "2026-05-08T17:31:07.6877Z",
-    "count": 1590,
+    "catalogVersion": "2026.05.15",
+    "dateReleased": "2026-05-15T16:55:06.6086Z",
+    "count": 1592,
     "vulnerabilities": [
+        {
+            "cveID": "CVE-2026-42897",
+            "vendorProject": "Microsoft",
+            "product": "Microsoft",
+            "vulnerabilityName": "Microsoft Exchange Server Cross-Site Scripting Vulnerability",
+            "dateAdded": "2026-05-15",
+            "shortDescription": "Microsoft Exchange Server contains a cross-site scripting vulnerability during web page generation in Outlook Web Access and when certain interaction conditions are met, arbitrary JavaScript can be executed in the browser context.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-05-29",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/msrc.microsoft.com\/update-guide\/en-US\/vulnerability\/CVE-2026-42897 ; https:\/\/learn.microsoft.com\/en-us\/exchange\/plan-and-deploy\/post-installation-tasks\/security-best-practices\/exchange-emergency-mitigation-service ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2026-42897",
+            "cwes": [
+                "CWE-79"
+            ]
+        },
+        {
+            "cveID": "CVE-2026-20182",
+            "vendorProject": "Cisco",
+            "product": "Catalyst SD-WAN",
+            "vulnerabilityName": "Cisco Catalyst SD-WAN Controller Authentication Bypass Vulnerability",
+            "dateAdded": "2026-05-14",
+            "shortDescription": "Cisco Catalyst SD-WAN Controller & Manager contain an authentication bypass vulnerability that allows an unauthenticated, remote attacker to bypass authentication and obtain administrative privileges on an affected system.",
+            "requiredAction": "Please adhere to CISA\u2019s guidelines to assess exposure and mitigate risks associated with Cisco SD-WAN devices as outlined in CISA\u2019s Emergency Directive 26-03 (URL listed below in Notes) and CISA\u2019s Hunt & Hardening Guidance for Cisco SD-WAN Devices (URL listed below in Notes). Adhere to the applicable BOD 22-01 guidance for cloud services or discontinue use of the product if mitigations are not available.",
+            "dueDate": "2026-05-17",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "CISA Mitigation Instructions: https:\/\/www.cisa.gov\/news-events\/directives\/ed-26-03-mitigate-vulnerabilities-cisco-sd-wan-systems ; https:\/\/www.cisa.gov\/news-events\/directives\/supplemental-direction-ed-26-03-hunt-and-hardening-guidance-cisco-sd-wan-systems ; https:\/\/sec.cloudapps.cisco.com\/security\/center\/content\/CiscoSecurityAdvisory\/cisco-sa-sdwan-rpa2-v69WY2SW ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2026-20182",
+            "cwes": [
+                "CWE-287"
+            ]
+        },
         {
             "cveID": "CVE-2026-42208",
             "vendorProject": "BerriAI",
             "product": "LiteLLM",
             "vulnerabilityName": "BerriAI LiteLLM SQL Injection Vulnerability",
             "dateAdded": "2026-05-08",
-            "shortDescription": "BerriAI LiteLLM contains a SQL injection vulnerability that allows an attacker to read data from the proxy's database and potentially modify it, leading to unauthorised access to the proxy and the credentials it manages.",
+            "shortDescription": "BerriAI LiteLLM contains a SQL injection vulnerability that allows an attacker to read data from the proxy's database and potentially modify it, leading to unauthorized access to the proxy and the credentials it manages.",
             "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
             "dueDate": "2026-05-11",
             "knownRansomwareCampaignUse": "Unknown",
@@ -41,7 +71,7 @@
             "vulnerabilityName": "Palo Alto Networks PAN-OS Out-of-bounds Write Vulnerability",
             "dateAdded": "2026-05-06",
             "shortDescription": "Palo Alto Networks PAN-OS contains an out-of-bounds write vulnerability in the User-ID Authentication Portal (aka Captive Portal) service that can allow an unauthenticated attacker to execute arbitrary code with root privileges on the PA-Series and VM-Series firewalls by sending specially crafted packets.",
-            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.    Until the vendor releases an official fix, the following workaround should be implemented:  - Restrict User-ID Authentication Portal access to only trusted zones.  - Disable User-ID Authentication Portal if not required.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable. Until the vendor releases an official fix, the following workaround should be implemented:  - Restrict User-ID Authentication Portal access to only trusted zones.  - Disable User-ID Authentication Portal if not required. 5\/13\/2026: Palo Alto has released a variety of patches. If these are relevant to your environment, please apply the designated patch.",
             "dueDate": "2026-05-09",
             "knownRansomwareCampaignUse": "Unknown",
             "notes": "https:\/\/security.paloaltonetworks.com\/CVE-2026-0300 ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2026-0300",
@@ -88,7 +118,7 @@
             "shortDescription": "ConnectWise ScreenConnect contains a path traversal vulnerability which could allow an attacker to execute remote code or directly impact confidential data and critical systems.",
             "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
             "dueDate": "2026-05-12",
-            "knownRansomwareCampaignUse": "Unknown",
+            "knownRansomwareCampaignUse": "Known",
             "notes": "https:\/\/www.connectwise.com\/company\/trust\/security-bulletins\/connectwise-screenconnect-23.9.8 ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2024-1708",
             "cwes": [
                 "CWE-22"
@@ -149,7 +179,7 @@
             "shortDescription": "SimpleHelp contains a path traversal vulnerability that allows admin users to upload arbitrary files anywhere on the file system by uploading a crafted zip file (i.e. zip slip). This can be exploited to execute arbitrary code on the host in the context of the SimpleHelp server user.",
             "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
             "dueDate": "2026-05-08",
-            "knownRansomwareCampaignUse": "Unknown",
+            "knownRansomwareCampaignUse": "Known",
             "notes": "https:\/\/simple-help.com\/kb---security-vulnerabilities-01-2025#security-vulnerabilities-in-simplehelp-5-5-7-and-earlier ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2024-57728",
             "cwes": [
                 "CWE-22"
@@ -164,7 +194,7 @@
             "shortDescription": "SimpleHelp contains a missing authorization vulnerability that could allow low-privileged technicians to create API keys with excessive permissions. These API keys can be used to escalate privileges to the server admin role.",
             "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
             "dueDate": "2026-05-08",
-            "knownRansomwareCampaignUse": "Unknown",
+            "knownRansomwareCampaignUse": "Known",
             "notes": "https:\/\/simple-help.com\/kb---security-vulnerabilities-01-2025#security-vulnerabilities-in-simplehelp-5-5-7-and-earlier ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2024-57726",
             "cwes": [
                 "CWE-862"

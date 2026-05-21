@@ -20,7 +20,7 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	client := models.GetClient()
 	baseURL := getURL(target, "")
 
-	// Matematik işlemi: 1337 * 1337 = 1787569
+	// Mathematical operation: 1337 * 1337 = 1787569
 	const expectedResult = "1787569"
 
 	endpoints := []string{"/", "/index.php", "/home", "/search", "/error"}
