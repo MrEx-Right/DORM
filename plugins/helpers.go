@@ -211,6 +211,7 @@ func GetPluginInventory() map[string][]string {
 		"Recon & Info Gathering": {
 			"Open Port Detection", "Service Banner Info", "Basic File Scan", "PHP Info Check", "WAF Detection",
 			"CMS Detection", "Security.txt File", "Email Disclosure", "System Metrics Exposure", "Open Directory Listing",
+			"Unnecessary Port Warning",
 		},
 		"Injection Vulnerabilities": {
 			"SQL Injection Scanner", "XSS (Cross-Site Scripting)", "LFI (Local File Inclusion)", "Blind Command Injection (Time)",

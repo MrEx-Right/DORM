@@ -60,7 +60,7 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 func handleCVEDatabase(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
-	
+
 	// Limit if the database is too large (first 500 records)
 	limit := 500
 	if len(CVEMemoryDB) < limit {
@@ -119,7 +119,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		GlobalRotateUA = false
 	}
 	GlobalAuthHeader = r.URL.Query().Get("auth")
-	
+
 	// Proxy Setup
 	GlobalProxyEnabled = r.URL.Query().Get("proxyEnabled") == "true"
 	if proxyUrl := r.URL.Query().Get("proxyUrl"); proxyUrl != "" {
@@ -236,7 +236,8 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	engine.Ctx = ctx        // PASS CONTEXT TO ENGINE
 
 	// PLUGINS REGISTRATION
-	engine.AddPlugin(&plugins.DOMScannerPlugin{})  //DOM Scanner
+	engine.AddPlugin(&plugins.DOMScannerPlugin{}) //DOM Scanner
+	engine.AddPlugin(&plugins.UnnecessaryPortsPlugin{})
 	engine.AddPlugin(&plugins.FingerprintPlugin{}) //Fingerprinting
 	engine.AddPlugin(&plugins.TLSCheckPlugin{})    //TLS Check
 	engine.AddPlugin(&plugins.BruteForcePlugin{})  //Brute Force
@@ -340,7 +341,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	engine.AddPlugin(&plugins.FileUploadPlugin{})
 	engine.AddPlugin(&plugins.WPEnumPlugin{})
 	engine.AddPlugin(&plugins.TLSCipherPlugin{})
-	
+
 	engine.AddPlugin(&plugins.Bypass403Plugin{})
 	engine.AddPlugin(&plugins.PromptInjectionPlugin{})
 

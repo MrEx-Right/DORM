@@ -878,7 +878,7 @@
         </div>
 
         <div style="margin-top:auto; font-size:12px; color:rgba(255,255,255,0.3); text-align:center; font-weight: 600;">
-            v1.11.0
+            v1.12.0
         </div>
     </div>
 
@@ -1083,13 +1083,17 @@
         <div id="view-cvedb" class="view-section">
             <div class="container">
                 <div class="control-panel">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
                         <div style="display: flex; align-items: center; gap: 20px;">
                             <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #fff;"><i
-                                    class="fas fa-database" style="color: #F59E0B; margin-right: 10px;"></i>Local CVE Archive</h2>
-                            <label class="toggle-label" style="background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.15);">
+                                    class="fas fa-database" style="color: #F59E0B; margin-right: 10px;"></i>Local CVE
+                                Archive</h2>
+                            <label class="toggle-label"
+                                style="background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.15);">
                                 <input type="checkbox" id="cveRadarToggle" class="custom-checkbox" checked>
-                                <span style="color:#E2E8F0; margin-left: 8px;"><i class="fas fa-satellite-dish" style="color: #F59E0B; margin-right: 6px;"></i> Enable in Scans</span>
+                                <span style="color:#E2E8F0; margin-left: 8px;"><i class="fas fa-satellite-dish"
+                                        style="color: #F59E0B; margin-right: 6px;"></i> Enable in Scans</span>
                             </label>
                         </div>
                         <div id="cveStats" style="color: var(--text-dim); font-size: 14px; font-weight: 600;">
@@ -1100,11 +1104,12 @@
                         Search across the CISA Known Exploited Vulnerabilities (KEV) catalog.
                     </p>
                     <div class="input-group" style="margin-top: 15px;">
-                        <input type="text" id="cveSearchInput" 
+                        <input type="text" id="cveSearchInput"
                             style="flex-grow: 1; background-color: rgba(0, 0, 0, 0.2); color: #fff; border: 1px solid var(--panel-border); border-radius: 8px; padding: 16px; font-family: 'Inter', sans-serif; font-size: 15px; outline: none;"
                             placeholder="Type product name, CVE ID or keyword..."
                             onkeyup="if(event.key === 'Enter') searchCVEs()">
-                        <button onclick="searchCVEs()" style="background: var(--accent);"><i class="fas fa-search"></i> SEARCH</button>
+                        <button onclick="searchCVEs()" style="background: var(--accent);"><i class="fas fa-search"></i>
+                            SEARCH</button>
                     </div>
                 </div>
 
@@ -1118,7 +1123,10 @@
                         </tr>
                     </thead>
                     <tbody id="cveTableBody">
-                        <tr><td colspan="4" style="text-align:center; padding:40px; color:var(--text-dim);">Use the box above to perform a search.</td></tr>
+                        <tr>
+                            <td colspan="4" style="text-align:center; padding:40px; color:var(--text-dim);">Use the box
+                                above to perform a search.</td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
