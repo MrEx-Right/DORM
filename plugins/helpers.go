@@ -216,8 +216,7 @@ func GetPluginInventory() map[string][]string {
 		"Injection Vulnerabilities": {
 			"SQL Injection Scanner", "XSS (Cross-Site Scripting)", "LFI (Local File Inclusion)", "Blind Command Injection (Time)",
 			"XXE Injection", "CRLF Injection", "Java Deserialization Risk", "Node.js Prototype Pollution", "Directory Traversal",
-			"Log4Shell (CVE-2021-44228)", "Spring Cloud Gateway RCE", "F5 BIG-IP TMUI RCE", "Shellshock models.Vulnerability",
-			"Drupalgeddon2 RCE", "Apache Struts RCE", "Citrix ADC Traversal", "NoSQL Injection (MongoDB)", "Atlassian Confluence RCE",
+			"Apache Struts RCE", "NoSQL Injection (MongoDB)",
 		},
 		"Misconfiguration & Exposure": {
 			"Security Headers Analysis", "SSL Certificate Check", "CORS Misconfiguration", "Spring Boot Actuator",
@@ -235,7 +234,7 @@ func GetPluginInventory() map[string][]string {
 		"Authentication & Sessions": {
 			"WordPress User Disclosure", "Open Redirect", "Cookie Security", "Tomcat Manager Panel", "Admin Panel Bypass (IP Spoof)",
 			"IDOR / Unauthorized Access Test", "Jenkins Script Console", "Subdomain Takeover Risk", "ASP.NET ViewState Encryption",
-			"GitLab User Enum", "JWT None Algorithm", "TeamCity Auth Bypass", "Shadow API Discovery", "Admin Panel Finder",
+			"GitLab User Enum", "JWT None Algorithm", "Shadow API Discovery", "Admin Panel Finder",
 			"403/401 Authorization Bypass",
 		},
 		"Advanced Logic": {
@@ -244,9 +243,6 @@ func GetPluginInventory() map[string][]string {
 		},
 		"Vulnerability Checks": {
 			"API Key in JS Files", "Weak TLS Cipher Suites Scanner", "WordPress Enumeration & CVE Scanner",
-		},
-		"Fuzzing Engine": {
-			"Fuzzer",
 		},
 	}
 }

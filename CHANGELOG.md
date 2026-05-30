@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.13.1] - 2026-05-30
+### 🧹 CVE Plugin Cleanup & Proxy Optimization
+
+- **Vulnerability Scanning Streamlining:** Decoupled and completely removed 8 signature-based CVE exploit plugins from the active scanning pool. This streamlines the scanner engine to focus primarily on high-fidelity, input-driven generic vulnerabilities.
+  - **Removed Modules:** Log4Shell (CVE-2021-44228), Spring Cloud Gateway RCE (CVE-2022-22947), F5 BIG-IP TMUI RCE (CVE-2020-5902), Shellshock (CVE-2014-6271), Drupalgeddon2 RCE (CVE-2018-7600), Citrix ADC Traversal (CVE-2019-19781), Atlassian Confluence RCE (CVE-2022-26134), and TeamCity Auth Bypass (CVE-2023-42793).
+  - **Retained General Modules:** Retained generic product scanners and detection modules, including WordPress Enumeration & CVE Radar, Apache Struts RCE, and the Offline CVE Radar database parsing engine.
+- **Native Analyzer Proxy Landing Page:** Resolved a protocol scheme resolution error when accessing the local DAST proxy (port `8081`) directly via a web browser. Implemented a beautiful, glassmorphic dark-themed English instructions landing page for direct browser access, preventing raw `unsupported protocol scheme` failures while keeping forward proxy operations fully functional.
+
 ## [v1.13.0] - 2026-05-28
 ### 🚀 Plugin Enhancement Pack 1 · Update PEP 1.1
 
