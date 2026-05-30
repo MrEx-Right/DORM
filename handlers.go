@@ -69,7 +69,7 @@ func handleCVEDatabase(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(CVEMemoryDB[:limit])
 }
 
-// CVE Arama
+	// CVE Search
 func handleCVESearch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")

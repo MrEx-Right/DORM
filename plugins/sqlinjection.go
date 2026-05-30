@@ -28,7 +28,7 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	client := models.GetClient()
 	baseURL := getURL(target, "")
 
-	// ── Hedef endpoint'ler ──────────────────────────────────────────────
+	// ── Target endpoints ──────────────────────────────────────────────
 	endpoints := []string{
 		"/",
 		"/index.php", "/login.php", "/product.php", "/cart.php",
@@ -43,7 +43,7 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 		"order", "sort", "category", "ref",
 	}
 
-	// ── DB hata mesajları ────────────────────────────────────────────────
+	// ── DB error messages ────────────────────────────────────────────────
 	dbErrors := []string{
 		"SQL syntax", "mysql_fetch", "mysql_num_rows", "mysql_query",
 		"ORA-01756", "ORA-00907", "Oracle Error", "Oracle JDBC",
@@ -55,7 +55,7 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 		"Warning: mysql_", "You have an error in your SQL syntax",
 	}
 
-	// ── DB fingerprint imzaları ──────────────────────────────────────────
+	// ── DB fingerprint signatures ──────────────────────────────────────────
 	dbFingerprints := map[string][]string{
 		"MySQL":      {"mysql", "MySQL", "MariaDB", "mysql_fetch", "mysql_num_rows"},
 		"PostgreSQL": {"PostgreSQL", "PSQLException", "pg_query", "pgsql"},
@@ -76,7 +76,7 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 1 — Error-Based (smart guessing + WAF bypass payloads)
+	// PHASE 1 — Error-Based (smart guessing + WAF bypass payloads)
 	// ══════════════════════════════════════════════════════════════════════
 	errorPayloads := []string{
 		// Klasik
@@ -114,10 +114,10 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 							Severity: "CRITICAL",
 							CVSS:     9.8,
 							Description: fmt.Sprintf(
-								"Veritabanı hatası tetiklendi (Error-Based SQLi).\nURL: %s\nPayload: %s\nHata Eşleşmesi: %s\nTespit Edilen DB: %s",
+								"Database error triggered (Error-Based SQLi).\nURL: %s\nPayload: %s\nError Match: %s\nDetected DB: %s",
 								targetURL, payload, errMsg, db,
 							),
-							Solution:  "Hazırlanmış ifadeler (Prepared Statements / Parameterized Queries) kullanın.",
+							Solution:  "Use Prepared Statements / Parameterized Queries.",
 							Reference: "OWASP A03:2021 – Injection",
 						}
 					}
@@ -127,8 +127,8 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 2 — UNION-Based Detection
-	// ORDER BY ile sütun sayısı → UNION SELECT NULL ile canary
+	// PHASE 2 — UNION-Based Detection
+	// Number of columns via ORDER BY → canary with UNION SELECT NULL
 	// ══════════════════════════════════════════════════════════════════════
 	unionEndpoints := []string{"/", "/index.php", "/products", "/search", "/view"}
 	unionParams := []string{"id", "cat", "item", "p", "product_id"}
@@ -143,7 +143,7 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 			baseBody, _ := io.ReadAll(io.LimitReader(baseResp.Body, 65536))
 			baseResp.Body.Close()
 
-			// Sütun sayısını ORDER BY ile bul (1-10 arası)
+			// Find number of columns via ORDER BY (between 1-10)
 			columns := 0
 			for i := 1; i <= 10; i++ {
 				orderURL := fmt.Sprintf("%s%s?%s=1 ORDER BY %d--", baseURL, ep, param, i)
@@ -154,14 +154,14 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 				body, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
 				resp.Body.Close()
 
-				// Hata = i-1 sütun bulundu
+				// Error = i-1 columns found
 				for _, errMsg := range dbErrors {
 					if strings.Contains(string(body), errMsg) {
 						columns = i - 1
 						break
 					}
 				}
-				// Ayrıca response boyutu düşerse de dur
+				// Also stop if response size drops
 				if columns > 0 {
 					break
 				}
@@ -170,9 +170,8 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 					break
 				}
 			}
-
 			if columns > 0 {
-				// UNION SELECT NULL,NULL,... ile canary dene
+				// Test canary using UNION SELECT NULL,NULL,...
 				nulls := strings.Repeat(",NULL", columns-1)
 				canary := "DORM_UNION_8x7k"
 				unionPayload := fmt.Sprintf("0 UNION SELECT '%s'%s--", canary, nulls)
@@ -192,10 +191,10 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 						Severity: "CRITICAL",
 						CVSS:     9.8,
 						Description: fmt.Sprintf(
-							"UNION-Based SQL Injection başarıyla doğrulandı — canary string response'da görüntülendi.\nEndpoint: %s\nParam: %s\nSütun Sayısı: %d\nCanary Payload: %s",
+							"UNION-Based SQL Injection confirmed successfully — canary string was displayed in response.\nEndpoint: %s\nParam: %s\nColumns Count: %d\nCanary Payload: %s",
 							ep, param, columns, unionPayload,
 						),
-						Solution:  "Parameterized queries kullanın. Uygulama hatalarını kullanıcıya göstermeyin.",
+						Solution:  "Use parameterized queries. Do not show application errors to the user.",
 						Reference: "OWASP A03:2021 – Injection",
 					}
 				}
@@ -204,7 +203,7 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 3 — Spider Endpoint Entegrasyonu (GET + POST)
+	// PHASE 3 — Spider Endpoint Integration (GET + POST)
 	// ══════════════════════════════════════════════════════════════════════
 	key := "endpoints_" + target.IP
 	if existing, ok := models.SharedData.Load(key); ok {
@@ -238,10 +237,10 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 									Severity: "CRITICAL",
 									CVSS:     9.8,
 									Description: fmt.Sprintf(
-										"Spider'ın keşfettiği endpoint'te veritabanı hatası tetiklendi.\nURL: %s\nParam: %s  Payload: %s\nHata: %s  DB: %s",
+										"Database error triggered on spider-discovered endpoint.\nURL: %s\nParam: %s  Payload: %s\nError: %s  DB: %s",
 										u.String(), param, payload, errMsg, db,
 									),
-									Solution:  "Hazırlanmış ifadeler (Prepared Statements) kullanın.",
+									Solution:  "Use Prepared Statements.",
 									Reference: "OWASP A03:2021 – Injection",
 								}
 							}
@@ -253,7 +252,7 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 4 — Header Injection SQLi
+	// PHASE 4 — Header Injection SQLi
 	// User-Agent, X-Forwarded-For, Referer, X-Real-IP
 	// ══════════════════════════════════════════════════════════════════════
 	headerPayloads := []string{"'", "' OR '1'='1'--", "1' AND SLEEP(0)--"}
@@ -286,10 +285,10 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 							Severity: "HIGH",
 							CVSS:     8.5,
 							Description: fmt.Sprintf(
-								"HTTP header üzerinden SQL injection başarıyla tetiklendi.\nEndpoint: %s\nHeader: %s\nPayload: %s\nHata: %s  DB: %s",
+								"SQL injection successfully triggered via HTTP header.\nEndpoint: %s\nHeader: %s\nPayload: %s\nError: %s  DB: %s",
 								targetURL, hdr, payload, errMsg, db,
 							),
-							Solution:  "Tüm HTTP header değerlerini güvenilmez kullanıcı girdisi olarak ele alın ve parameterized query kullanın.",
+							Solution:  "Treat all HTTP header values as untrusted user inputs and use parameterized queries.",
 							Reference: "CWE-89: SQL Injection via HTTP Headers",
 						}
 					}
@@ -299,7 +298,7 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 5 — Time-Based Blind SQLi
+	// PHASE 5 — Time-Based Blind SQLi
 	// ══════════════════════════════════════════════════════════════════════
 	sleepSeconds := 5
 	timePayloads := map[string]string{
@@ -323,17 +322,17 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 				Severity: "CRITICAL",
 				CVSS:     9.9,
 				Description: fmt.Sprintf(
-					"Sunucu yanıtı %.2f saniye gecikti — Time-Based Blind SQLi doğrulandı.\nDB Tipi: %s\nPayload: %s",
+					"Server response delayed by %.2f seconds — Time-Based Blind SQLi confirmed.\nDB Type: %s\nPayload: %s",
 					duration.Seconds(), dbType, payload,
 				),
-				Solution:  "Girdileri doğrulayın ve Prepared Statements kullanın.",
+				Solution:  "Validate inputs and use Prepared Statements.",
 				Reference: "OWASP Blind SQL Injection",
 			}
 		}
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 6 — POST / Auth Bypass
+	// PHASE 6 — POST / Auth Bypass
 	// ══════════════════════════════════════════════════════════════════════
 	loginPages := []string{
 		"/login.php", "/admin", "/admin.php", "/user/login",
@@ -366,10 +365,10 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 						Severity: "CRITICAL",
 						CVSS:     9.8,
 						Description: fmt.Sprintf(
-							"POST injection ile login bypass tespit edildi.\nEndpoint: %s\nPayload: %s\nResponse Farkı: %.0f byte",
+							"Login bypass detected via POST injection.\nEndpoint: %s\nPayload: %s\nResponse Diff: %.0f bytes",
 							page, payload, diff,
 						),
-						Solution:  "Tüm POST girdilerini sterilize edin ve Prepared Statements (PDO) kullanın.",
+						Solution:  "Sanitize all POST inputs and use Prepared Statements (PDO).",
 						Reference: "OWASP Injection / Authentication Bypass",
 					}
 				}

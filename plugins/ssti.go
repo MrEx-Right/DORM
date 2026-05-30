@@ -25,16 +25,16 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	client := models.GetClient()
 	baseURL := getURL(target, "")
 
-	// ── Engine-spesifik kanaryalar ────────────────────────────────────────
+	// ── Engine-specific canaries ────────────────────────────────────────
 	type SSTIProbe struct {
 		Payload  string
-		Expected string // response'da aranacak
+		Expected string // to be searched in response
 		Engine   string
 		IsRCE    bool
 	}
 
 	probes := []SSTIProbe{
-		// ── Math canary (1337 * 1337 = 1787569) — tüm engine'lerde çalışır ─
+		// ── Math canary (1337 * 1337 = 1787569) — works on all engines ─
 		{"{{1337*1337}}", "1787569", "Jinja2/Nunjucks/Twig (math)", false},
 		{"${1337*1337}", "1787569", "Freemarker/Groovy (math)", false},
 		{"#{1337*1337}", "1787569", "Spring EL / Pebble (math)", false},
@@ -85,7 +85,7 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		},
 	}
 
-	// ── Hata imzaları (error-based detection) ────────────────────────────
+	// ── Error signatures (error-based detection) ────────────────────────────
 	errorSigs := []string{
 		"TemplateSyntaxError", "TemplateNotFound", "UndefinedError",
 		"Unclosed comment", "ParseError", "TemplateSyntaxException",
@@ -106,7 +106,7 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 1 — GET Parameter Fuzzing
+	// PHASE 1 — GET Parameter Fuzzing
 	// ══════════════════════════════════════════════════════════════════════
 	for _, ep := range endpoints {
 		for _, param := range params {
@@ -121,7 +121,7 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				resp.Body.Close()
 				body := string(bodyBytes)
 
-				// Math/fingerprint canary eşleşmesi
+				// Math/fingerprint canary match
 				if strings.Contains(body, probe.Expected) && !strings.Contains(body, probe.Payload) {
 					sev := "CRITICAL"
 					cvss := 9.9
@@ -140,10 +140,10 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 						Severity: sev,
 						CVSS:     cvss,
 						Description: fmt.Sprintf(
-							"Template engine, enjekte edilen kodu yürüttü.\nEndpoint: %s\nParam: %s\nPayload: %s\nBeklenen Çıktı: %s\nEngine Fingerprint: %s",
+							"Template engine executed the injected code.\nEndpoint: %s\nParam: %s\nPayload: %s\nExpected Output: %s\nEngine Fingerprint: %s",
 							targetURL, param, probe.Payload, probe.Expected, probe.Engine,
 						),
-						Solution:  "Kullanıcı girdilerini template engine'e geçirmeden önce sterilize edin. Sandbox modunu aktif hale getirin.",
+						Solution:  "Sanitize user inputs before passing them to the template engine. Enable sandbox mode.",
 						Reference: "OWASP SSTI / CWE-94: Code Injection",
 					}
 				}
@@ -158,10 +158,10 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 							Severity: "HIGH",
 							CVSS:     8.0,
 							Description: fmt.Sprintf(
-								"Template engine parse hatası sızdı — SSTI yüzey alanı doğrulandı.\nEndpoint: %s\nParam: %s\nPayload: %s\nHata: %s\nEngine: %s",
+								"Template engine parse error leaked — SSTI surface area confirmed.\nEndpoint: %s\nParam: %s\nPayload: %s\nError: %s\nEngine: %s",
 								targetURL, param, probe.Payload, errSig, engine,
 							),
-							Solution:  "Template hata mesajlarını production'da kullanıcıya göstermeyin.",
+							Solution:  "Do not show template error messages to the user in production.",
 							Reference: "OWASP SSTI / CWE-209: Error Message Information Exposure",
 						}
 					}
@@ -171,7 +171,7 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 2 — Spider GET Endpoint Entegrasyonu
+	// PHASE 2 — Spider GET Endpoint Integration
 	// ══════════════════════════════════════════════════════════════════════
 	key := "endpoints_" + target.IP
 	if existing, ok := models.SharedData.Load(key); ok {
@@ -179,7 +179,7 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		for _, ep := range spiderEndpoints {
 			if ep.Method == "GET" && len(ep.Params) > 0 {
 				for _, param := range ep.Params {
-					for _, probe := range probes[:8] { // İlk 8 probe (RCE'siz)
+					for _, probe := range probes[:8] { // First 8 probes (RCE-free)
 						parsedURL, err := url.Parse(ep.URL)
 						if err != nil {
 							continue
@@ -203,10 +203,10 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 								Severity: "CRITICAL",
 								CVSS:     9.9,
 								Description: fmt.Sprintf(
-									"Spider'ın keşfettiği endpoint'te template injection doğrulandı.\nURL: %s\nParam: %s\nPayload: %s\nEngine: %s",
+									"Template injection confirmed on spider-discovered endpoint.\nURL: %s\nParam: %s\nPayload: %s\nEngine: %s",
 									parsedURL.String(), param, probe.Payload, probe.Engine,
 								),
-								Solution:  "Kullanıcı girdilerini template engine'e geçirmeden önce sterilize edin.",
+								Solution:  "Sanitize user inputs before passing them to the template engine.",
 								Reference: "OWASP SSTI / CWE-94",
 							}
 						}
@@ -236,10 +236,10 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 								Severity: "CRITICAL",
 								CVSS:     9.9,
 								Description: fmt.Sprintf(
-									"POST parametresi üzerinden template injection doğrulandı.\nURL: %s\nParam: %s\nPayload: %s\nEngine: %s",
+									"Template injection confirmed via POST parameter.\nURL: %s\nParam: %s\nPayload: %s\nEngine: %s",
 									ep.URL, param, probe.Payload, probe.Engine,
 								),
-								Solution:  "POST girdileri de dahil olmak üzere tüm kullanıcı verilerini sterilize edin.",
+								Solution:  "Sanitize all user data, including POST inputs.",
 								Reference: "OWASP SSTI / CWE-94",
 							}
 						}

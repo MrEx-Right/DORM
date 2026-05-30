@@ -23,7 +23,7 @@ type BruteForcePlugin struct{}
 
 func (p *BruteForcePlugin) Name() string { return "Mini-Hydra (SSH/FTP/Telnet/HTTP Brute Force)" }
 
-// defaultCreds — 100+ en yaygın default credential listesi
+// defaultCreds — List of 100+ most common default credentials
 var defaultCreds = []struct{ User, Pass string }{
 	// ── Generic / Universal ──────────────────────────────────────────────
 	{"admin", "admin"},
@@ -138,7 +138,7 @@ var defaultCreds = []struct{ User, Pass string }{
 	{"admin", "master"},
 }
 
-// httpBasicEndpoints — web panel brute force için denenecek endpoint'ler
+// httpBasicEndpoints — Endpoints to try for web panel brute forcing
 var httpBasicEndpoints = []string{
 	"/", "/admin", "/admin/", "/administrator",
 	"/wp-admin", "/wp-login.php",
@@ -216,8 +216,8 @@ func bruteSSH(target models.ScanTarget) *models.Vulnerability {
 				Name:        "Brute Force: SSH Default Credentials",
 				Severity:    "CRITICAL",
 				CVSS:        10.0,
-				Description: fmt.Sprintf("SSH servisi varsayılan kimlik bilgileriyle giriş kabul etti.\n%s\nPort: %d", r.cred, target.Port),
-				Solution:    "Tüm varsayılan parolaları hemen değiştirin. SSH key-based auth kullanın ve şifre girişini devre dışı bırakın (PasswordAuthentication no).",
+				Description: fmt.Sprintf("SSH service accepted login with default credentials.\n%s\nPort: %d", r.cred, target.Port),
+				Solution:    "Change all default passwords immediately. Use SSH key-based authentication and disable password login (PasswordAuthentication no).",
 				Reference:   "CWE-521: Weak Password Requirements",
 			}
 		}
@@ -245,8 +245,8 @@ func bruteFTP(target models.ScanTarget) *models.Vulnerability {
 				Name:        "Brute Force: FTP Default Credentials",
 				Severity:    "CRITICAL",
 				CVSS:        10.0,
-				Description: fmt.Sprintf("FTP servisi varsayılan kimlik bilgileriyle giriş kabul etti.\nUser: '%s'  Pass: '%s'\nPort: %d", c.User, c.Pass, target.Port),
-				Solution:    "Varsayılan FTP kimlik bilgilerini değiştirin. Mümkünse FTP yerine SFTP kullanın.",
+				Description: fmt.Sprintf("FTP service accepted login with default credentials.\nUser: '%s'  Pass: '%s'\nPort: %d", c.User, c.Pass, target.Port),
+				Solution:    "Change default FTP credentials. If possible, use SFTP instead of FTP.",
 				Reference:   "CWE-521: Weak Password Requirements",
 			}
 		}
@@ -260,7 +260,7 @@ func bruteFTP(target models.ScanTarget) *models.Vulnerability {
 func bruteTelnet(target models.ScanTarget) *models.Vulnerability {
 	addr := net.JoinHostPort(target.IP, fmt.Sprintf("%d", target.Port))
 
-	// Önce banner oku — servis Telnet mi?
+	// Read the banner first — is the service Telnet?
 	conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
 	if err != nil {
 		return nil
@@ -271,7 +271,7 @@ func bruteTelnet(target models.ScanTarget) *models.Vulnerability {
 	conn.Close()
 
 	bannerStr := string(banner[:n])
-	// Telnet doğrulama: IAC (0xFF) veya "login:" / "Password:" içermeli
+	// Telnet validation: Must contain IAC (0xFF) or "login:" / "Password:"
 	isTelnet := len(bannerStr) > 0 && (bannerStr[0] == 0xFF ||
 		containsAny(bannerStr, "login:", "Login:", "Password:", "ogin", "assword", "Telnet", "telnet"))
 
@@ -279,15 +279,15 @@ func bruteTelnet(target models.ScanTarget) *models.Vulnerability {
 		return nil
 	}
 
-	// Credential deneme (basit — Telnet protokolü tam otomasyonu karmaşık,
-	// bu aşamada açık port + banner = HIGH bulgu)
+	// Credential attempt (simple — full Telnet protocol automation is complex,
+	// at this stage open port + banner = HIGH finding)
 	return &models.Vulnerability{
 		Target:      target,
 		Name:        "Brute Force: Telnet Service Exposed",
 		Severity:    "CRITICAL",
 		CVSS:        9.0,
-		Description: fmt.Sprintf("Port %d'de aktif Telnet servisi tespit edildi.\nBanner: %q\nTelnet, kimlik bilgilerini şifresiz (cleartext) iletir. Brute force ve MitM saldırılarına açıktır.", target.Port, bannerStr),
-		Solution:    "Telnet servisini kapatın ve SSH ile değiştirin. Eğer zorunluysa güçlü parolalar ve IP kısıtlaması uygulayın.",
+		Description: fmt.Sprintf("Active Telnet service detected on port %d.\nBanner: %q\nTelnet transmits credentials in cleartext. Vulnerable to brute force and MitM attacks.", target.Port, bannerStr),
+		Solution:    "Disable the Telnet service and replace it with SSH. If mandatory, implement strong passwords and IP restriction.",
 		Reference:   "CWE-319: Cleartext Transmission of Sensitive Information",
 	}
 }
@@ -298,7 +298,7 @@ func bruteHTTPBasic(target models.ScanTarget) *models.Vulnerability {
 	client := models.GetClient()
 	baseURL := getURL(target, "")
 
-	// Önce 401 dönen endpoint'leri bul
+	// First find endpoints returning 401
 	var protectedEndpoints []string
 	for _, ep := range httpBasicEndpoints {
 		resp, err := client.Get(baseURL + ep)
@@ -315,7 +315,7 @@ func bruteHTTPBasic(target models.ScanTarget) *models.Vulnerability {
 		return nil
 	}
 
-	// 401 bulunan endpoint'lere credential dene
+	// Try credentials on 401 endpoints
 	for _, ep := range protectedEndpoints {
 		targetURL := baseURL + ep
 		for _, c := range defaultCreds {
@@ -333,15 +333,15 @@ func bruteHTTPBasic(target models.ScanTarget) *models.Vulnerability {
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 			resp.Body.Close()
 
-			// 200 + "admin" içeriği veya redirect değil
+			// 200 + "admin" content or not a redirect
 			if resp.StatusCode == 200 && !containsAny(string(body), "Invalid", "Unauthorized", "denied", "Wrong") {
 				return &models.Vulnerability{
 					Target:      target,
 					Name:        "Brute Force: HTTP Basic Auth Bypass",
 					Severity:    "CRITICAL",
 					CVSS:        9.8,
-					Description: fmt.Sprintf("HTTP Basic Auth, varsayılan kimlik bilgileriyle kırıldı.\nEndpoint: %s\nUser: '%s'  Pass: '%s'", targetURL, c.User, c.Pass),
-					Solution:    "Varsayılan parolaları değiştirin. HTTP Basic Auth yerine token tabanlı auth kullanmayı değerlendirin.",
+					Description: fmt.Sprintf("HTTP Basic Auth was cracked with default credentials.\nEndpoint: %s\nUser: '%s'  Pass: '%s'", targetURL, c.User, c.Pass),
+					Solution:    "Change default passwords. Consider using token-based auth instead of HTTP Basic Auth.",
 					Reference:   "CWE-521: Weak Password Requirements",
 				}
 			}

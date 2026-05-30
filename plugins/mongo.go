@@ -27,25 +27,25 @@ func (p *MongoPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 	addr := fmt.Sprintf("%s:%d", target.IP, target.Port)
 
-	// ── Phase 1: isMaster — Servis MongoDB mi? ───────────────────────────
+	// ── Phase 1: isMaster — Is the service MongoDB? ───────────────────────────
 	isMasterResp, err := mongoQuery(addr, "admin.$cmd", bsonIsMaster())
 	if err != nil {
 		return nil
 	}
 
 	if !strings.Contains(isMasterResp, "ismaster") && !strings.Contains(isMasterResp, "isMaster") {
-		return nil // MongoDB değil
+		return nil // Not MongoDB
 	}
 
-	// ── Phase 2: listDatabases — Auth gerektiriyor mu? ───────────────────
+	// ── Phase 2: listDatabases — Is authentication required? ───────────────────
 	listDBResp, err := mongoQuery(addr, "admin.$cmd", bsonListDatabases())
 
 	if err == nil && strings.Contains(listDBResp, "databases") {
-		// Auth olmadan DB listesi çekildi → CRITICAL
+		// Database list retrieved without authentication → CRITICAL
 		dbNames := extractDatabaseNames(listDBResp)
 		dbList := strings.Join(dbNames, ", ")
 		if dbList == "" {
-			dbList = "(parse edilemedi — raw wire response)"
+			dbList = "(could not be parsed — raw wire response)"
 		}
 
 		return &models.Vulnerability{
@@ -54,23 +54,23 @@ func (p *MongoPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 			Severity: "CRITICAL",
 			CVSS:     9.8,
 			Description: fmt.Sprintf(
-				"MongoDB, kimlik doğrulaması olmadan 'listDatabases' komutunu çalıştırdı.\nVeritabanı Listesi: [%s]\nPort: %d\nKanıt: listDatabases yanıtında 'databases' alanı bulundu.",
+				"MongoDB executed 'listDatabases' command without authentication.\nDatabase List: [%s]\nPort: %d\nProof: 'databases' field found in listDatabases response.",
 				dbList, target.Port,
 			),
-			Solution:  "MongoDB'yi --auth bayrağıyla başlatın. Admin kullanıcı oluşturun ve tüm kullanıcılara güçlü parolalar atayın. MongoDB portunu (27017) dış ağa kapatın.",
+			Solution:  "Start MongoDB with the --auth flag. Create an admin user and assign strong passwords to all users. Close the MongoDB port (27017) to the external network.",
 			Reference: "CWE-306: Missing Authentication for Critical Function",
 		}
 	}
 
-	// ── Phase 3: buildInfo — Versiyon tespiti ────────────────────────────
+	// ── Phase 3: buildInfo — Version detection ────────────────────────────
 	buildResp, err := mongoQuery(addr, "admin.$cmd", bsonBuildInfo())
 
-	mongoVersion := "(bilinmiyor)"
+	mongoVersion := "(unknown)"
 	if err == nil {
 		mongoVersion = extractMongoVersion(buildResp)
 	}
 
-	// Wire protokolü yanıt veriyor ama auth gerekiyor (HIGH)
+	// Wire protocol is responding but auth is required (HIGH)
 	if strings.Contains(listDBResp, "not authorized") || strings.Contains(listDBResp, "Unauthorized") {
 		return &models.Vulnerability{
 			Target:   target,
@@ -78,35 +78,35 @@ func (p *MongoPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 			Severity: "HIGH",
 			CVSS:     7.5,
 			Description: fmt.Sprintf(
-				"MongoDB Wire Protocol aktif ve erişilebilir, ancak kimlik doğrulaması zorunlu.\nlistDatabases erişimi reddedildi, ancak servis bilgileri sızdı.\nMongoDB Versiyonu: %s\nPort: %d",
+				"MongoDB Wire Protocol is active and accessible, but authentication is required.\nAccess to listDatabases was denied, but service information leaked.\nMongoDB Version: %s\nPort: %d",
 				mongoVersion, target.Port,
 			),
-			Solution:  "MongoDB'yi dış ağa kapatın. Firewall ile 27017/27018 portlarını kısıtlayın.",
+			Solution:  "Close MongoDB to the external network. Restrict ports 27017/27018 using a firewall.",
 			Reference: "CWE-284: Improper Access Control",
 		}
 	}
 
-	// Wire protokolü yanıt veriyor, isMaster OK ama listDB başarısız
+	// Wire protocol is responding, isMaster OK but listDB failed
 	return &models.Vulnerability{
 		Target:   target,
 		Name:     "MongoDB: Wire Protocol Exposed (isMaster)",
 		Severity: "HIGH",
 		CVSS:     7.5,
 		Description: fmt.Sprintf(
-			"MongoDB Wire Protocol aktif. isMaster komutu başarıyla yanıt aldı.\nMongoDB Versiyonu: %s\nPort: %d\nBu port dış ağa açık olmamalıdır.",
+			"MongoDB Wire Protocol is active. The isMaster command responded successfully.\nMongoDB Version: %s\nPort: %d\nThis port should not be exposed to the external network.",
 			mongoVersion, target.Port,
 		),
-		Solution:  "Firewall ile 27017/27018 portlarını yalnızca uygulama sunucusuna açın. --auth bayrağını kullanın.",
+		Solution:  "Open ports 27017/27018 only to the application server using a firewall. Use the --auth flag.",
 		Reference: "CWE-284: Improper Access Control",
 	}
 }
 
 // ==================================================
-// MongoDB Wire Protocol — Yardımcı Fonksiyonlar
-// OP_QUERY (opcode 2004) üzerinden komut gönderme
+// MongoDB Wire Protocol — Helper Functions
+// Sending commands via OP_QUERY (opcode 2004)
 // ==================================================
 
-// mongoQuery: Verilen collection'a BSON document gönderir, yanıtı döner.
+// mongoQuery: Sends BSON document to the given collection, returns the response.
 func mongoQuery(addr, collection string, bsonDoc []byte) (string, error) {
 	conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
 	if err != nil {
@@ -120,7 +120,7 @@ func mongoQuery(addr, collection string, bsonDoc []byte) (string, error) {
 		return "", err
 	}
 
-	// Yanıt oku (max 64KB)
+	// Read response (max 64KB)
 	buf := make([]byte, 65536)
 	n, err := io.ReadAtLeast(conn, buf, 16)
 	if err != nil {
@@ -130,7 +130,7 @@ func mongoQuery(addr, collection string, bsonDoc []byte) (string, error) {
 	return string(buf[:n]), nil
 }
 
-// buildOPQuery: MongoDB Wire Protocol OP_QUERY mesajı oluşturur.
+// buildOPQuery: Creates MongoDB Wire Protocol OP_QUERY message.
 // Struct:
 //   - MsgHeader (16 byte): messageLength + requestID + responseTo + opCode(2004)
 //   - flags (4 byte)
@@ -146,7 +146,7 @@ func buildOPQuery(collection string, query []byte) []byte {
 	body = append(body, 0x00, 0x00, 0x00, 0x00) // flags = 0
 	body = append(body, collBytes...)
 	body = append(body, 0x00, 0x00, 0x00, 0x00) // numberToSkip = 0
-	body = append(body, 0xFF, 0xFF, 0xFF, 0xFF) // numberToReturn = -1 (tümü)
+	body = append(body, 0xFF, 0xFF, 0xFF, 0xFF) // numberToReturn = -1 (all)
 	body = append(body, query...)
 
 	// Header
@@ -161,7 +161,7 @@ func buildOPQuery(collection string, query []byte) []byte {
 }
 
 // ── Hardcoded BSON Documents ─────────────────────────────────────────────────
-// BSON encode edilmiş minimal komutlar — sıfır dış bağımlılık
+// Minimal BSON encoded commands — zero external dependencies
 
 // bsonIsMaster: BSON encode of {isMaster: 1}
 func bsonIsMaster() []byte {
@@ -217,10 +217,10 @@ func bsonBuildInfo() []byte {
 
 // ── Response Parsing Helpers ─────────────────────────────────────────────────
 
-// extractDatabaseNames: Raw BSON yanıtından DB isimlerini basit string arama ile çıkarır.
+// extractDatabaseNames: Extracts DB names from raw BSON response using simple string search.
 func extractDatabaseNames(raw string) []string {
 	var names []string
-	// BSON string alanları: "name" key'inden sonra gelen değerleri ara
+	// BSON string fields: Look for values coming after the "name" key
 	idx := 0
 	for {
 		nameIdx := strings.Index(raw[idx:], "name")
@@ -229,7 +229,7 @@ func extractDatabaseNames(raw string) []string {
 		}
 		idx += nameIdx + 5 // "name" + null byte
 
-		// Sonraki printable ASCII string'i çıkar (DB adı)
+		// Extract the next printable ASCII string (DB name)
 		start := idx
 		end := start
 		for end < len(raw) && raw[end] >= 0x20 && raw[end] < 0x7F && raw[end] != 0 {
@@ -239,7 +239,7 @@ func extractDatabaseNames(raw string) []string {
 		if end > start && end-start < 64 {
 			candidate := raw[start:end]
 			candidate = strings.TrimSpace(candidate)
-			// Sadece geçerli görünen DB isimleri
+			// Only valid-looking DB names
 			if len(candidate) > 0 && len(candidate) < 64 && isValidDBName(candidate) {
 				names = append(names, candidate)
 			}
@@ -250,7 +250,7 @@ func extractDatabaseNames(raw string) []string {
 		}
 	}
 
-	// Tekrarları kaldır
+	// Remove duplicates
 	seen := map[string]bool{}
 	unique := []string{}
 	for _, n := range names {
@@ -262,15 +262,15 @@ func extractDatabaseNames(raw string) []string {
 	return unique
 }
 
-// extractMongoVersion: buildInfo yanıtından versiyon string'ini çıkarır.
+// extractMongoVersion: Extracts version string from buildInfo response.
 func extractMongoVersion(raw string) string {
 	vIdx := strings.Index(raw, "version")
 	if vIdx == -1 {
-		return "(bilinmiyor)"
+		return "(unknown)"
 	}
 	start := vIdx + 8
 	if start >= len(raw) {
-		return "(bilinmiyor)"
+		return "(unknown)"
 	}
 	end := start
 	for end < len(raw) && (raw[end] == '.' || (raw[end] >= '0' && raw[end] <= '9')) {
@@ -279,10 +279,10 @@ func extractMongoVersion(raw string) string {
 	if end > start {
 		return raw[start:end]
 	}
-	return "(bilinmiyor)"
+	return "(unknown)"
 }
 
-// isValidDBName: Bir string'in geçerli MongoDB DB adı olup olmadığını kontrol eder.
+// isValidDBName: Checks if a string is a valid MongoDB DB name.
 func isValidDBName(s string) bool {
 	if len(s) == 0 || len(s) > 38 {
 		return false

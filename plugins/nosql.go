@@ -14,7 +14,7 @@ import (
 // ==================================================
 // NoSQL INJECTION — v2.0 "Mongo Mayhem"
 // $ne · JSON Body · $where RCE · $regex Leak
-// CouchDB probe · Spider POST entegrasyonu
+// CouchDB probe · Spider POST integration
 // ==================================================
 type NoSQLPlugin struct{}
 
@@ -32,7 +32,7 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	params := []string{"user", "username", "u", "search", "q", "id", "token", "code", "password", "email"}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 1 — GET $ne Operator (mevcut mantık, iyileştirilmiş)
+	// PHASE 1 — GET $ne Operator (existing logic, optimized)
 	// ══════════════════════════════════════════════════════════════════════
 	for _, ep := range endpoints {
 		for _, param := range params {
@@ -72,10 +72,10 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 					Severity: "HIGH",
 					CVSS:     8.2,
 					Description: fmt.Sprintf(
-						"MongoDB '$ne' operatörü ile kimlik doğrulama atlatıldı.\nParam: %s\nBaseline: HTTP %d → Attack: HTTP %d",
+						"Authentication bypassed with MongoDB '$ne' operator.\nParam: %s\nBaseline: HTTP %d → Attack: HTTP %d",
 						param, codeBase, codeAttack,
 					),
-					Solution:  "Kullanıcı girdilerini nesne (object) yerine string olarak zorunlu kılın. Girdi tipi doğrulaması uygulayın.",
+					Solution:  "Enforce user inputs as string instead of object. Implement input type validation.",
 					Reference: "OWASP NoSQL Injection / CWE-943",
 				}
 			}
@@ -87,10 +87,10 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 					Severity: "HIGH",
 					CVSS:     7.5,
 					Description: fmt.Sprintf(
-						"'$ne' operatörü ile response boyutu belirgin şekilde arttı — veri sızıntısı tespit edildi.\nParam: %s\nBaseline: %d byte → Attack: %d byte",
+						"Response size increased significantly with '$ne' operator — data leak detected.\nParam: %s\nBaseline: %d bytes → Attack: %d bytes",
 						param, lenBase, lenAttack,
 					),
-					Solution:  "Girdi tipi doğrulaması uygulayın. Operatör enjeksiyonunu filtreleyin.",
+					Solution:  "Implement input type validation. Filter operator injections.",
 					Reference: "CWE-943: Improper Neutralization in Data Query Logic",
 				}
 			}
@@ -98,7 +98,7 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 2 — JSON Body Injection (POST application/json)
+	// PHASE 2 — JSON Body Injection (POST application/json)
 	// ══════════════════════════════════════════════════════════════════════
 	jsonPayloads := []struct {
 		Body string
@@ -106,19 +106,19 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}{
 		{
 			`{"username": {"$gt": ""}, "password": {"$gt": ""}}`,
-			"$gt (greater-than) ile tüm kayıtları eşleştirme",
+			"$gt (greater-than) matches all records",
 		},
 		{
 			`{"username": {"$ne": null}, "password": {"$ne": null}}`,
-			"$ne null ile null olmayan tüm kayıtları eşleştirme",
+			"$ne null matches all non-null records",
 		},
 		{
 			`{"username": {"$exists": true}, "password": {"$exists": true}}`,
-			"$exists ile alan varlık bypass",
+			"$exists field existence bypass",
 		},
 		{
 			`{"username": {"$regex": ".*"}, "password": {"$regex": ".*"}}`,
-			"$regex wildcard ile tüm kullanıcıları eşleştirme",
+			"$regex wildcard matches all users",
 		},
 	}
 
@@ -127,7 +127,7 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	for _, ep := range postEndpoints {
 		targetURL := baseURL + ep
 
-		// Baseline (geçersiz cred)
+		// Baseline (invalid credentials)
 		baseBody := bytes.NewReader([]byte(`{"username": "invalid_dorm_x9", "password": "invalid_dorm_x9"}`))
 		baseResp, err := client.Post(targetURL, "application/json", baseBody)
 		if err != nil {
@@ -156,10 +156,10 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 					Severity: "CRITICAL",
 					CVSS:     9.1,
 					Description: fmt.Sprintf(
-						"JSON body üzerinden NoSQL injection ile kimlik doğrulama atlatıldı.\nEndpoint: %s\nTeknik: %s\nPayload: %s\nBaseline: HTTP %d (%d byte) → Attack: HTTP %d (%d byte)",
+						"Authentication bypassed via NoSQL injection in JSON body.\nEndpoint: %s\nTechnique: %s\nPayload: %s\nBaseline: HTTP %d (%d bytes) → Attack: HTTP %d (%d bytes)",
 						targetURL, pl.Desc, pl.Body, baseCode, baseLen, attackCode, attackLen,
 					),
-					Solution:  "JSON body'deki tüm alanları string olarak zorunlu kılın. MongoDB operatörlerini ($gt, $ne, $regex) whitelist ile engelleyin.",
+					Solution:  "Enforce all fields in JSON body as strings. Whitelist/block MongoDB operators ($gt, $ne, $regex).",
 					Reference: "OWASP NoSQL Injection / CWE-943",
 				}
 			}
@@ -167,7 +167,7 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 3 — POST Form Injection (user[$ne]=x)
+	// PHASE 3 — POST Form Injection (user[$ne]=x)
 	// ══════════════════════════════════════════════════════════════════════
 	formEndpoints := []string{"/login", "/api/login", "/auth", "/signin"}
 	formParams := []string{"username", "user", "email", "password", "pass"}
@@ -208,10 +208,10 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 					Severity: "CRITICAL",
 					CVSS:     9.1,
 					Description: fmt.Sprintf(
-						"Form-encoded POST body'de '$ne' operatörü ile auth bypass.\nEndpoint: %s\nPayload: %s[$ne]=invalid_dorm_x9",
+						"Auth bypass via '$ne' operator in form-encoded POST body.\nEndpoint: %s\nPayload: %s[$ne]=invalid_dorm_x9",
 						targetURL, param,
 					),
-					Solution:  "Sunucu tarafında girdi tiplerini doğrulayın; PHP'de `is_string()`, Node.js'de `typeof` kullanın.",
+					Solution:  "Validate input types server-side; use `is_string()` in PHP, `typeof` in Node.js.",
 					Reference: "OWASP NoSQL Injection",
 				}
 			}
@@ -219,7 +219,7 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 4 — $where JavaScript Time-Based
+	// PHASE 4 — $where JavaScript Time-Based
 	// ══════════════════════════════════════════════════════════════════════
 	wherePayloads := []string{
 		`{"$where": "sleep(5000)"}`,
@@ -248,7 +248,7 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 			}
 			resp.Body.Close()
 
-			// Attack baseline'dan en az 4 saniye daha uzun olmalı
+			// Attack must be at least 4 seconds longer than baseline
 			if attackElapsed > baseElapsed+4*time.Second {
 				return &models.Vulnerability{
 					Target:   target,
@@ -256,10 +256,10 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 					Severity: "CRITICAL",
 					CVSS:     9.8,
 					Description: fmt.Sprintf(
-						"$where operatörü ile MongoDB içinde JavaScript yürütüldü (Time-Based doğrulama).\nEndpoint: %s\nPayload: %s\nBaseline: %.2fs → Attack: %.2fs (fark: %.2fs)",
+						"JavaScript executed inside MongoDB via $where operator (Time-Based validation).\nEndpoint: %s\nPayload: %s\nBaseline: %.2fs → Attack: %.2fs (diff: %.2fs)",
 						targetURL, payload, baseElapsed.Seconds(), attackElapsed.Seconds(), (attackElapsed - baseElapsed).Seconds(),
 					),
-					Solution:  "MongoDB'de server-side JavaScript'i devre dışı bırakın (--noscript). $where operatörünü engelleyin.",
+					Solution:  "Disable server-side JavaScript in MongoDB (--noscript). Block the $where operator.",
 					Reference: "CWE-943 / OWASP NoSQL Injection",
 				}
 			}
@@ -267,7 +267,7 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 5 — $regex Data Leak Detection
+	// PHASE 5 — $regex Data Leak Detection
 	// ══════════════════════════════════════════════════════════════════════
 	regexPayload := `{"username": {"$regex": ".*"}, "password": {"$regex": ".*"}}`
 
@@ -296,17 +296,17 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				Severity: "HIGH",
 				CVSS:     7.5,
 				Description: fmt.Sprintf(
-					"$regex wildcard operatörü ile response boyutu belirgin şekilde arttı — veri sızıntısı doğrulandı.\nEndpoint: %s\nBaseline: %d byte → Regex Attack: %d byte",
+					"Response size increased significantly with $regex wildcard operator — data leak confirmed.\nEndpoint: %s\nBaseline: %d bytes → Regex Attack: %d bytes",
 					targetURL, len(baseBytes), len(regexBytes),
 				),
-				Solution:  "JSON girdisinde MongoDB operatörlerini ($regex, $where, $gt) whitelist ile engelleyin.",
+				Solution:  "Block MongoDB operators ($regex, $where, $gt) in JSON input or use whitelisting.",
 				Reference: "OWASP NoSQL Injection / CWE-943",
 			}
 		}
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 6 — Time-Based Boolean (mevcut, iyileştirilmiş)
+	// PHASE 6 — Time-Based Boolean (existing, optimized)
 	// ══════════════════════════════════════════════════════════════════════
 	timePayloadsList := []string{
 		`';sleep(5000);var a='`,
@@ -344,10 +344,10 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 						Severity: "CRITICAL",
 						CVSS:     9.8,
 						Description: fmt.Sprintf(
-							"JavaScript sleep() payload'ı ile sunucu %s gecikti — NoSQL/MongoDB JS execution doğrulandı.\nParam: %s\nPayload: %s",
+							"Server delayed by %s via JavaScript sleep() payload — NoSQL/MongoDB JS execution confirmed.\nParam: %s\nPayload: %s",
 							elapsed.Round(time.Millisecond), param, tp,
 						),
-						Solution:  "MongoDB'de --noscript bayrağını kullanın ve tüm girdileri doğrulayın.",
+						Solution:  "Use --noscript flag in MongoDB and validate all user inputs.",
 						Reference: "CWE-943 / OWASP Injection",
 					}
 				}
@@ -356,7 +356,7 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 7 — CouchDB Unauthorized Access Probe
+	// PHASE 7 — CouchDB Unauthorized Access Probe
 	// ══════════════════════════════════════════════════════════════════════
 	couchEndpoints := []string{"/_users", "/_all_docs", "/_config", "/_utils"}
 	for _, ep := range couchEndpoints {
@@ -375,17 +375,17 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				Severity: "HIGH",
 				CVSS:     8.0,
 				Description: fmt.Sprintf(
-					"CouchDB yönetim endpoint'i kimlik doğrulaması olmadan erişilebilir durumda.\nEndpoint: %s\nResponse: HTTP %d",
+					"CouchDB management endpoint is accessible without authentication.\nEndpoint: %s\nResponse: HTTP %d",
 					baseURL+ep, resp.StatusCode,
 				),
-				Solution:  "CouchDB'yi require_valid_user=true ile yapılandırın ve admin partisi oluşturun.",
+				Solution:  "Configure CouchDB with require_valid_user=true and create an admin account.",
 				Reference: "CWE-306: Missing Authentication for Critical Function",
 			}
 		}
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// FAZA 8 — Spider POST Entegrasyonu
+	// PHASE 8 — Spider POST Integration
 	// ══════════════════════════════════════════════════════════════════════
 	key := "endpoints_" + target.IP
 	if existing, ok := models.SharedData.Load(key); ok {
@@ -407,10 +407,10 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 							Severity: "CRITICAL",
 							CVSS:     9.1,
 							Description: fmt.Sprintf(
-								"Spider'ın bulduğu POST endpoint'te JSON NoSQL injection başarılı.\nURL: %s\nPayload: %s",
+								"JSON NoSQL injection succeeded on spider-discovered POST endpoint.\nURL: %s\nPayload: %s",
 								ep.URL, pl.Body,
 							),
-							Solution:  "Tüm JSON girdilerinde MongoDB operatörlerini filtreleyin.",
+							Solution:  "Filter MongoDB operators in all JSON inputs.",
 							Reference: "OWASP NoSQL Injection",
 						}
 					}
