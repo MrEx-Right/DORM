@@ -1,9 +1,68 @@
 {
     "title": "CISA Catalog of Known Exploited Vulnerabilities",
-    "catalogVersion": "2026.05.29",
-    "dateReleased": "2026-05-29T19:00:06.3429Z",
-    "count": 1607,
+    "catalogVersion": "2026.06.03",
+    "dateReleased": "2026-06-03T16:48:16.931Z",
+    "count": 1611,
     "vulnerabilities": [
+        {
+            "cveID": "CVE-2026-45247",
+            "vendorProject": "Mirasvit",
+            "product": "Mirasvit Full Page Cache Warmer",
+            "vulnerabilityName": "Mirasvit Full Page Cache Warmer Deserialization of Untrusted Data Vulnerability",
+            "dateAdded": "2026-06-03",
+            "shortDescription": "Mirasvit Full Page Cache Warmer contains a deserialization of untrusted data vulnerability that could allow unauthenticated attackers to achieve remote code execution by supplying a crafted serialized PHP object in the CacheWarmer cookie.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-06-06",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/mirasvit.com\/package\/changelog\/?package=mirasvit\/module-cache-warmer ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2026-45247",
+            "cwes": [
+                "CWE-502"
+            ]
+        },
+        {
+            "cveID": "CVE-2022-0492",
+            "vendorProject": "Linux",
+            "product": "Kernel",
+            "vulnerabilityName": "Linux Kernel Improper Authentication Vulnerability",
+            "dateAdded": "2026-06-02",
+            "shortDescription": "Linux Kernel contains an improper authentication vulnerability which could allow for privilege escalation via the cgroups v1 release_agent feature.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-06-05",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "This vulnerability affects a common open-source component, third-party library, or a protocol used by different products. Please check with specific vendors for information on patching status. For more information, please see: https:\/\/git.kernel.org\/pub\/scm\/linux\/kernel\/git\/torvalds\/linux.git\/commit\/?id=24f6008564183aa120d07c03d9289519c2fe02af ; https:\/\/www.kernel.org\/ ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2022-0492",
+            "cwes": [
+                "CWE-287",
+                "CWE-862"
+            ]
+        },
+        {
+            "cveID": "CVE-2025-48595",
+            "vendorProject": "Android",
+            "product": "Framework",
+            "vulnerabilityName": "Android Framework Integer Overflow Vulnerability",
+            "dateAdded": "2026-06-02",
+            "shortDescription": "Android Framework contains an integer overflow vulnerability that allows for code execution that could allow for local privilege escalation.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-06-05",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/source.android.com\/docs\/security\/bulletin\/2026\/2026-06-01 ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2025-48595",
+            "cwes": [
+                "CWE-190"
+            ]
+        },
+        {
+            "cveID": "CVE-2024-21182",
+            "vendorProject": "Oracle",
+            "product": "WebLogic Server",
+            "vulnerabilityName": "Oracle WebLogic Server Unspecified Vulnerability",
+            "dateAdded": "2026-06-01",
+            "shortDescription": "Oracle WebLogic contains an unspecified vulnerability that could allow an unauthenticated attacker with network access via T3, IIOP to compromise Oracle WebLogic Server. Successful attacks of this vulnerability can result in unauthorized access to critical data or complete access to all Oracle WebLogic Server accessible data.",
+            "requiredAction": "Apply mitigations per vendor instructions, follow applicable BOD 22-01 guidance for cloud services, or discontinue use of the product if mitigations are unavailable.",
+            "dueDate": "2026-06-04",
+            "knownRansomwareCampaignUse": "Unknown",
+            "notes": "https:\/\/www.oracle.com\/security-alerts\/cpujul2024.html ; https:\/\/nvd.nist.gov\/vuln\/detail\/CVE-2024-21182",
+            "cwes": []
+        },
         {
             "cveID": "CVE-2026-0257",
             "vendorProject": "Palo Alto Networks",
