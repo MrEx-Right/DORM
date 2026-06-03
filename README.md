@@ -1,12 +1,12 @@
-# 👁️ DORM - Next-Gen Vulnerability Scanner
+# DORM - Next-Gen Vulnerability Scanner
 
 ![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)
-![License](https://img.shields.io/badge/License-GPLv3-blue)
+![License](https://img.shields.io/badge/License-AGPL--3.0-blue)
 ![Type](https://img.shields.io/badge/Type-Offensive%20Security-red)
 
 **DORM** is a high-performance, concurrent, and modular vulnerability scanner written in **Go**. Designed for Red Teams and Bug Bounty hunters, it combines passive reconnaissance with active, aggressive exploitation techniques.
 
-Unlike traditional scanners, DORM features a hybrid engine that utilizes **Headless Chrome (DOM XSS)**, **Smart Fuzzing**, and **In-Memory Exploit-DB** integration.
+Unlike traditional scanners, DORM features a hybrid engine that utilizes a **Native DAST Proxy**, a **Smart Spider (Active Fuzzing Engine)**, and an **Offline CVE Database** integration.
 
 ---
 
@@ -23,7 +23,7 @@ Unlike traditional scanners, DORM features a hybrid engine that utilizes **Headl
 </p>
 
 <p align="center">
-  <i>Real-time monitoring and advanced vulnerability detection capabilities.</i>
+  <i>Premium glassmorphism dark-themed dashboard with real-time SSE monitoring and persistent history management.</i>
 </p>
 
 ---
@@ -31,28 +31,29 @@ Unlike traditional scanners, DORM features a hybrid engine that utilizes **Headl
 ## 🚀 Key Features
 
 ### 🔥 Core Engine
-- **High Concurrency:** Scans multiple targets and ports simultaneously using Go routines.
-- **Smart Port Discovery:** Automatically detects web, database, and cloud services.
-- **Real-Time Dashboard:** Web-based UI (SSE) to monitor scan progress live.
+- **High Concurrency:** Orchestrates non-blocking scans across multiple targets and IP ranges simultaneously using Go routines.
+- **Native Proxy Analyzer:** Built-in HTTP DAST proxy (port 8081) for real-time passive traffic inspection and vulnerability detection.
+- **Smart Port Risk Analysis:** Performs deep service classification and framework fingerprinting on alternative ports to identify live dev servers.
+- **Dashboard & History Archival:** Real-time web-based UI (SSE) with a dedicated history viewer and HTML/PDF enterprise reporting capabilities.
 
 ### 🧠 Advanced Capabilities
-- **🕷️ Web Spider:** Recursively crawls the target to map the attack surface.
-- **🕸️ DOM XSS Scanner:** Uses **Headless Chrome** to detect JavaScript-based vulnerabilities in SPA (React/Vue).
-- **📚 Exploit-DB Integration:** Loads the entire Exploit Database into RAM for instant service version matching.
-- **🔓 Brute Force (Mini-Hydra):** Supports dictionary attacks on SSH and FTP.
+- **🕷️ Smart Spider (Active Fuzzer):** Intelligently crawls, parses HTML forms, extracts API endpoints, and creates a shared intelligence pool for precision payload injections.
+- **🕸️ Next-Gen DOM & Reflected XSS Engine:** Tri-phase architecture with advanced WAF-bypassing payload arsenals and line-by-line static DOM taint analysis.
+- **📚 Local CVE Database & AI Correlation:** Zero-latency offline CISA KEV search engine with AI-driven Semantic Versioning for exact vulnerability matching.
+- **🦎 Chameleon Mode & Evasion:** Dynamic User-Agent rotation, IP obfuscation, and smart jitter rate limiting to bypass WAFs and Firewalls.
 
-### 🛡️ 80+ Attack Modules
-DORM comes with over 80 specialized plugins including:
-- **Injection:** SQLi (Blind/Time), XSS (Reflected/DOM), SSTI, CRLF, Host Header.
-- **Cloud & DevOps:** Docker API, Kubernetes Kubelet, AWS/Google Key Leaks, S3 Buckets.
-- **Critical CVEs:** Log4Shell, Spring4Shell, Drupalgeddon2, F5 BIG-IP TMUI.
-- **Misconfig:** CORS, Git/Env Exposure, Open Redirects, Subdomain Takeover.
+### 🛡️ Comprehensive Attack Modules
+DORM comes equipped with highly advanced, multi-phase plugins:
+- **Injection Pipelines:** Omni-SQLi (6-phase), Blind RCE "Phantom Strike" (dynamic WAF bypass), XXE "XML Devil", Next-Gen SSRF (Cloud metadata & DNS rebinding), SSTI, and CRLF.
+- **Authentication & Logic:** "Hydra Elite" Brute Force Engine, JWT "Key Breaker" (Algorithm Confusion), Advanced IDOR (Dual-Profile Authorization Matrix), GraphQL Introspection.
+- **Cloud & DevOps:** Service exposure detection for MongoDB Wire, Tomcat "Catalina Exploiter" (In-Memory WAR Deployment), Docker API, Kubernetes, Redis.
+- **AI & Emerging Threats:** Dedicated AI/LLM Prompt Injection Scanner, 403/401 Authorization Bypass, Web Cache Poisoning, and HTTP Request Smuggling.
 
 ---
 
 ## 📦 Installation
 
-DORM requires **Go 1.21+** and **Google Chrome** (for DOM Scanner).
+DORM requires **Go 1.21+**.
 
 ---
 
@@ -88,9 +89,10 @@ The script will:
 - ✅ Verify your Go installation (1.21+ required)
 - ✅ Download all dependencies via `go mod download`
 - ✅ Compile `DORM.exe` in the project folder
+- ✅ Terminate any existing `DORM.exe` processes to prevent port conflicts
 
 **Step 2 — Run:**
 
 Double-click `DORM.exe`. A console window opens showing DORM's output. **Close that window to stop DORM.**
 
-> To rebuild (e.g. after pulling updates), delete `DORM.exe` and run `build_windows.bat` again.
+> To rebuild (e.g. after pulling updates), run `build_windows.bat` again.
