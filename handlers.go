@@ -335,6 +335,8 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	engine.AddPlugin(&plugins.TLSCipherPlugin{})
 
 	engine.AddPlugin(&plugins.Bypass403Plugin{})
+	engine.AddPlugin(&plugins.BFLABOLAPlugin{})   // BFLA/BOLA — HTTP Method Tampering + Role Escalation
+	engine.AddPlugin(&plugins.IPSpoofPlugin{})     // IP Spoof — Rate-Limit & WAF Bypass
 	engine.AddPlugin(&plugins.PromptInjectionPlugin{})
 
 	// Apply User Filters
