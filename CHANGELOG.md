@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.15.1] - 2026-06-23
+### 🐛 False Positive Eradication Update
+
+- **Open Redirect Scanner:** Fixed a major false positive where innocuous redirects (e.g., HTTP to HTTPS) were flagged as vulnerabilities simply because the `Location` header contained the payload as a parameter. The engine now strictly parses the `Location` header and verifies that the `Host` exactly matches the payload domain (`example.com`), guaranteeing absolute precision.
+- **Weak TLS Cipher Suites:** Eliminated false positives related to legacy ciphers (e.g., CVE-2016-2183 SWEET32, RC4). Previously, a successful TLS connection triggered an alert even if the server ignored the requested weak cipher and negotiated a secure fallback. The scanner now strictly inspects the `ConnectionState` to verify that the server explicitly negotiated and accepted the weak `CipherSuite` requested.
+
 ## [v1.15.0] - 2026-06-19
 ### ⚡ The Auth-Breaker & IP-Ghost Update
 

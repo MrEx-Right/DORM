@@ -41,8 +41,10 @@ func (p *TLSCipherPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		conn, err := tls.DialWithDialer(dialer, "tcp", address, config)
 
 		if err == nil {
-
-			supportedWeakCiphers = append(supportedWeakCiphers, cipherName)
+			state := conn.ConnectionState()
+			if state.CipherSuite == cipherID {
+				supportedWeakCiphers = append(supportedWeakCiphers, cipherName)
+			}
 			conn.Close()
 		}
 	}

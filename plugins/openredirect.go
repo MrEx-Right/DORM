@@ -4,7 +4,6 @@ import (
 	"DORM/models"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 )
 
@@ -26,8 +25,11 @@ func (p *OpenRedirectPlugin) Run(target models.ScanTarget) *models.Vulnerability
 		return nil
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 300 && resp.StatusCode < 400 && strings.Contains(resp.Header.Get("Location"), "example.com") {
-		return &models.Vulnerability{Target: target, Name: "Open Redirect", Severity: "MEDIUM", CVSS: 6.1, Description: "Open redirect detected.", Solution: "Use a whitelist.", Reference: ""}
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		locURL, err := url.Parse(resp.Header.Get("Location"))
+		if err == nil && locURL.Host == "example.com" {
+			return &models.Vulnerability{Target: target, Name: "Open Redirect", Severity: "MEDIUM", CVSS: 6.1, Description: "Open redirect detected.", Solution: "Use a whitelist.", Reference: ""}
+		}
 	}
 	// === SPIDER ENDPOINT INTEGRATION ===
 	key := "endpoints_" + target.IP
@@ -49,15 +51,18 @@ func (p *OpenRedirectPlugin) Run(target models.ScanTarget) *models.Vulnerability
 					resp, err := client.Get(targetURL)
 					if err == nil {
 						resp.Body.Close()
-						if resp.StatusCode >= 300 && resp.StatusCode < 400 && strings.Contains(resp.Header.Get("Location"), "example.com") {
-							return &models.Vulnerability{
-								Target:      target,
-								Name:        "Open Redirect (Spider-Discovered)",
-								Severity:    "MEDIUM",
-								CVSS:        6.1,
-								Description: "Open redirect detected on parameter discovered by Spider.\nURL: " + targetURL,
-								Solution:    "Use a whitelist.",
-								Reference:   "",
+						if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+							locURL, err := url.Parse(resp.Header.Get("Location"))
+							if err == nil && locURL.Host == "example.com" {
+								return &models.Vulnerability{
+									Target:      target,
+									Name:        "Open Redirect (Spider-Discovered)",
+									Severity:    "MEDIUM",
+									CVSS:        6.1,
+									Description: "Open redirect detected on parameter discovered by Spider.\nURL: " + targetURL,
+									Solution:    "Use a whitelist.",
+									Reference:   "",
+								}
 							}
 						}
 					}
