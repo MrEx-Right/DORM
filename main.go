@@ -2,6 +2,7 @@ package main
 
 import (
 	"DORM/analyzer"
+	"DORM/cve"
 	"DORM/models"
 	"fmt"
 	"net/http"
@@ -11,11 +12,14 @@ import (
 func main() {
 	models.GetClient = getClient
 	models.DeepScanTarget = DeepScanTarget
-	models.SearchLocalCVEs = SearchLocalCVEs
+	models.SearchLocalCVEs = func(product, version string) []models.LocalCVE {
+		return cve.Search(product, version)
+	}
 	models.SearchExploitDB = SearchExploitDB
 	// 1. Initialize the Database
 	InitDB("dorm_engine.db")
-	SyncCVEDatabase()
+	// 2. Sync full CVEProject database (~280K CVEs) — blocking at startup
+	cve.SyncFullDatabase()
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -43,10 +47,21 @@ func main() {
 	port := ":8080"
 	url := "http://localhost" + port
 
-	fmt.Println("===========================================")
-	fmt.Println("          DORM SCANNER v1.15.1 		 	    ")
-	fmt.Println("===========================================")
-	fmt.Printf("[*] Server Active: %s\n", url)
+	banner := `
+██████╗  ██████╗ ██████╗ ███╗   ███╗
+██╔══██╗██╔═══██╗██╔══██╗████╗ ████║
+██║  ██║██║   ██║██████╔╝██╔████╔██║
+██║  ██║██║   ██║██╔══██╗██║╚██╔╝██║
+██████╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
+╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.16.0
+
+       [ Security Engine • Active ]
+`
+	fmt.Println("\033[38;5;214m" + banner + "\033[0m")
+	fmt.Println("\033[1;30m====================================================\033[0m")
+	fmt.Printf("\033[1;32m[*] Server Active: \033[1;36m%s\033[0m\n", url)
+	fmt.Printf("\033[1;32m[*] Analyzer Proxy Active on Port: \033[1;36m8081\033[0m\n")
+	fmt.Println("\033[1;30m====================================================\033[0m")
 
 	go func() {
 		time.Sleep(1 * time.Second)

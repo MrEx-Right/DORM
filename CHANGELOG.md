@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.16.0] - 2026-06-26
+### 🌐 NIST CVE Database (cvelistV5) & UX Update
+
+- **Full CVE Database Engine:** Removed the legacy CISA KEV implementation and fully integrated the comprehensive CVEProject/cvelistV5 nightly snapshot system. The database now tracks over 280,000+ vulnerability records with intelligent delta updates (fetching only changes) and high-speed in-memory indexing via the new `cve/sync.go` engine.
+- **UX & Interface Refinements:** Streamlined the web interface by removing the local CVE database views for a cleaner experience. Replaced the basic terminal startup banner with a highly stylized, ANSI Shadow ASCII art banner that visually emphasizes the core "DORM" brand.
+- **Resilience:** Implemented a robust `probeSnapshotURL()` mechanism that uses HTTP HEAD requests to intelligently discover the latest CVE release snapshots even when GitHub's standard API endpoints are rate-limited or unavailable.
+
 ## [v1.15.1] - 2026-06-23
 ### 🐛 False Positive Eradication Update
 

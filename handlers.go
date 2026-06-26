@@ -2,6 +2,7 @@ package main
 
 import (
 	"DORM/analyzer"
+	"DORM/cve"
 	"DORM/models"
 	"DORM/plugins"
 	"context"
@@ -56,17 +57,20 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// List CVE Database
+// List CVE Database (first 500 records + stats)
 func handleCVEDatabase(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
-	// Limit if the database is too large (first 500 records)
-	limit := 500
-	if len(CVEMemoryDB) < limit {
-		limit = len(CVEMemoryDB)
+	type CVEResponse struct {
+		Stats map[string]interface{} `json:"stats"`
+		CVEs  []models.LocalCVE      `json:"cves"`
 	}
-	json.NewEncoder(w).Encode(CVEMemoryDB[:limit])
+
+	json.NewEncoder(w).Encode(CVEResponse{
+		Stats: cve.GetStats(),
+		CVEs:  cve.GetFirst(500),
+	})
 }
 
 	// CVE Search
@@ -80,9 +84,10 @@ func handleCVESearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	results := SearchLocalCVEs(query, "Any")
+	results := cve.Search(query, "")
 	json.NewEncoder(w).Encode(results)
 }
+
 
 func handleScan(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")

@@ -57,6 +57,7 @@ type LocalCVE struct {
     CVSS          float64 `json:"cvss"`
     VendorProject string  `json:"vendorProject"`
     Description   string  `json:"description"`
+    Severity      string  `json:"severity"`
 }
 
 var DeepScanTarget func(targetURL string) *TechProfile

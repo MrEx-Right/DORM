@@ -367,7 +367,7 @@ function startScan() {
     const proxyEnabled = document.getElementById('proxyToggle').checked;
     const proxyUrl = document.getElementById('proxyUrlInput').value || "http://127.0.0.1:8081";
 
-    const cveRadar = document.getElementById('cveRadarToggle').checked;
+    const cveRadar = false; // Toggle was removed from UI
 
     // Assign to global variable (Notice: query param is now "targets")
     scanEventSource = new EventSource(`/scan?targets=${encodeURIComponent(targetString)}&plugins=${encodeURIComponent(selected.join(","))}&delay=${speed}&rotateUA=${rotateUA}&auth=${encodeURIComponent(authHeader)}&proxyEnabled=${proxyEnabled}&proxyUrl=${encodeURIComponent(proxyUrl)}&cveRadar=${cveRadar}`);
