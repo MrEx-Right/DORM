@@ -39,7 +39,7 @@ Unlike traditional scanners, DORM features a hybrid engine that utilizes a **Nat
 ### 🧠 Advanced Capabilities
 - **🕷️ Smart Spider (Active Fuzzer):** Intelligently crawls, parses HTML forms, extracts API endpoints, and creates a shared intelligence pool for precision payload injections.
 - **🕸️ Next-Gen DOM & Reflected XSS Engine:** Tri-phase architecture with advanced WAF-bypassing payload arsenals and line-by-line static DOM taint analysis.
-- **📚 Local CVE Database & AI Correlation:** Zero-latency offline CISA KEV search engine with AI-driven Semantic Versioning for exact vulnerability matching.
+- **📚 NIST CVE Database Engine:** High-performance, zero-latency offline engine powered by `CVEProject/cvelistV5`. Synchronizes a massive repository of 280,000+ vulnerability records locally with intelligent delta updates for lightning-fast product/version correlation.
 - **🦎 Chameleon Mode & Evasion:** Dynamic User-Agent rotation, IP obfuscation, and smart jitter rate limiting to bypass WAFs and Firewalls.
 
 ### 🛡️ Comprehensive Attack Modules
