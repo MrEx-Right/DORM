@@ -73,7 +73,7 @@ func handleCVEDatabase(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-	// CVE Search
+// CVE Search
 func handleCVESearch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
@@ -87,7 +87,6 @@ func handleCVESearch(w http.ResponseWriter, r *http.Request) {
 	results := cve.Search(query, "")
 	json.NewEncoder(w).Encode(results)
 }
-
 
 func handleScan(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -340,9 +339,20 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	engine.AddPlugin(&plugins.TLSCipherPlugin{})
 
 	engine.AddPlugin(&plugins.Bypass403Plugin{})
-	engine.AddPlugin(&plugins.BFLABOLAPlugin{})   // BFLA/BOLA — HTTP Method Tampering + Role Escalation
-	engine.AddPlugin(&plugins.IPSpoofPlugin{})     // IP Spoof — Rate-Limit & WAF Bypass
+	engine.AddPlugin(&plugins.BFLABOLAPlugin{}) // BFLA/BOLA — HTTP Method Tampering + Role Escalation
+	engine.AddPlugin(&plugins.IPSpoofPlugin{})  // IP Spoof — Rate-Limit & WAF Bypass
 	engine.AddPlugin(&plugins.PromptInjectionPlugin{})
+
+	// ── Framework-Specific Security Misconfiguration Plugins ──
+	engine.AddPlugin(&plugins.DjangoPlugin{})
+	engine.AddPlugin(&plugins.RailsPlugin{})
+	engine.AddPlugin(&plugins.AspNetCorePlugin{})
+	engine.AddPlugin(&plugins.ExpressJSPlugin{})
+	engine.AddPlugin(&plugins.NextJSPlugin{})
+	engine.AddPlugin(&plugins.NestJSPlugin{})
+	engine.AddPlugin(&plugins.FastAPIPlugin{})
+	engine.AddPlugin(&plugins.SymfonyPlugin{})
+	engine.AddPlugin(&plugins.CodeIgniterPlugin{})
 
 	// Apply User Filters
 	engine.SetFilter(selectedPluginsStr)

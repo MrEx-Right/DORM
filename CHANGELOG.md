@@ -2,6 +2,67 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.17.0] - 2026-07-05
+### 🧩 Framework Security Suite & Detection Engine Hardening
+
+This update delivers three major improvements: a full framework-specific vulnerability suite (9 new plugins), a hardened Prompt Injection engine, and a false-positive fix for the TLS Cipher scanner — bringing the total active plugin count to **99**.
+
+---
+
+#### 🆕 Framework-Specific Security Misconfiguration Suite (9 New Plugins)
+
+A new category of plugins has been introduced targeting framework-level operational security misconfigurations. Each plugin first fingerprints the target framework via HTTP response signals (headers, cookies, body patterns), then fires a chain of active probes against framework-specific endpoints. Findings are returned only on confirmed body/header signal matches — no passive-only checks, no CVE exploitation. All 9 plugins follow the same `fingerprint → probe → signal → Vulnerability{}` architecture used by every other DORM module.
+
+- **Django Scanner (`django.go`):** Fingerprints via `/admin/` + `csrfmiddlewaretoken`. Detects: Debug mode active (`DisallowedHost`, `ImproperlyConfigured`, stack trace in 404), insecure `django-insecure-` secret key visible in error pages, admin panel exposed at `/admin/`, Django Debug Toolbar accessible at `/__debug__/`, DRF Browsable API renderer enabled (`/api/?format=api`), API schema publicly accessible (`/api/schema/`, `/api/docs/`), and static file directory listing (`/static/`). Aggregates all hits into a single finding with severity escalation up to `CRITICAL (CVSS 9.1)`.
+
+- **Ruby on Rails Scanner (`rails.go`):** Fingerprints via `X-Runtime: 0.` float header + `_session_id` cookie. Detects: `/rails/info/properties` exposing Ruby/Rails version and middleware stack, `/rails/info/routes` leaking the full route table, development exception pages rendering `ActionController::RoutingError` + `Rails.root`, mailer preview endpoint accessible at `/rails/mailers/`, asset source maps (`.js.map`, `.css.map`) downloadable, and Devise/auth sign-in endpoints enumerable.
+
+- **ASP.NET Core Scanner (`aspnetcore.go`):** Fingerprints via `X-Powered-By: ASP.NET`, `X-AspNet-Version` header, `Server: Microsoft-IIS/Kestrel`, or `__RequestVerificationToken` in body. Detects: Developer Exception Page revealing .NET stack traces and assembly paths, `Trace.axd` HTTP request history log, ELMAH error log (`/elmah.axd`), `web.config` backup files (`.bak`, `.old`, `.orig`) containing connection strings, Blazor WASM boot manifest (`/_framework/blazor.boot.json`) exposing assembly list, Swagger/OpenAPI UI accessible in production, health check endpoints leaking internal service topology (DB/Redis names), and SignalR hub negotiation endpoints returning `connectionToken` unauthenticated.
+
+- **Express/Node.js Scanner (`expressjs.go`):** Fingerprints via `X-Powered-By: Express` header + `connect.sid` cookie. Detects: `X-Powered-By` version disclosure, `package.json` publicly accessible (full dependency list), `package-lock.json`/`yarn.lock` lock file exposure, `node_modules/` directory listing enabled, `.env` file exposure containing `NODE_ENV`/`DB_PASSWORD`/`SECRET`/`API_KEY`, JavaScript source maps (`.js.map`) downloadable from web root, and application log endpoints (`/logs`, `/debug`, `/_logs`) returning plaintext log data.
+
+- **Next.js Scanner (`nextjs.go`):** Fingerprints via `__NEXT_DATA__` script tag in HTML + `/_next/static/` path or `x-nextjs-page` header. Detects: `__NEXT_DATA__` JSON blob containing `env`, `serverRuntimeConfig`, or `runtimeConfig` keys with non-empty values leaked to the client, build ID exposure at `/_next/BUILD_ID`, `next.config.js` publicly accessible, JavaScript source maps in `/_next/static/chunks/`, unprotected API routes returning secret/password/token/key/database fields, server-side env vars leaked into `pageProps`, and middleware authorization bypass via the `x-middleware-subrequest` header (status code differential detection).
+
+- **NestJS Scanner (`nestjs.go`):** Fingerprints via `X-Powered-By: Express` + `/api-json` OpenAPI response. Detects: Swagger/OpenAPI documentation publicly accessible (`/api`, `/api-docs`, `/swagger`, `/api-json`), internal module names leaked in malformed JSON POST error responses (`@nestjs/`, `TypeOrmModule`), health endpoint revealing DB/Redis/ORM dependency names, debug/log endpoints returning `[LOG]`/`[DEBUG]`/`[ERROR]` output, and unsecured API operations detected by parsing OpenAPI spec for missing `security` fields (threshold: >3 unguarded operations).
+
+- **FastAPI Scanner (`fastapi.go`):** Fingerprints via `Server: uvicorn`/`gunicorn` header or `/openapi.json` returning `"openapi"`. Detects: Swagger UI (`/docs`) and ReDoc (`/redoc`) publicly accessible, raw OpenAPI JSON schema exposed (`/openapi.json`), Pydantic v2 validation error objects leaking field schema (`"loc"` + `"msg"` + `"type"` triple), Python tracebacks (`Traceback (most recent call last)`) in 500 responses, Prometheus metrics endpoint (`/metrics`) returning `# HELP`/`# TYPE` lines, and CORS wildcard + credentials misconfiguration (`Access-Control-Allow-Origin: *` + `Access-Control-Allow-Credentials: true` simultaneously).
+
+- **Symfony Scanner (`symfony.go`):** Fingerprints via `X-Debug-Token` response header, `sf-dump` CSS class in body, or `Symfony\Component` in exception pages. Detects: Web Debug Toolbar accessible at `/_wdt/`, full Symfony Profiler request/response dump at `/_profiler/`, development front controllers (`app_dev.php`, `index_dev.php`) reachable in production, exception pages exposing `Symfony\Component` class names and Twig template paths, `.env` variant files (`/.env.local`, `/.env.dev`, `/.env.test`, `/.env.prod`) containing `APP_SECRET`/`DATABASE_URL`, and API Platform documentation accessible without authentication.
+
+- **CodeIgniter Scanner (`codeigniter.go`):** Fingerprints via `ci_session` cookie + `CodeIgniter` keyword in body or `/index.php/` URL pattern. Detects: PHP error display enabled (`A PHP Error was encountered`, `Severity: Notice`), `database.php` config file publicly accessible containing DB credentials, `config.php` exposed with encryption key and base URL, application/system directory listing (`/application/`, `/system/`), `phpinfo()` pages accessible, `ci_session` cookie missing `HttpOnly`/`Secure`/`SameSite` flags, and Spark CLI endpoint accessible via HTTP.
+
+---
+
+#### 🔁 Prompt Injection Engine — v2.0 (`prompt_injection.go`)
+
+Complete rewrite of the AI/LLM Prompt Injection scanner with significantly expanded coverage and a smarter detection mechanism.
+
+- **30 Payload Configurations:** Expanded from 3 to 30 unique injection configurations, each targeting a distinct bypass vector: classic direct override, DAN role-play persona swap, nested continuation injection, Markdown code-block smuggling, Base64 decode trick, JSON role injection, XML/CDATA smuggling, prompt-continuation override, Unicode homoglyph bypass, `[INST]` bracket override (Llama/Mistral format), token-stuffing via repetition, false-authority admin override, developer mode jailbreak, translation obfuscation, hypothetical framing, story/fiction framing, Socratic system prompt leak, reverse psychology, invisible zero-width Unicode injection, fake system message header spoofing, leetspeak encoded override, false memory injection, instruction chaining, escaped newline smuggling, fabricated chat-log injection, OpenAI function-call JSON injection, negative constraint bypass, emotional manipulation, URL parameter comment injection, and multi-language confusion (French).
+
+- **50-Word Feedback Signal Engine:** Detection logic entirely rewritten. Instead of checking for a single hardcoded canary string, the engine now maintains a dictionary of 50 feedback words — direct canary markers (`DORM_PWNED`, `DORM_INJECTED`, `DORM_CONFIRMED`, `DORM_CANARY`, `DORM_LEAKED`), obedience phrases (`sure, i can help with that`, `as instructed`, `following your instructions`, `previous instructions ignored`), system prompt leakage signals (`system prompt:`, `my instructions are`, `confidential instructions`), jailbreak confirmation phrases (`dan mode`, `developer mode enabled`, `do anything now`, `unrestricted mode`), and generic compliance outputs (`acknowledged`, `your wish is my command`, `consider it done`).
+
+- **HTML Body Grep Mechanism:** The detection pipeline strips all HTML markup from the response body using a compiled `regexp` before scanning — `stripHTML()` removes all `<tag>` elements and normalises whitespace, ensuring signals embedded in HTML-formatted responses (chat interfaces, rendered markdown) are not missed. `containsFeedbackSignal()` then applies case-insensitive `strings.Contains` against all 50 words on the cleaned plaintext.
+
+- **Status Code Independence:** The engine no longer requires HTTP 200 to process a response. Every response body — regardless of status code — is read and analysed. This captures AI APIs that return injection compliance in 400/500 error envelopes.
+
+- **Improved `urlParamEncode()`:** Expanded the minimal URL encoder to handle 10 special characters (`"`, `'`, `\n`, `\r`, `{`, `}`, `[`, `]`, `<`, `>`) in addition to spaces, enabling proper encoding of complex payloads in GET query parameters.
+
+- **Severity Upgrade:** Confirmed prompt injection findings are now rated `HIGH (CVSS 8.1)` (previously `MEDIUM 6.5`) reflecting the confirmed model compliance signal.
+
+- **Extended API Endpoint Coverage:** Added `/query`, `/api/query`, `/llm`, `/gpt`, `/assistant`, `/api/assistant` to the probe endpoint list (15 total, previously 9).
+
+---
+
+#### 🐛 TLS Cipher Scanner — False Positive Fix (`tlscipher.go`)
+
+Fixed a class of false positives caused by WAFs, CDNs, and load balancers that accept TLS handshakes for all cipher suites (for interception/inspection purposes) but immediately reset the connection with a TCP RST when the backend does not support the negotiated cipher.
+
+- **Root Cause:** The previous implementation flagged a cipher as "supported" immediately after a successful TLS handshake, before verifying that the server would actually transmit application data. WAFs completing handshakes for traffic analysis triggered false positives.
+
+- **Fix — Application Data Verification:** After the handshake + `ConnectionState` cipher check, the scanner now sends a minimal HTTP request (`GET / HTTP/1.0\r\n\r\n`) and attempts to read at least 1 byte of the response with a 2-second deadline. The cipher is only added to the confirmed weak list if: the server returns data (`readErr == nil`), the read times out (`timeout` in error string — server is holding the connection), or the connection is cleanly closed by the server (`eof` in error string). A hard TCP RST or TLS alert (connection reset by peer) is treated as a delayed WAF rejection and the cipher is discarded from results.
+
+---
+
 ## [v1.16.0] - 2026-06-26
 ### 🌐 NIST CVE Database (cvelistV5) & UX Update
 

@@ -43,7 +43,25 @@ func (p *TLSCipherPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		if err == nil {
 			state := conn.ConnectionState()
 			if state.CipherSuite == cipherID {
-				supportedWeakCiphers = append(supportedWeakCiphers, cipherName)
+				// Verify connection is truly established (prevent WAF delayed-rejection false positives)
+				conn.SetDeadline(time.Now().Add(2 * time.Second))
+				_, writeErr := conn.Write([]byte("GET / HTTP/1.0\r\n\r\n"))
+				
+				if writeErr == nil {
+					buf := make([]byte, 1)
+					_, readErr := conn.Read(buf)
+					
+					// If we can read data, or it timed out waiting for HTTP on a non-HTTP port, or gracefully closed:
+					// It's a true positive. If it's a TCP RST or TLS error, it's a delayed WAF rejection.
+					if readErr == nil {
+						supportedWeakCiphers = append(supportedWeakCiphers, cipherName)
+					} else {
+						errStr := strings.ToLower(readErr.Error())
+						if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "eof") {
+							supportedWeakCiphers = append(supportedWeakCiphers, cipherName)
+						}
+					}
+				}
 			}
 			conn.Close()
 		}
