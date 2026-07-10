@@ -380,6 +380,11 @@ function startScan() {
             return;
         }
 
+        if (data.Status === "ERROR") {
+            alert("Scan Error: " + data.Message);
+            return;
+        }
+
         vulnCount++; scanResults.push(data);
         const badgeClass = "sev-" + escapeHtml(data.Severity.toUpperCase());
 

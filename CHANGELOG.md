@@ -2,6 +2,37 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.18.0] - 2026-07-10
+### 🕷️ Spider & CVE Database Improvements
+
+This update significantly improves the Web Spider and the CVE Database Sync mechanisms, making DORM more resilient, accurate, and memory efficient.
+
+---
+
+#### 🕸️ Web Spider (v3) Engine Rewrite
+- **Timeout Protection:** Added context deadlines to `fetchBody` (`context.WithTimeout`). The spider now aborts requests safely if a target server hangs indefinitely, preventing runaway processes.
+- **Dynamic Config Limits:** Removed the hard-coded 150 URL limit. Added a new `SpiderConfig` struct that supports dynamic `MaxURLs` (default 500) and `MaxDepth` constraints to better handle large corporate sites.
+- **Robust HTML Parsing:** Removed fragile Regex-based HTML parsing for forms and links. Switched to `golang.org/x/net/html` for robust traversal. Regex is now only utilized as a fallback for extracting JavaScript paths.
+
+#### 🗄️ CVE Database Engine Enhancements
+- **Multi-Level Product Resolution:** Fixed a major issue where over 150K CVEs were being skipped due to missing product identifiers. The engine now uses a 3-tier fallback logic:
+  1. Primary: Reads the structured Product tag.
+  2. Fallback: Uses the Vendor Project tag if Product is missing or "n/a".
+  3. NLP Fallback: Extracts the product name directly from the description text via grammatical patterns (e.g., "flaw in the X module").
+- **Universal Language Fallback:** Descriptions are no longer restricted strictly to "en" or "en-US". The engine will accept any available language description if English is missing.
+- **Skip Diagnostics Logging:** Added explicit skip counters (`state`, `no_desc`, `no_product`) during database compilation to provide better visibility into why certain CVEs are rejected (e.g., REJECTED/RESERVED states).
+- **Format & Path Changes:** Converted `cve_full.json` serialization from minified strings to indented JSON (`json.MarshalIndent`) for manual inspection. Moved the database location from `wordlists/` to a dedicated `cve/` directory.
+
+#### 🎯 Passive CVE Plugin Enhancements
+- **Composite Key Search:** Enhanced the index search capability (`Search()`) to query both simple product names and `vendor:product` composite keys, and increased the result limits from 25 to 50 deduplicated hits.
+- **Unrestricted Reporting:** Removed the CVSS thresholds that previously dropped MEDIUM and LOW vulnerabilities. The engine now reports every matched CVE regardless of its score.
+- **Versionless Reporting:** If a technology version cannot be fingerprinted, DORM will now report all discovered CVEs (up to the limit) for the matching product as potential risks instead of silently skipping them.
+
+#### 🖥️ UI & Scan Stability
+- **Unreachable Target Validation:** If a user enters a dead IP or domain, the UI no longer silently resets to the "START SCAN" state. The backend immediately fires an explicit `"ERROR"` SSE payload, and the frontend intercepts this to display a browser alert. Scan history now correctly reflects a "Failed" status for unreachable targets.
+- **Localization:** Translated all Turkish comments and strings across the Spider component into professional English.
+
+
 ## [v1.17.0] - 2026-07-05
 ### 🧩 Framework Security Suite & Detection Engine Hardening
 

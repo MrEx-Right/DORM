@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	FullDBFile     = "wordlists/cve_full.json"
+	FullDBFile     = "cve/cve_full.json"
 	UpdateInterval = 24 * time.Hour
 )
 
@@ -149,7 +149,7 @@ func getLatestURLs() (fullURL, deltaURL string, err error) {
 // SyncFullDatabase downloads and loads the CVEProject nightly snapshot.
 // Blocks until complete; safe to call at startup.
 func SyncFullDatabase() {
-	os.MkdirAll("wordlists", os.ModePerm)
+	os.MkdirAll("cve", os.ModePerm)
 
 	fileInfo, err := os.Stat(FullDBFile)
 	hasLocal := err == nil
@@ -225,7 +225,7 @@ func downloadAndProcess(zipURL string) error {
 	}
 
 	fmt.Printf("[+] CVE Database: Parsed %d CVEs, writing to disk...\n", len(records))
-	outBytes, err := json.Marshal(records)
+	outBytes, err := json.MarshalIndent(records, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal error: %v", err)
 	}
@@ -291,7 +291,7 @@ func downloadAndProcessDelta(zipURL string) error {
 	}
 	fmt.Printf("[+] CVE Database: %d updated, %d added. Writing to disk...\n", updates, adds)
 
-	outBytes, err := json.Marshal(localDB)
+	outBytes, err := json.MarshalIndent(localDB, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal error: %v", err)
 	}
@@ -306,7 +306,12 @@ func downloadAndProcessDelta(zipURL string) error {
 
 func processEntries(zipReader *zip.Reader) ([]models.LocalCVE, error) {
 	var records []models.LocalCVE
-	processed, skipped := 0, 0
+	processed := 0
+	skipReasons := map[string]int{
+		"state":   0, // REJECTED / RESERVED
+		"no_desc": 0, // no usable description in any language
+		"no_prod": 0, // no product AND no vendor AND no desc hint
+	}
 
 	for _, f := range zipReader.File {
 		base := path.Base(f.Name)
@@ -348,9 +353,9 @@ func processEntries(zipReader *zip.Reader) ([]models.LocalCVE, error) {
 			continue
 		}
 
-		rec := parseCVE5(data)
+		rec, skipReason := parseCVE5(data)
 		if rec == nil {
-			skipped++
+			skipReasons[skipReason]++
 			continue
 		}
 
@@ -360,35 +365,57 @@ func processEntries(zipReader *zip.Reader) ([]models.LocalCVE, error) {
 			fmt.Printf("[*] CVE Database: Processed %d records...\n", processed)
 		}
 	}
-	fmt.Printf("[+] CVE Database: %d parsed, %d skipped\n", processed, skipped)
+	totalSkipped := skipReasons["state"] + skipReasons["no_desc"] + skipReasons["no_prod"]
+	fmt.Printf("[+] CVE Database: %d parsed, %d skipped (state=%d, no_desc=%d, no_product=%d)\n",
+		processed, totalSkipped, skipReasons["state"], skipReasons["no_desc"], skipReasons["no_prod"])
 	return records, nil
 }
 
 // --- CVE JSON 5.0 Parser ---
 
-func parseCVE5(data []byte) *models.LocalCVE {
+// parseCVE5 parses a single CVE JSON 5.0 file into a LocalCVE record.
+// Returns (nil, reason) when the entry should be discarded.
+// Skip reasons:
+//   - "state"   : entry is REJECTED or RESERVED (no real data)
+//   - "no_desc" : no description found in any language
+//   - "no_prod" : cannot derive a product identifier by any fallback
+func parseCVE5(data []byte) (*models.LocalCVE, string) {
 	var root cve5Root
 	if err := json.Unmarshal(data, &root); err != nil {
-		return nil
-	}
-	if root.CveMetadata.State != "PUBLISHED" {
-		return nil
+		return nil, "state"
 	}
 
+	// Only REJECTED and RESERVED are genuinely useless.
+	state := root.CveMetadata.State
+	if state == "REJECTED" || state == "RESERVED" {
+		return nil, "state"
+	}
+
+	// --- Description: prefer English, fall back to any language ---
 	desc := ""
+	var anyLangDesc string
 	for _, d := range root.Containers.CNA.Descriptions {
-		if d.Lang == "en" {
+		switch d.Lang {
+		case "en":
 			desc = d.Value
-			break
-		}
-		if d.Lang == "en-US" && desc == "" {
-			desc = d.Value
+		case "en-US", "en-GB":
+			if desc == "" {
+				desc = d.Value
+			}
+		default:
+			if anyLangDesc == "" {
+				anyLangDesc = d.Value
+			}
 		}
 	}
 	if desc == "" {
-		return nil
+		desc = anyLangDesc // last resort: non-English description
+	}
+	if desc == "" {
+		return nil, "no_desc"
 	}
 
+	// --- CVSS score ---
 	var cvss float64
 	severity := ""
 	for _, m := range root.Containers.CNA.Metrics {
@@ -409,6 +436,7 @@ func parseCVE5(data []byte) *models.LocalCVE {
 		severity = CVSSToSeverity(cvss)
 	}
 
+	// --- Product resolution: 3-tier fallback ---
 	vendor, product, version := "", "", ""
 	if len(root.Containers.CNA.Affected) > 0 {
 		aff := root.Containers.CNA.Affected[0]
@@ -418,8 +446,28 @@ func parseCVE5(data []byte) *models.LocalCVE {
 			version = aff.Versions[0].Version
 		}
 	}
-	if product == "" || product == "n/a" || product == "none" {
-		return nil
+
+	// Tier 1: clean up placeholder values
+	if product == "n/a" || product == "none" || product == "unspecified" {
+		product = ""
+	}
+	if vendor == "n/a" || vendor == "none" || vendor == "unspecified" {
+		vendor = ""
+	}
+
+	// Tier 2: fall back to vendor when product is missing
+	if product == "" && vendor != "" {
+		product = vendor
+	}
+
+	// Tier 3: extract a hint from the description.
+	// Looks for patterns like "in X ", "in the X ", "plugin X", "software X".
+	if product == "" {
+		product = extractProductHint(desc)
+	}
+
+	if product == "" {
+		return nil, "no_prod"
 	}
 
 	if len(desc) > 400 {
@@ -434,7 +482,52 @@ func parseCVE5(data []byte) *models.LocalCVE {
 		CVSS:          cvss,
 		Severity:      severity,
 		Description:   desc,
+	}, ""
+}
+
+// extractProductHint attempts to derive a product name from a CVE description
+// by scanning for common grammatical patterns used in vulnerability write-ups.
+func extractProductHint(desc string) string {
+	descLower := strings.ToLower(desc)
+
+	// Patterns: "vulnerability in X", "issue in X", "flaw in X", "bug in X",
+	//           "in the X plugin", "in X before", "affecting X"
+	patterns := []struct{ prefix, stop string }{
+		{"vulnerability in the ", " "},
+		{"vulnerability in ", " "},
+		{"issue in the ", " "},
+		{"issue in ", " "},
+		{"flaw in the ", " "},
+		{"flaw in ", " "},
+		{"in the ", " plugin"},
+		{"in the ", " component"},
+		{"in the ", " module"},
+		{"affecting ", " "},
 	}
+
+	for _, p := range patterns {
+		idx := strings.Index(descLower, p.prefix)
+		if idx < 0 {
+			continue
+		}
+		start := idx + len(p.prefix)
+		end := strings.Index(descLower[start:], p.stop)
+		if end < 0 {
+			// take up to next space or end
+			end = strings.IndexAny(descLower[start:], " ,.(")
+		}
+		if end < 0 {
+			end = len(descLower) - start
+		}
+		hint := strings.TrimSpace(desc[start : start+end])
+		hint = strings.ToLower(hint)
+		// Sanity: reject if it looks like noise
+		if len(hint) >= 2 && len(hint) <= 60 &&
+			!strings.ContainsAny(hint, "<>{}") {
+			return hint
+		}
+	}
+	return ""
 }
 
 // --- Load from Disk + Build Index ---
@@ -471,7 +564,9 @@ func loadFromDisk() {
 
 // --- Search ---
 
-// Search performs a fast indexed product CVE lookup.
+// Search performs a fast indexed CVE lookup by product name.
+// It queries both the plain product key and any vendor:product composite key,
+// returning up to 50 deduplicated results for the caller to filter further.
 func Search(product, version string) []models.LocalCVE {
 	product = strings.ToLower(strings.TrimSpace(product))
 	if product == "" {
@@ -488,18 +583,31 @@ func Search(product, version string) []models.LocalCVE {
 	seen := make(map[int]struct{})
 	var matches []models.LocalCVE
 
-	for _, idx := range productIndex[product] {
-		if _, ok := seen[idx]; ok {
-			continue
+	// Collect candidate index positions from all matching keys.
+	// Keys to probe: exact product, and any "vendor:product" entry.
+	keysToProbe := []string{product}
+	for k := range productIndex {
+		// vendor:product composite keys contain a colon
+		if strings.HasSuffix(k, ":"+product) {
+			keysToProbe = append(keysToProbe, k)
 		}
-		seen[idx] = struct{}{}
-		matches = append(matches, MemoryDB[idx])
-		if len(matches) >= 25 {
-			return matches
+	}
+
+	for _, key := range keysToProbe {
+		for _, idx := range productIndex[key] {
+			if _, ok := seen[idx]; ok {
+				continue
+			}
+			seen[idx] = struct{}{}
+			matches = append(matches, MemoryDB[idx])
+			if len(matches) >= 50 {
+				return matches
+			}
 		}
 	}
 	return matches
 }
+
 
 func searchLinear(product string) []models.LocalCVE {
 	var out []models.LocalCVE

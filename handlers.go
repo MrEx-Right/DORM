@@ -358,9 +358,11 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	engine.SetFilter(selectedPluginsStr)
 
 	if len(activeTargets) == 0 {
+		// Send explicit error to frontend so it doesn't just silently stop
+		fmt.Fprintf(w, "data: {\"Status\": \"ERROR\", \"Message\": \"No reachable ports found for the provided target(s). Check your input or network.\"}\n\n")
 		fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
 		flusher.Flush()
-		record.Status = "Completed"
+		record.Status = "Failed"
 		record.EndTime = time.Now()
 		DB.UpdateScan(record.ID, record)
 		return
