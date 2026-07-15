@@ -4,6 +4,7 @@ import (
 	"DORM/analyzer"
 	"DORM/cve"
 	"DORM/models"
+	"DORM/sitemapper"
 	"fmt"
 	"net/http"
 	"time"
@@ -18,6 +19,14 @@ func main() {
 	models.SearchExploitDB = SearchExploitDB
 	// 1. Initialize the Database
 	InitDB("dorm_engine.db")
+
+	// Wire sitemapper DB callback (avoids circular import)
+	sitemapper.OnSiteMapReady = func(host, scanID string, sm *sitemapper.SiteMap) {
+		if err := DB.SaveSiteMap(host, scanID, sm); err != nil {
+			fmt.Printf("[Sitemapper] DB save error for %s: %v\n", host, err)
+		}
+	}
+
 	// 2. Sync full CVEProject database (~280K CVEs) — blocking at startup
 	cve.SyncFullDatabase()
 
@@ -35,7 +44,7 @@ func main() {
 	http.HandleFunc("/stop", handleStop)
 	http.HandleFunc("/plugins", handlePluginList)
 
-	// 2. Register History API Routes
+	// History API Routes
 	http.HandleFunc("/api/history", handleHistory)
 	http.HandleFunc("/api/history/delete", handleDelete)
 	http.HandleFunc("/api/history/delete_all", handleDeleteAll)
@@ -43,6 +52,10 @@ func main() {
 	// CVE DB API Routes
 	http.HandleFunc("/api/cvedb", handleCVEDatabase)
 	http.HandleFunc("/api/cvedb/search", handleCVESearch)
+
+	// Sitemapper API Routes
+	http.HandleFunc("/api/sitemap", handleSiteMap)
+	http.HandleFunc("/api/sitemap/list", handleSiteMapList)
 
 	port := ":8080"
 	url := "http://localhost" + port
@@ -53,7 +66,7 @@ func main() {
 ██║  ██║██║   ██║██████╔╝██╔████╔██║
 ██║  ██║██║   ██║██╔══██╗██║╚██╔╝██║
 ██████╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
-╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.18.0
+╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.19.0
 
        [ Security Engine • Active ]
 `

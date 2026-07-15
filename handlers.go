@@ -5,6 +5,7 @@ import (
 	"DORM/cve"
 	"DORM/models"
 	"DORM/plugins"
+	"DORM/sitemapper"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,8 +14,10 @@ import (
 	"net/url"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"DORM/bypassers"
 	"time"
 )
 
@@ -117,11 +120,6 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	selectedPluginsStr := r.URL.Query().Get("plugins")
 
 	// --- UPDATE CLIENT SETTINGS (Located in client.go) ---
-	if r.URL.Query().Get("rotateUA") == "true" {
-		GlobalRotateUA = true
-	} else {
-		GlobalRotateUA = false
-	}
 	GlobalAuthHeader = r.URL.Query().Get("auth")
 
 	// Proxy Setup
@@ -130,6 +128,20 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		GlobalProxyURL = proxyUrl
 	}
 	InitTransport() // Initialize proxy transport and connection pool safely
+
+	// --- WAF BYPASS SETTINGS ---
+	bypassers.GlobalDelayConfig.BaseDelayMs = 0
+	bypassers.GlobalDelayConfig.JitterMs = 0
+	if delayStr := r.URL.Query().Get("wafDelay"); delayStr != "" {
+		if d, err := strconv.Atoi(delayStr); err == nil {
+			bypassers.GlobalDelayConfig.BaseDelayMs = d
+		}
+	}
+	if jitterStr := r.URL.Query().Get("wafJitter"); jitterStr != "" {
+		if j, err := strconv.Atoi(jitterStr); err == nil {
+			bypassers.GlobalDelayConfig.JitterMs = j
+		}
+	}
 	// ----------------------------------------------------
 
 	if targetsParam == "" {
@@ -185,11 +197,32 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	record := NewScanRecord(recordTitle)
 	DB.SaveScan(record)
 
+	// Stream the generated ScanID back to the frontend immediately so live updates work!
+	fmt.Fprintf(w, "data: {\"Status\": \"STARTED\", \"ScanID\": \"%s\"}\n\n", record.ID)
+	flusher.Flush()
+
 	var foundVulns []*models.Vulnerability
 	var muVulns sync.Mutex
 	// --- STORAGE INTEGRATION END ---
 
-	// STEP 1: SMART PORT DISCOVERY (FAST PRE-SCAN)
+	// STEP 1: PRE-SCAN — Run Sitemapper before the engine starts
+	// This ensures all plugins find rich endpoint data in SharedData when they run.
+	fmt.Printf("[*] Running Sitemapper for %d target(s)...\n", len(sanitizedTargets))
+	for _, host := range sanitizedTargets {
+		proto := "http"
+		// Sitemapper will try http; it handles redirects to https internally
+		targetURL := fmt.Sprintf("%s://%s", proto, host)
+		go func(tURL, tHost string) {
+			sm, err := sitemapper.QuickWithContext(ctx, tURL, record.ID)
+			if err != nil {
+				fmt.Printf("[Sitemapper] Error for %s: %v\n", tHost, err)
+				return
+			}
+			_ = sm
+		}(targetURL, host)
+	}
+
+	// STEP 2: SMART PORT DISCOVERY (FAST PRE-SCAN)
 	fmt.Printf("[*] Discovered %d target(s) for scanning...\n", len(sanitizedTargets))
 
 	commonPorts := []int{
@@ -410,6 +443,67 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 }
 
+// handleSiteMap returns the site map for a given host.
+// First checks in-memory SharedData (live scan), then falls back to SQLite.
+func handleSiteMap(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+
+	host := r.URL.Query().Get("target")
+	scanID := r.URL.Query().Get("scan_id")
+	if host == "" {
+		http.Error(w, "Missing 'target' parameter", http.StatusBadRequest)
+		return
+	}
+	if scanID == "" {
+		http.Error(w, "Missing 'scan_id' parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Normalize: strip scheme if provided
+	host = strings.TrimPrefix(host, "http://")
+	host = strings.TrimPrefix(host, "https://")
+	host = strings.TrimRight(host, "/")
+
+	// 1. Try in-memory (running or recently completed scan)
+	if sm := sitemapper.GetSiteMap(host); sm != nil && sm.ScanID == scanID {
+		json.NewEncoder(w).Encode(sm)
+		return
+	}
+
+	// 2. Fall back to database
+	sm, err := DB.GetSiteMap(host, scanID)
+	if err != nil {
+		http.Error(w, `{"error":"No sitemap found for this target. Run a scan first."}`, http.StatusNotFound)
+		return
+	}
+
+	json.NewEncoder(w).Encode(sm)
+}
+
+// handleSiteMapList returns the list of hosts that have a stored SiteMap for a specific scanID.
+func handleSiteMapList(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+
+	scanID := r.URL.Query().Get("scan_id")
+	if scanID == "" {
+		json.NewEncoder(w).Encode([]string{})
+		return
+	}
+
+	hosts, err := DB.ListSiteMapHosts(scanID)
+	if err != nil {
+		http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+		return
+	}
+
+	if hosts == nil {
+		hosts = []string{}
+	}
+	json.NewEncoder(w).Encode(hosts)
+}
+
 // --- HISTORY API HANDLERS ---
 
 func handleHistory(w http.ResponseWriter, r *http.Request) {
@@ -433,20 +527,21 @@ func handleDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := r.URL.Query().Get("id")
-	if id == "" {
+	scanID := r.URL.Query().Get("id")
+	if scanID == "" {
 		http.Error(w, "Missing 'id' parameter", http.StatusBadRequest)
 		return
 	}
 
-	err := DB.DeleteScan(id)
-	if err != nil {
-		http.Error(w, "Failed to delete: "+err.Error(), http.StatusInternalServerError)
+	if err := DB.DeleteScan(scanID); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusInternalServerError)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Scan deleted successfully"))
+	// Also delete any associated sitemaps
+	DB.DeleteSiteMapsByScanID(scanID)
+
+	fmt.Fprintf(w, `{"status":"success"}`)
 }
 
 func handleDeleteAll(w http.ResponseWriter, r *http.Request) {
@@ -457,12 +552,13 @@ func handleDeleteAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := DB.DeleteAllScans()
-	if err != nil {
-		http.Error(w, "Failed to delete all history: "+err.Error(), http.StatusInternalServerError)
+	if err := DB.DeleteAllScans(); err != nil {
+		http.Error(w, `{"error":"Failed to clear history"}`, http.StatusInternalServerError)
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("All history deleted successfully"))
+	// Clear all sitemaps as well
+	DB.DeleteAllSiteMaps()
+
+	fmt.Fprintf(w, `{"status":"success"}`)
 }

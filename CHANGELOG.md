@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.19.0] - 2026-07-14
+### 🛡️ WAF Bypass Engine & UI Enhancements
+
+This update introduces a dedicated WAF bypass architecture to help DORM evade enterprise rate-limiting and signature-based WAFs. It also fixes critical real-time state synchronization issues with the Sitemapper module.
+
+---
+
+#### 🥷 WAF Bypass Framework (`bypassers/`)
+- **Rate Limiting / Jitter (`delay.go`):** Added a global sleep mechanism with configurable base delay and random jitter (ms) to throttle outgoing requests and bypass rate-limiting WAF rules.
+- **User-Agent Rotation (`rotateagent.go`):** Extracted UA rotation logic into a dedicated module and hardcoded it to be permanently active for all outgoing plugin and spider requests.
+- **Null-Byte Injection (`nullbyte.go`):** Implemented safe `%00` injection logic for future payloads to exploit path truncation flaws in backend parsing.
+- **Double URL Encoding (`uep.go`):** Added a payload transformer that double URL encodes malicious payloads (`<script>` -> `%253Cscript%253E`) to bypass WAFs that only decode inputs once.
+
+#### 🖥️ UI & Control Panel
+- **WAF Bypass Menu:** Added a dedicated "WAF Bypass" tab to the left navigation menu, allowing users to configure Base Delay, Jitter, Null-Byte, and UEP settings dynamically before starting a scan.
+- **Proxy Icon Update:** Changed the Proxy Settings icon to `fa-server` to distinguish it visually from the Sitemap icon.
+- **Rotate User-Agent Removed:** Removed the "Rotate User-Agent" toggle from the UI, as this feature is now a permanently enabled stealth mechanism in the core HTTP client.
+
+#### 🗄️ Core Engine & Sitemapper Fixes
+- **Sitemap Sync & Polling:** Fixed a synchronization bug where Sitemapper results were not streaming to the frontend during scans. The backend now immediately fires a `STARTED` SSE payload containing the `ScanID`, allowing the frontend to begin polling `db_site_maps` instantly.
+
+
 ## [v1.18.0] - 2026-07-10
 ### 🕷️ Spider & CVE Database Improvements
 

@@ -8,6 +8,15 @@ import (
 // SharedData is a global concurrent map for sharing data between plugins
 var SharedData sync.Map
 
+// SharedData key prefixes — always append the target hostname.
+const (
+	KeyPrefixSiteMap    = "sitemap_"    // *sitemapper.SiteMap
+	KeyPrefixEndpoints  = "endpoints_"  // []models.Endpoint
+	KeyPrefixForbidden  = "forbidden_"  // []string (403/401 paths + robots disallows)
+	KeyPrefixJSFiles    = "jsfiles_"    // []string (JS file URLs)
+	KeyPrefixTechProfile = "techprofile_" // *models.TechProfile
+)
+
 type ScanTarget struct {
 	IP   string
 	Port int

@@ -2,6 +2,7 @@ package main
 
 import (
 	"DORM/models"
+	"DORM/sitemapper"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -42,6 +43,28 @@ type DBScanRecord struct {
 	CreatedAt       time.Time `gorm:"index"`
 }
 
+// DBSiteMap is the GORM model for persisting SiteMap data to dorm_engine.db.
+// One record per host — each new scan overwrites the previous one for that host.
+type DBSiteMap struct {
+	ID             string    `gorm:"primaryKey"`
+	Host           string    `gorm:"index"` // changed from uniqueIndex
+	ScanID         string    `gorm:"index"`
+	BaseURL        string
+	TotalPages     int
+	TotalForms     int
+	TotalEndpoints int
+	TotalJSFiles   int
+	MaxDepth       int
+	Technologies   string // JSON: map[string]int
+	RobotDisallows string // JSON: []string
+	SitemapURLs    string // JSON: []string
+	PagesJSON      []byte // full []sitemapper.Page
+	EndpointsJSON  []byte // full []sitemapper.Endpoint
+	FormsJSON      []byte // full []sitemapper.Form
+	JSFilesJSON    []byte // full []sitemapper.JSFile
+	CreatedAt      time.Time `gorm:"index"`
+}
+
 // StorageManager handles thread-safe DB operations.
 type StorageManager struct {
 	db    *gorm.DB
@@ -61,7 +84,7 @@ func InitDB(path string) {
 		log.Fatalf("[!] Failed to connect to database: %v", err)
 	}
 
-	err = database.AutoMigrate(&DBScanRecord{})
+	err = database.AutoMigrate(&DBScanRecord{}, &DBSiteMap{})
 	if err != nil {
 		log.Fatalf("[!] Database migration failed: %v", err)
 	}
@@ -207,6 +230,160 @@ func NewScanRecord(target string) ScanRecord {
 		SeverityStats:   make(map[string]int),
 		Vulnerabilities: []*models.Vulnerability{},
 	}
+}
+
+// ==========================================
+// SITEMAPPER STORAGE OPERATIONS
+// ==========================================
+
+// SaveSiteMap persists a SiteMap to the database. Uses upsert (by ScanID + Host) so each host
+// per scan always has a single up-to-date record.
+func (s *StorageManager) SaveSiteMap(host, scanID string, sm *sitemapper.SiteMap) error {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	pagesJSON, _ := json.Marshal(sm.Pages)
+	endpointsJSON, _ := json.Marshal(sm.Endpoints)
+	formsJSON, _ := json.Marshal(sm.Forms)
+	jsFilesJSON, _ := json.Marshal(sm.JSFiles)
+	techJSON, _ := json.Marshal(sm.Stats.Technologies)
+	robotJSON, _ := json.Marshal(sm.RobotDisallows)
+	sitemapURLsJSON, _ := json.Marshal(sm.SitemapURLs)
+
+	record := DBSiteMap{
+		Host:           host,
+		ScanID:         scanID,
+		BaseURL:        sm.BaseURL,
+		TotalPages:     sm.Stats.TotalPages,
+		TotalForms:     sm.Stats.TotalForms,
+		TotalEndpoints: sm.Stats.TotalEndpoints,
+		TotalJSFiles:   sm.Stats.TotalJSFiles,
+		MaxDepth:       sm.Stats.MaxDepth,
+		Technologies:   string(techJSON),
+		RobotDisallows: string(robotJSON),
+		SitemapURLs:    string(sitemapURLsJSON),
+		PagesJSON:      pagesJSON,
+		EndpointsJSON:  endpointsJSON,
+		FormsJSON:      formsJSON,
+		JSFilesJSON:    jsFilesJSON,
+		CreatedAt:      sm.CreatedAt,
+	}
+
+	// Find existing record by scan_id + host for upsert
+	var existing DBSiteMap
+	err := s.db.Where("scan_id = ? AND host = ?", scanID, host).First(&existing).Error
+	if err == nil {
+		// Update existing
+		record.ID = existing.ID
+	} else {
+		// Create new
+		record.ID = uuid.New().String()
+	}
+
+	return s.db.Save(&record).Error
+}
+
+// GetSiteMap retrieves the SiteMap for a given host and scanID from the database.
+func (s *StorageManager) GetSiteMap(host, scanID string) (*sitemapper.SiteMap, error) {
+	s.Mutex.RLock()
+	defer s.Mutex.RUnlock()
+
+	var record DBSiteMap
+	if err := s.db.Where("scan_id = ? AND host = ?", scanID, host).First(&record).Error; err != nil {
+		return nil, fmt.Errorf("sitemap not found for host %s in scan %s", host, scanID)
+	}
+
+	return dbSiteMapToModel(&record), nil
+}
+
+// GetSiteMapByScanID retrieves a SiteMap by its associated scan ID.
+func (s *StorageManager) GetSiteMapByScanID(scanID string) (*sitemapper.SiteMap, error) {
+	s.Mutex.RLock()
+	defer s.Mutex.RUnlock()
+
+	var record DBSiteMap
+	if err := s.db.Where("scan_id = ?", scanID).First(&record).Error; err != nil {
+		return nil, fmt.Errorf("sitemap not found for scan: %s", scanID)
+	}
+
+	return dbSiteMapToModel(&record), nil
+}
+
+// ListSiteMapHosts returns all hosts that have a stored SiteMap for a specific scanID.
+func (s *StorageManager) ListSiteMapHosts(scanID string) ([]string, error) {
+	s.Mutex.RLock()
+	defer s.Mutex.RUnlock()
+
+	var records []DBSiteMap
+	if err := s.db.Where("scan_id = ?", scanID).Select("host").Order("created_at desc").Find(&records).Error; err != nil {
+		return nil, err
+	}
+
+	hosts := make([]string, 0, len(records))
+	for _, r := range records {
+		hosts = append(hosts, r.Host)
+	}
+	return hosts, nil
+}
+
+// DeleteSiteMapsByScanID removes all stored SiteMaps for a given scanID.
+func (s *StorageManager) DeleteSiteMapsByScanID(scanID string) error {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	return s.db.Where("scan_id = ?", scanID).Delete(&DBSiteMap{}).Error
+}
+
+// DeleteAllSiteMaps removes all stored SiteMaps.
+func (s *StorageManager) DeleteAllSiteMaps() error {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	return s.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&DBSiteMap{}).Error
+}
+
+// dbSiteMapToModel converts a DBSiteMap GORM record back into a sitemapper.SiteMap.
+func dbSiteMapToModel(r *DBSiteMap) *sitemapper.SiteMap {
+	sm := &sitemapper.SiteMap{
+		Host:      r.Host,
+		BaseURL:   r.BaseURL,
+		ScanID:    r.ScanID,
+		CreatedAt: r.CreatedAt,
+		Stats: sitemapper.MapStats{
+			TotalPages:     r.TotalPages,
+			TotalForms:     r.TotalForms,
+			TotalEndpoints: r.TotalEndpoints,
+			TotalJSFiles:   r.TotalJSFiles,
+			MaxDepth:       r.MaxDepth,
+			Technologies:   make(map[string]int),
+		},
+	}
+
+	json.Unmarshal([]byte(r.Technologies), &sm.Stats.Technologies)
+	json.Unmarshal([]byte(r.RobotDisallows), &sm.RobotDisallows)
+	json.Unmarshal([]byte(r.SitemapURLs), &sm.SitemapURLs)
+	json.Unmarshal(r.PagesJSON, &sm.Pages)
+	json.Unmarshal(r.EndpointsJSON, &sm.Endpoints)
+	json.Unmarshal(r.FormsJSON, &sm.Forms)
+	json.Unmarshal(r.JSFilesJSON, &sm.JSFiles)
+
+	if sm.RobotDisallows == nil {
+		sm.RobotDisallows = []string{}
+	}
+	if sm.Pages == nil {
+		sm.Pages = []sitemapper.Page{}
+	}
+	if sm.Endpoints == nil {
+		sm.Endpoints = []sitemapper.Endpoint{}
+	}
+	if sm.Forms == nil {
+		sm.Forms = []sitemapper.Form{}
+	}
+	if sm.JSFiles == nil {
+		sm.JSFiles = []sitemapper.JSFile{}
+	}
+
+	return sm
 }
 
 // ==========================================

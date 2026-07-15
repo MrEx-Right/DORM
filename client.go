@@ -2,12 +2,13 @@ package main
 
 import (
 	"crypto/tls"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	"DORM/bypassers"
 )
 
 // ==========================================
@@ -15,7 +16,7 @@ import (
 // ==========================================
 
 // Global Variables (Controlled by main.go/handleScan)
-var GlobalRotateUA bool = false
+
 var GlobalAuthHeader string = ""
 var GlobalProxyEnabled bool = false
 var GlobalProxyURL string = "http://127.0.0.1:8080"
@@ -52,18 +53,7 @@ func InitTransport() {
 	baseTransport = customTransport
 }
 
-// User Agent List
-var userAgents = []string{
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/121.0",
-	"Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
-}
 
-func getRandomUserAgent() string {
-	return userAgents[rand.Intn(len(userAgents))]
-}
 
 // --- PROXY MIDDLEWARE (The Brain) ---
 type UARoundTripper struct {
@@ -72,9 +62,8 @@ type UARoundTripper struct {
 
 func (urt *UARoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	// 1. User-Agent Rotation (Bukalemun)
-	if GlobalRotateUA {
-		req.Header.Set("User-Agent", getRandomUserAgent())
-	}
+	// Always enabled now as part of Stealth module
+	req.Header.Set("User-Agent", bypassers.GetRandomUserAgent())
 
 	// 2. Auth Injection (Cookie/Token)
 	if GlobalAuthHeader != "" {
@@ -86,6 +75,9 @@ func (urt *UARoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 			req.Header.Set(key, val)
 		}
 	}
+
+	// 3. WAF Rate Limiting / Jitter Bypass
+	bypassers.Sleep()
 
 	return urt.Proxied.RoundTrip(req)
 }
