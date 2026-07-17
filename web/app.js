@@ -628,14 +628,18 @@ function checkAllPlugins(state) {
 // --- CVE DB LOGIC ---
 async function loadCVEDatabase() {
     const tbody = document.getElementById('cveTableBody');
-    const stats = document.getElementById('cveStats');
+    const statsEl = document.getElementById('cveStats');
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:40px; color:var(--accent);">Loading CVE records...</td></tr>';
     
     try {
         const resp = await fetch('/api/cvedb');
-        const cves = await resp.json();
-        
-        stats.innerText = `Total Records: ${cves.length}+`;
+        const data = await resp.json();
+
+        // Backend returns { stats: {total_cves, ...}, cves: [...] }
+        const cves = data.cves || [];
+        const totalCount = (data.stats && data.stats.total_cves) ? data.stats.total_cves : cves.length;
+
+        statsEl.innerText = `Total Records: ${totalCount.toLocaleString()}`;
         
         tbody.innerHTML = '';
         if (cves.length === 0) {
@@ -678,13 +682,19 @@ async function searchCVEs() {
 function renderCVELines(cves) {
     const tbody = document.getElementById('cveTableBody');
     cves.forEach(c => {
-        const badgeClass = c.cvss >= 9.0 ? 'sev-CRITICAL' : (c.cvss >= 7.0 ? 'sev-HIGH' : 'sev-MEDIUM');
+        let badgeClass;
+        if (c.cvss >= 9.0)      badgeClass = 'sev-CRITICAL';
+        else if (c.cvss >= 7.0) badgeClass = 'sev-HIGH';
+        else if (c.cvss >= 4.0) badgeClass = 'sev-MEDIUM';
+        else if (c.cvss > 0)    badgeClass = 'sev-LOW';
+        else                    badgeClass = 'sev-INFO';
+
         const html = `
             <tr class="vuln-row">
                 <td style="font-weight:bold; color:var(--accent);">${escapeHtml(c.id)}</td>
                 <td style="color:#fff; font-weight:600;">${escapeHtml(c.product)}</td>
                 <td style="color:var(--text-main); font-size:13px;">${escapeHtml(c.description)}</td>
-                <td><span class="badge ${badgeClass}">${c.cvss.toFixed(1)}</span></td>
+                <td><span class="badge ${badgeClass}">${c.cvss > 0 ? c.cvss.toFixed(1) : 'N/A'}</span></td>
             </tr>
         `;
         tbody.insertAdjacentHTML('beforeend', html);

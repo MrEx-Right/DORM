@@ -20,7 +20,9 @@ import (
 
 const (
 	FullDBFile     = "cve/cve_full.json"
-	UpdateInterval = 24 * time.Hour
+	// CVEProject publishes multiple snapshots per day; 6h ensures we always
+	// pick up the latest one without hammering GitHub on every restart.
+	UpdateInterval = 6 * time.Hour
 )
 
 // --- CVE JSON 5.0 Parse Structs ---
@@ -70,7 +72,15 @@ var (
 
 // knownTimestamps lists the hour-tags CVEProject uses in release names,
 // ordered newest-first so we always prefer the most recent snapshot.
-var knownTimestamps = []string{"2300Z", "2200Z", "2100Z", "2000Z", "1900Z"}
+// CVEProject publishes at various times throughout the day (checked 2026-07-16:
+// 1100Z confirmed). The list covers every hour from 23:00 down to 00:00 UTC.
+var knownTimestamps = []string{
+	"2300Z", "2200Z", "2100Z", "2000Z", "1900Z",
+	"1800Z", "1700Z", "1600Z", "1500Z", "1400Z",
+	"1300Z", "1200Z", "1100Z", "1000Z", "0900Z",
+	"0800Z", "0700Z", "0600Z", "0500Z", "0400Z",
+	"0300Z", "0200Z", "0100Z", "0000Z",
+}
 
 // probeSnapshotURL finds the latest available nightly ZIP on GitHub
 // by HEAD-checking candidate URLs (today + yesterday × known timestamps).
@@ -132,12 +142,37 @@ func getLatestURLs() (fullURL, deltaURL string, err error) {
 		return "", "", err
 	}
 
+	// Two-pass asset selection:
+	// Pass 1 — collect all candidates.
+	// Pass 2 — prefer end-of-day delta (most comprehensive) over intraday ones.
+	var endOfDayDeltaURL string
+	var anyDeltaURL string
+
 	for _, asset := range release.Assets {
-		if strings.Contains(asset.Name, "all_CVEs") && strings.HasSuffix(asset.Name, ".zip.zip") {
+		name := asset.Name
+		switch {
+		case strings.Contains(name, "all_CVEs") && strings.HasSuffix(name, ".zip.zip"):
 			fullURL = asset.BrowserDownloadURL
-		} else if strings.Contains(asset.Name, "delta_CVEs") && strings.HasSuffix(asset.Name, ".zip") {
-			deltaURL = asset.BrowserDownloadURL
+
+		case strings.Contains(name, "delta_CVEs") &&
+			strings.HasSuffix(name, ".zip") &&
+			!strings.HasSuffix(name, ".zip.zip"):
+			// end-of-day delta is the gold standard — covers every CVE change
+			// published throughout the day, not just the midnight snapshot delta.
+			if strings.Contains(name, "at_end_of_day") {
+				endOfDayDeltaURL = asset.BrowserDownloadURL
+			} else {
+				anyDeltaURL = asset.BrowserDownloadURL
+			}
 		}
+	}
+
+	// Prefer end-of-day delta; fall back to any other delta variant.
+	if endOfDayDeltaURL != "" {
+		deltaURL = endOfDayDeltaURL
+		fmt.Println("[+] CVE Database: End-of-day delta available, using it.")
+	} else if anyDeltaURL != "" {
+		deltaURL = anyDeltaURL
 	}
 
 	if fullURL == "" {

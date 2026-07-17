@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.19.1] - 2026-07-16
+### 🔧 Bug Fixes & Severity Calibration
+
+This patch corrects inflated severity ratings in the port scanner, fixes a broken CVE database rendering bug in the frontend, and hardens the CVE sync engine to reliably fetch the latest daily snapshots from CVEProject.
+
+---
+
+#### ⚖️ Port Scanner Severity Calibration (`plugins/unnecessaryports.go`)
+- **FTP (21) & Database Ports downgraded to INFO:** The mere presence of an open port is informational, not a confirmed vulnerability. Dedicated plugins (`ftpanon.go`, `mongo.go`, `redis.go`, etc.) already perform active exploit checks and issue HIGH/CRITICAL findings when warranted. Reporting FTP as CVSS 7.5 solely because port 21 is open was a false positive.
+- **Telnet (23) & SMB (445) downgraded to MEDIUM / CVSS 5.3:** Both protocols carry inherent risk, but port visibility alone does not confirm exploitability. Severity reduced from HIGH / 7.5–8.5 to MEDIUM / 5.3.
+- **RDP (3389) & VNC (5900/5901) downgraded to LOW / CVSS 3.5:** Reduced from MEDIUM / 6.0. Port exposure is worth noting but does not constitute a confirmed attack surface without further testing.
+- **DevOps API ports (Docker, Kubernetes, RabbitMQ, Consul) downgraded to LOW / CVSS 3.1:** Reduced from MEDIUM / 6.5. Exposure is notable but unconfirmed without authentication testing.
+- **Alternative HTTP ports (non-dev) downgraded to INFO / CVSS 0.0:** Generic web services on non-standard ports are purely informational unless a dev/debug signature is detected via active probe.
+- **Dev/Debug services (webpack, werkzeug, Flask debug, etc.) remain MEDIUM / CVSS 6.0:** This finding is backed by active HTTP probing and confirmed body/header signal matching — severity is justified.
+
+#### 🐛 CVE Database Frontend Fix (`web/app.js`)
+- **Broken render fixed:** `/api/cvedb` returns `{ "stats": {...}, "cves": [...] }` but the frontend was treating the entire object as an array. `cves.length` evaluated to `undefined`, causing `renderCVELines()` to crash silently — the CVE tab displayed nothing. Fixed by correctly destructuring `data.cves` from the response.
+- **Stats counter fixed:** Total record count now reads from `data.stats.total_cves` (the actual in-memory count of ~280K) instead of the truncated display slice length.
+- **Severity badge fix in `renderCVELines()`:** Badge logic previously collapsed LOW and INFO into MEDIUM. Corrected to CRITICAL (≥9.0) / HIGH (≥7.0) / MEDIUM (≥4.0) / LOW (>0) / INFO (=0). CVSS 0 entries now display `N/A` instead of crashing on `.toFixed()`.
+
+#### 🔄 CVE Sync Engine Hardening (`cve/sync.go`)
+- **Missing timestamp in probe list:** CVEProject publishes snapshots at various hours throughout the day. The fallback `probeSnapshotURL()` function only checked `1900Z–2300Z`. The `1100Z` release (confirmed live on 2026-07-16) was never discovered, causing the engine to fall back to yesterday's database when the GitHub API was unavailable. Expanded `knownTimestamps` to cover all 24 hours (`0000Z`–`2300Z`).
+- **UpdateInterval reduced from 24h to 6h:** A 24-hour window meant that restarting DORM later in the same day always loaded the stale morning snapshot. 6 hours allows up to 4 refreshes per day, matching CVEProject's publish cadence without hammering GitHub.
+- **Delta URL false match fixed:** `strings.HasSuffix(name, ".zip")` also matches `.zip.zip` filenames. The full snapshot (`all_CVEs_at_midnight.zip.zip`) could have been incorrectly selected as the delta. Added an explicit `!strings.HasSuffix(name, ".zip.zip")` guard.
+- **End-of-day delta support added:** CVEProject publishes a `_delta_CVEs_at_end_of_day.zip` asset that contains all CVE changes for the entire day — more comprehensive than the intraday `_at_midnight` delta. The asset selector now uses a two-pass approach to explicitly prefer the end-of-day delta, falling back to any other delta variant if it is not yet available.
+
+---
+
 ## [v1.19.0] - 2026-07-14
 ### 🛡️ WAF Bypass Engine & UI Enhancements
 
