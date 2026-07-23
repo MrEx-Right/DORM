@@ -43,23 +43,19 @@ func (p *TLSCipherPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		if err == nil {
 			state := conn.ConnectionState()
 			if state.CipherSuite == cipherID {
-				// Verify connection is truly established (prevent WAF delayed-rejection false positives)
+				// Verify connection is truly established with application data (prevent WAF/CDN false positives)
 				conn.SetDeadline(time.Now().Add(2 * time.Second))
-				_, writeErr := conn.Write([]byte("GET / HTTP/1.0\r\n\r\n"))
+				req := fmt.Sprintf("GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\nUser-Agent: DORM-Scanner\r\n\r\n", target.IP)
+				_, writeErr := conn.Write([]byte(req))
 				
 				if writeErr == nil {
 					buf := make([]byte, 1)
-					_, readErr := conn.Read(buf)
+					n, readErr := conn.Read(buf)
 					
-					// If we can read data, or it timed out waiting for HTTP on a non-HTTP port, or gracefully closed:
-					// It's a true positive. If it's a TCP RST or TLS error, it's a delayed WAF rejection.
-					if readErr == nil {
+					// Only confirm if server actually returns application-layer data over this weak cipher.
+					// Timeout, EOF, or connection resets indicate WAF/CDN rejection or drop, NOT active support.
+					if readErr == nil && n > 0 {
 						supportedWeakCiphers = append(supportedWeakCiphers, cipherName)
-					} else {
-						errStr := strings.ToLower(readErr.Error())
-						if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "eof") {
-							supportedWeakCiphers = append(supportedWeakCiphers, cipherName)
-						}
 					}
 				}
 			}

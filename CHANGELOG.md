@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.20.0] - 2026-07-23
+### 🕷️ DOM Crawler Integration & Concurrency Refactor
+
+This major release introduces a headless browser engine capable of crawling JavaScript-heavy Single Page Applications (SPAs). It also features a complete overhaul of the pre-scan concurrency model to eliminate bottlenecks and prevent connection timeouts.
+
+---
+
+#### 🕸️ DOM Crawler Engine (`dom/` & `sitemapper/`)
+- **SPA-Aware Browser Crawler:** Integrated `chromedp` to launch a headless browser that executes JavaScript, navigates SPAs (React, Vue, Angular), and clicks interactive elements to uncover hidden attack surfaces.
+- **Network Interception:** Added a network listener to capture XHR/Fetch API calls initiated by the page. Dynamically discovered endpoints are correctly parsed with their HTTP methods (POST, PUT, etc.) and payloads, ensuring DORM plugins can attack them accurately.
+- **Client-Side Route Discovery:** Injects scripts to capture `history.pushState` and `window.__dormRoutes` to map hidden client-side routing logic.
+- **Form Extraction:** Extracts HTML forms rendered dynamically via JS and automatically feeds them into the main vulnerability Engine.
+
+#### 🖥️ UI & Control Panel (`web/`)
+- **Live Activity Feed:** Added a new "DOM Crawler" panel that streams real-time browser activity (Navigations, Clicks, Forms, XHRs, and Errors) with micro-animations.
+- **New Icons:** Updated the "New Scan" icon to `fa-satellite-dish` for better thematic alignment.
+
+#### 🔒 TLS Scanner False Positive Mitigation (`plugins/tlscipher.go` & `plugins/tlscheck.go`)
+- **Strict Application Data Verification:** Completely removed fallback logic that treated read timeouts (`timeout`) or connection drops (`eof`) as valid indicators of weak cipher support. WAFs/CDNs often complete TLS handshakes for traffic inspection but drop or ignore connections afterwards.
+- **HTTP/1.1 Probe Request:** Probes now transmit a complete, compliant `HTTP/1.1` request with a `Host` header (`GET / HTTP/1.1\r\nHost: <IP>\r\nConnection: close\r\nUser-Agent: DORM-Scanner\r\n\r\n`).
+- **Empirical Read Confirmation:** A weak cipher suite or legacy protocol is now flagged **only** if the target web server explicitly returns encrypted application-layer data over the negotiated TLS connection (`readErr == nil && n > 0`).
+
+---
+
 ## [v1.19.1] - 2026-07-16
 ### 🔧 Bug Fixes & Severity Calibration
 

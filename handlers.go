@@ -2,7 +2,9 @@ package main
 
 import (
 	"DORM/analyzer"
+	"DORM/bypassers"
 	"DORM/cve"
+	"DORM/dom"
 	"DORM/models"
 	"DORM/plugins"
 	"DORM/sitemapper"
@@ -17,9 +19,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"DORM/bypassers"
 	"time"
 )
+
 
 // ==========================================
 // 3. HANDLERS (WEB OPS)
@@ -44,6 +46,47 @@ func openBrowser(url string) {
 func handlePluginList(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(plugins.GetPluginInventory())
+}
+
+// handleDOMEvents streams real-time DOM-Crawler events to the UI via SSE.
+// The UI subscribes to GET /dom-events and receives a stream of JSON events
+// describing every navigate, click, XHR intercept and SPA route discovery.
+func handleDOMEvents(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// Register this connection as a subscriber on the DOM event bus
+	subID := fmt.Sprintf("sse-%p", r)
+	events := dom.GetBus().Subscribe(subID)
+	defer dom.GetBus().Unsubscribe(subID)
+
+	// Send a heartbeat comment every 15s to keep the connection alive
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case ev, ok := <-events:
+			if !ok {
+				return
+			}
+			fmt.Fprintf(w, "data: %s\n\n", ev.ToJSON())
+			flusher.Flush()
+		case <-ticker.C:
+			fmt.Fprintf(w, ": heartbeat\n\n")
+			flusher.Flush()
+		}
+	}
 }
 
 // STOP ENDPOINT
@@ -205,25 +248,100 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	var muVulns sync.Mutex
 	// --- STORAGE INTEGRATION END ---
 
-	// STEP 1: PRE-SCAN — Run Sitemapper before the engine starts
-	// This ensures all plugins find rich endpoint data in SharedData when they run.
-	fmt.Printf("[*] Running Sitemapper for %d target(s)...\n", len(sanitizedTargets))
+	// STEP 1: PRE-SCAN — Run Sitemapper + DOM-Crawler in parallel.
+	//
+	// Race-Free Design:
+	//   goroutine A → sitemapper.Run()  → writes to its own *SiteMap
+	//   goroutine B → dom.Crawl()       → writes to its own *DOMResult
+	//   After BOTH finish (or timeout): domResult.MergeInto(sm) is called once,
+	//   then StoreSiteMap writes to SharedData — zero concurrent writes.
+	//
+	// A shared prescanTimeout caps the combined pre-scan phase.
+	// If either crawler finishes early, the WaitGroup just proceeds.
+	const prescanTimeout = 120 * time.Second
+	prescanCtx, prescanCancel := context.WithTimeout(ctx, prescanTimeout)
+	defer prescanCancel()
+
+	fmt.Printf("[*] PRE-SCAN: Sitemapper + DOM-Crawler starting for %d target(s)...\n", len(sanitizedTargets))
+
+	var prescanWg sync.WaitGroup
 	for _, host := range sanitizedTargets {
 		proto := "http"
-		// Sitemapper will try http; it handles redirects to https internally
 		targetURL := fmt.Sprintf("%s://%s", proto, host)
+
+		prescanWg.Add(1)
 		go func(tURL, tHost string) {
-			sm, err := sitemapper.QuickWithContext(ctx, tURL, record.ID)
-			if err != nil {
-				fmt.Printf("[Sitemapper] Error for %s: %v\n", tHost, err)
-				return
+			defer prescanWg.Done()
+
+			// ── Sub-goroutine A: Sitemapper (HTTP crawl) ──────────────────
+			type smResult struct {
+				sm  *sitemapper.SiteMap
+				err error
 			}
-			_ = sm
+			smCh := make(chan smResult, 1)
+			go func() {
+				sm, err := sitemapper.QuickWithContext(prescanCtx, tURL, record.ID)
+				smCh <- smResult{sm, err}
+			}()
+
+			// ── Sub-goroutine B: DOM-Crawler (browser crawl) ───────────────
+			type domResult struct {
+				result *dom.DOMResult
+				err    error
+			}
+			domCh := make(chan domResult, 1)
+			go func() {
+				result, err := dom.Crawl(prescanCtx, tURL, dom.FastDOMConfig())
+				domCh <- domResult{result, err}
+			}()
+
+			// ── Wait for BOTH to complete (prescanCtx deadline is the cap) ─
+			var finalSM *sitemapper.SiteMap
+			var finalDOM *dom.DOMResult
+
+			for pending := 2; pending > 0; pending-- {
+				select {
+				case r := <-smCh:
+					if r.err != nil {
+						fmt.Printf("[Sitemapper] Error for %s: %v\n", tHost, r.err)
+					} else {
+						finalSM = r.sm
+						fmt.Printf("[Sitemapper] Done for %s — pages=%d endpoints=%d\n",
+							tHost, len(r.sm.Pages), len(r.sm.Endpoints))
+					}
+				case r := <-domCh:
+					if r.err != nil {
+						fmt.Printf("[DOM-Crawler] Error for %s: %v\n", tHost, r.err)
+					} else {
+						finalDOM = r.result
+						fmt.Printf("[DOM-Crawler] Done for %s — pages=%d xhr=%d routes=%d\n",
+							tHost, len(r.result.Pages), len(r.result.XHREndpoints), len(r.result.JSRoutes))
+					}
+				case <-prescanCtx.Done():
+					fmt.Printf("[PRE-SCAN] Timeout reached for %s — using partial results\n", tHost)
+					pending = 0 // exit wait loop
+				}
+			}
+
+			// ── Merge: DOM result → SiteMap (single-threaded, no race) ─────
+			if finalDOM != nil && finalSM != nil {
+				finalDOM.MergeInto(finalSM)
+				// Re-store the enriched SiteMap so downstream plugins see XHR/SPA data
+				sitemapper.StoreSiteMap(finalSM)
+				fmt.Printf("[PRE-SCAN] Merge complete for %s — total endpoints=%d\n",
+					tHost, len(finalSM.Endpoints))
+			} else if finalSM != nil {
+				// DOM crawler failed/timed out — sitemapper result still valid
+				sitemapper.StoreSiteMap(finalSM)
+			}
 		}(targetURL, host)
 	}
 
-	// STEP 2: SMART PORT DISCOVERY (FAST PRE-SCAN)
-	fmt.Printf("[*] Discovered %d target(s) for scanning...\n", len(sanitizedTargets))
+	// ==========================================
+	// STEP 1.5: SMART PORT DISCOVERY (CONCURRENT WITH PRE-SCAN)
+	// ==========================================
+	// We run port discovery immediately while sitemapper & dom-crawler are still running!
+	fmt.Printf("[*] Discovered %d target(s) for port scanning...\n", len(sanitizedTargets))
 
 	commonPorts := []int{
 		80, 443, 8080, 8443, 8000, 8001, 8081, 8888, 3000, 5000, 9000, 9090,
@@ -239,9 +357,8 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	}
 	var activeTargets []TargetPort
 	var mu sync.Mutex
-	var wg sync.WaitGroup
+	var portWg sync.WaitGroup
 
-	// Scan all ports for ALL provided targets
 	for _, host := range sanitizedTargets {
 		for _, port := range commonPorts {
 			select {
@@ -252,9 +369,9 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 			default:
 			}
 
-			wg.Add(1)
+			portWg.Add(1)
 			go func(h string, p int) {
-				defer wg.Done()
+				defer portWg.Done()
 				address := net.JoinHostPort(h, fmt.Sprintf("%d", p))
 				conn, err := net.DialTimeout("tcp", address, 1*time.Second)
 				if err == nil {
@@ -266,7 +383,38 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 			}(host, port)
 		}
 	}
-	wg.Wait()
+	portWg.Wait()
+	fmt.Printf("[*] PORT DISCOVERY complete.\n")
+
+	// ==========================================
+	// WAIT FOR PRE-SCAN WITH HEARTBEATS
+	// ==========================================
+	// We must wait for Sitemapper and DOM Crawler to finish, but we CANNOT block
+	// the thread silently, or the browser/nginx will timeout the SSE connection!
+	prescanDone := make(chan struct{})
+	go func() {
+		prescanWg.Wait()
+		close(prescanDone)
+	}()
+
+WaitLoop:
+	for {
+		select {
+		case <-prescanDone:
+			break WaitLoop
+		case <-ctx.Done():
+			fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
+			flusher.Flush()
+			return
+		case <-time.After(3 * time.Second):
+			// Keep SSE connection alive while DOM crawler does its heavy lifting
+			fmt.Fprintf(w, "data: {\"Status\": \"CRAWLING_DOM\"}\n\n")
+			flusher.Flush()
+		}
+	}
+	
+	fmt.Printf("[*] PRE-SCAN complete — engine starting\n")
+
 
 	// STEP 2: PREPARE AND RUN ENGINE
 	engine := NewEngine(10) // Concurrency 10
