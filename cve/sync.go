@@ -19,10 +19,7 @@ import (
 )
 
 const (
-	FullDBFile     = "cve/cve_full.json"
-	// CVEProject publishes multiple snapshots per day; 6h ensures we always
-	// pick up the latest one without hammering GitHub on every restart.
-	UpdateInterval = 6 * time.Hour
+	FullDBFile = "cve/cve_full.json"
 )
 
 // --- CVE JSON 5.0 Parse Structs ---
@@ -119,27 +116,28 @@ func probeSnapshotURL() string {
 }
 
 type githubRelease struct {
+	PublishedAt time.Time `json:"published_at"`
 	Assets []struct {
 		Name               string `json:"name"`
 		BrowserDownloadURL string `json:"browser_download_url"`
 	} `json:"assets"`
 }
 
-func getLatestURLs() (fullURL, deltaURL string, err error) {
+func getLatestURLs() (fullURL, deltaURL string, publishedAt time.Time, err error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Get("https://api.github.com/repos/CVEProject/cvelistV5/releases/latest")
 	if err != nil {
-		return "", "", err
+		return "", "", time.Time{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return "", "", fmt.Errorf("github api returned %d", resp.StatusCode)
+		return "", "", time.Time{}, fmt.Errorf("github api returned %d", resp.StatusCode)
 	}
 
 	var release githubRelease
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return "", "", err
+		return "", "", time.Time{}, err
 	}
 
 	// Two-pass asset selection:
@@ -176,9 +174,9 @@ func getLatestURLs() (fullURL, deltaURL string, err error) {
 	}
 
 	if fullURL == "" {
-		return "", "", fmt.Errorf("could not find full url")
+		return "", "", time.Time{}, fmt.Errorf("could not find full url")
 	}
-	return fullURL, deltaURL, nil
+	return fullURL, deltaURL, release.PublishedAt, nil
 }
 
 // SyncFullDatabase downloads and loads the CVEProject nightly snapshot.
@@ -189,14 +187,14 @@ func SyncFullDatabase() {
 	fileInfo, err := os.Stat(FullDBFile)
 	hasLocal := err == nil
 
-	if hasLocal && time.Since(fileInfo.ModTime()) < UpdateInterval {
-		fmt.Println("[+] CVE Database: Local snapshot is fresh, loading from disk...")
-		loadFromDisk()
-		return
-	}
-
-	fullURL, deltaURL, err := getLatestURLs()
-	if err != nil {
+	fullURL, deltaURL, publishedAt, err := getLatestURLs()
+	if err == nil && hasLocal {
+		if fileInfo.ModTime().After(publishedAt) {
+			fmt.Println("[+] CVE Database: Local snapshot is already up-to-date, loading from disk...")
+			loadFromDisk()
+			return
+		}
+	} else if err != nil {
 		fmt.Printf("[-] CVE GitHub API failed: %v — probing known release timestamps...\n", err)
 		fullURL = probeSnapshotURL()
 	}
