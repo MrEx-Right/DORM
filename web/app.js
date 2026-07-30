@@ -19,12 +19,15 @@ let vulnChart = new Chart(ctx, {
                 position: 'right',
                 labels: { color: '#c9d1d9', font: { family: 'Segoe UI' } },
                 onClick: function (e, legendItem, legend) {
-                    Chart.defaults.plugins.legend.onClick.call(this, e, legendItem, legend);
-
                     const index = legendItem.index;
-                    const meta = vulnChart.getDatasetMeta(0);
-                    const isHidden = meta.data[index].hidden; // Chart.js 3+
-                    const severity = vulnChart.data.labels[index];
+                    const chart = legend.chart;
+                    
+                    // Manually toggle data visibility in Chart.js 4+
+                    chart.toggleDataVisibility(index);
+                    chart.update();
+
+                    const isHidden = !chart.getDataVisibility(index);
+                    const severity = chart.data.labels[index];
 
                     const rows = document.querySelectorAll('.vuln-row[data-severity="' + severity + '"]');
                     const detailRows = document.querySelectorAll('.detail-row[data-severity="' + severity + '"]');
@@ -52,12 +55,14 @@ let detailVulnChart = new Chart(detailCtx, {
                 position: 'right',
                 labels: { color: '#c9d1d9', font: { family: 'Segoe UI' } },
                 onClick: function (e, legendItem, legend) {
-                    Chart.defaults.plugins.legend.onClick.call(this, e, legendItem, legend);
-
                     const index = legendItem.index;
-                    const meta = detailVulnChart.getDatasetMeta(0);
-                    const isHidden = meta.data[index].hidden; 
-                    const severity = detailVulnChart.data.labels[index];
+                    const chart = legend.chart;
+                    
+                    chart.toggleDataVisibility(index);
+                    chart.update();
+
+                    const isHidden = !chart.getDataVisibility(index); 
+                    const severity = chart.data.labels[index];
 
                     const rows = document.querySelectorAll('#detailTableBody .vuln-row[data-severity="' + severity + '"]');
                     const detailRows = document.querySelectorAll('#detailTableBody .detail-row[data-severity="' + severity + '"]');
@@ -154,7 +159,7 @@ function switchView(viewName) {
     document.getElementById('view-' + viewName).classList.add('active');
     document.querySelector('.main-content').scrollTop = 0; // Reset scroll position
     if (viewName === 'history') loadHistory();
-    if (viewName === 'cvedb') loadCVEDatabase();
+    if (viewName === 'cvecenter') loadCVECenter();
     if (viewName === 'sitemap') initSitemapView();
 }
 
@@ -326,6 +331,18 @@ function toggleAuth() {
         el.style.display = 'block';
         arrow.classList.replace('fa-chevron-right', 'fa-chevron-down');
     }
+}
+
+function toggleCveSection() {
+	const el = document.getElementById('cveContainer');
+	const arrow = document.getElementById('cveArrow');
+	if (el.style.display === 'block') {
+		el.style.display = 'none';
+		arrow.classList.replace('fa-chevron-down', 'fa-chevron-right');
+	} else {
+		el.style.display = 'block';
+		arrow.classList.replace('fa-chevron-right', 'fa-chevron-down');
+	}
 }
 
 function toggleDetail(detailId, parentId) {
@@ -565,6 +582,11 @@ function startScan() {
 
         if (data.Status === "ERROR") {
             alert("Scan Error: " + data.Message);
+            finishScanUI(); // Reset UI immediately on error
+            if (sitemapPollInterval) {
+                clearInterval(sitemapPollInterval);
+                sitemapPollInterval = null;
+            }
             return;
         }
 
@@ -636,6 +658,10 @@ function finishScanUI() {
     const pulse = document.getElementById('dom-nav-pulse');
     if (pulse) pulse.style.display = 'none';
     setDOMStatus('IDLE', '#94A3B8', 'rgba(148,163,184,0.1)', 'rgba(148,163,184,0.2)');
+    
+    // Hide CVE Banner if visible
+    const banner = document.getElementById('cveScanningBanner');
+    if (banner) banner.style.display = 'none';
 
     btn.disabled = false;
     btn.innerHTML = '<i class="fas fa-play"></i> START SCAN';
@@ -1110,9 +1136,195 @@ function renderSitemapView(data) {
     content.innerHTML = statsHTML + techHTML + disallowHTML +
         `<div class="sm-columns">${pagesHTML}${epsHTML}${formsHTML}</div>` + jsHTML;
         
-    // Restore open accordions
     openJS.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.add('open');
     });
+}
+
+// --- CVE CENTER LOGIC ---
+
+async function searchCVE() {
+    const query = document.getElementById('cveSearchInput').value.trim();
+    const tbody = document.getElementById('cveDbResults');
+    
+    if (!query) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: var(--text-dim);">Please enter a search term...</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: var(--accent);"><i class="fas fa-spinner fa-spin"></i> Searching database...</td></tr>';
+    
+    try {
+        const resp = await fetch('/api/cvedb/search?q=' + encodeURIComponent(query));
+        const data = await resp.json();
+        
+        if (!data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 30px; color: var(--text-dim);">No matching CVEs found.</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = '';
+        data.forEach(cve => {
+            let cvssColor = '#58a6ff';
+            if (cve.cvss >= 9.0) cvssColor = '#ff7b72'; // Critical
+            else if (cve.cvss >= 7.0) cvssColor = '#ff9b5e'; // High
+            else if (cve.cvss >= 4.0) cvssColor = '#d29922'; // Medium
+            
+            tbody.innerHTML += `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'" onclick="selectCVE('${escapeHtml(cve.id)}')">
+                    <td style="padding: 10px; color: #fff; font-family: 'Consolas', monospace;">${escapeHtml(cve.id)}</td>
+                    <td style="padding: 10px; text-align: center; color: ${cvssColor}; font-weight: bold;">${cve.cvss.toFixed(1)}</td>
+                    <td style="padding: 10px; color: var(--text-dim);">${escapeHtml(cve.product || '-')}</td>
+                    <td style="padding: 10px; text-align: right;">
+                        <button style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); color: #10B981; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+                            <i class="fas fa-crosshairs"></i> Target
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; padding: 30px; color: #EF4444;">Error searching database: ${e}</td></tr>`;
+    }
+}
+
+function selectCVE(cveId) {
+    document.getElementById('targetCveInput').value = cveId;
+    
+    // Highlight input briefly
+    const input = document.getElementById('targetCveInput');
+    input.style.borderColor = '#10B981';
+    setTimeout(() => {
+        input.style.borderColor = 'var(--panel-border)';
+    }, 500);
+}
+
+let cveCenterLoaded = false;
+async function loadCVECenter() {
+    if (cveCenterLoaded) return; // Load only once to save bandwidth
+    
+    try {
+        const resp = await fetch('/api/cvedb');
+        const data = await resp.json();
+        
+        // Update Stats
+        if (data.stats) {
+            document.getElementById('statTotalCve').innerText = (data.stats.total_cves || 0).toLocaleString();
+            if (data.stats.severity_counts) {
+                
+                // Draw Donut Chart
+                const ctx = document.getElementById('cveSeverityChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Critical', 'High', 'Medium', 'Low'],
+                        datasets: [{
+                            data: [
+                                data.stats.severity_counts.critical || 0,
+                                data.stats.severity_counts.high || 0,
+                                data.stats.severity_counts.medium || 0,
+                                data.stats.severity_counts.low || 0
+                            ],
+                            backgroundColor: ['#ff7b72', '#ff9b5e', '#d29922', '#58a6ff'],
+                            borderWidth: 0,
+                            cutout: '75%'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { 
+                                display: true, 
+                                position: 'right', 
+                                labels: { color: '#ccc', font: { size: 14, family: 'sans-serif' }, padding: 20 } 
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return ' ' + context.label + ': ' + context.raw.toLocaleString();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        
+        cveCenterLoaded = true;
+    } catch (e) {
+        console.error("Failed to load CVE Center data", e);
+    }
+    
+    // Load KEV Data
+    try {
+        const kevResp = await fetch('/api/kev');
+        const kevData = await kevResp.json();
+        
+        renderKEVList('kev-bucket-1', kevData.sinceYesterday);
+        renderKEVList('kev-bucket-2', kevData.last7Days);
+        renderKEVList('kev-bucket-3', kevData.last30Days);
+    } catch (e) {
+        console.error("Failed to load KEV data", e);
+        document.getElementById('kev-bucket-1').innerHTML = `<div style="color:red; text-align:center; padding:10px; font-size: 12px;">Failed to load KEV data.</div>`;
+        document.getElementById('kev-bucket-2').innerHTML = '';
+        document.getElementById('kev-bucket-3').innerHTML = '';
+    }
+}
+
+function renderKEVList(elementId, items) {
+    const el = document.getElementById(elementId);
+    if (!items || items.length === 0) {
+        el.innerHTML = `<div style="text-align: center; color: var(--text-dim); padding: 20px; font-size: 12px;">No KEVs reported in this timeframe.</div>`;
+        return;
+    }
+    
+    let html = '';
+    items.forEach(k => {
+        let epssBadge = `<span style="background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); color: #6EE7B7; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold;">EPSS: ${(k.epssScore*100).toFixed(1)}%</span>`;
+        if (k.epssScore >= 0.5) epssBadge = `<span style="background: rgba(220, 38, 38, 0.2); border: 1px solid rgba(220, 38, 38, 0.4); color: #FCA5A5; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold;">EPSS: ${(k.epssScore*100).toFixed(1)}%</span>`;
+        else if (k.epssScore >= 0.1) epssBadge = `<span style="background: rgba(245, 158, 11, 0.2); border: 1px solid rgba(245, 158, 11, 0.4); color: #FCD34D; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold;">EPSS: ${(k.epssScore*100).toFixed(1)}%</span>`;
+        
+        let rwBadge = '';
+        if (k.ransomwareUse === 'Known') {
+            rwBadge = `<span style="margin-left: 5px; background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.4); padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold;"><i class="fas fa-skull-crossbones"></i> Ransomware</span>`;
+        }
+
+        let cvssBadge = '';
+        if (k.cvssScore) {
+            let color = '#38BDF8';
+            let bg = 'rgba(56, 189, 248, 0.2)';
+            let border = 'rgba(56, 189, 248, 0.4)';
+            if (k.cvssScore >= 9.0) {
+                color = '#FCA5A5'; bg = 'rgba(220, 38, 38, 0.2)'; border = 'rgba(220, 38, 38, 0.4)';
+            } else if (k.cvssScore >= 7.0) {
+                color = '#FCD34D'; bg = 'rgba(245, 158, 11, 0.2)'; border = 'rgba(245, 158, 11, 0.4)';
+            }
+            cvssBadge = `<span style="margin-right: 5px; background: ${bg}; border: 1px solid ${border}; color: ${color}; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: bold;">CVSS: ${k.cvssScore.toFixed(1)}</span>`;
+        }
+        
+        html += `
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 6px; padding: 12px; transition: all 0.2s; cursor: pointer;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+                <div style="color: #38BDF8; font-weight: bold; font-family: 'Consolas', monospace; font-size: 13px;">${escapeHtml(k.cveID)}</div>
+                <div style="font-size: 10px; color: var(--text-dim);">${escapeHtml(k.dateAdded)}</div>
+            </div>
+            <div style="color: #fff; font-size: 13px; font-weight: bold; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(k.product)}">
+                ${escapeHtml(k.vendorProject)} - ${escapeHtml(k.product)}
+            </div>
+            <div style="color: var(--text-dim); font-size: 11px; margin-bottom: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;" title="${escapeHtml(k.vulnerabilityName)}">
+                ${escapeHtml(k.vulnerabilityName)}
+            </div>
+            <div style="display: flex; align-items: center;">
+                ${cvssBadge}
+                ${epssBadge}
+                ${rwBadge}
+            </div>
+        </div>
+        `;
+    });
+    
+    el.innerHTML = html;
 }

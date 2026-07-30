@@ -616,7 +616,23 @@ func Search(product, version string) []models.LocalCVE {
 	seen := make(map[int]struct{})
 	var matches []models.LocalCVE
 
-	// Collect candidate index positions from all matching keys.
+	// 1. Check CVE IDs first (linear scan is fast enough ~2-5ms)
+	for i, cve := range MemoryDB {
+		if strings.Contains(strings.ToLower(cve.ID), product) {
+			matches = append(matches, cve)
+			seen[i] = struct{}{}
+			if len(matches) >= 50 {
+				return matches
+			}
+		}
+	}
+
+	// If the user explicitly typed a CVE pattern and we found matches, return them immediately
+	if strings.HasPrefix(product, "cve-") && len(matches) > 0 {
+		return matches
+	}
+
+	// 2. Collect candidate index positions from all matching keys.
 	// Keys to probe: exact product, and any "vendor:product" entry.
 	keysToProbe := []string{product}
 	for k := range productIndex {
@@ -645,9 +661,9 @@ func Search(product, version string) []models.LocalCVE {
 func searchLinear(product string) []models.LocalCVE {
 	var out []models.LocalCVE
 	for _, cve := range MemoryDB {
-		if strings.Contains(cve.Product, product) || strings.Contains(product, cve.Product) {
+		if strings.Contains(strings.ToLower(cve.ID), product) || strings.Contains(cve.Product, product) || strings.Contains(product, cve.Product) {
 			out = append(out, cve)
-			if len(out) >= 10 {
+			if len(out) >= 50 {
 				break
 			}
 		}
@@ -655,15 +671,73 @@ func searchLinear(product string) []models.LocalCVE {
 	return out
 }
 
+// GetCVEByID returns a specific CVE record by its ID.
+func GetCVEByID(id string) *models.LocalCVE {
+	id = strings.ToUpper(strings.TrimSpace(id))
+	if id == "" {
+		return nil
+	}
+
+	indexMu.RLock()
+	defer indexMu.RUnlock()
+
+	// Simple linear search since ID lookups are rare (1 per specific scan)
+	// and we don't have an ID index. MemoryDB is fast enough for occasional lookups.
+	for _, cve := range MemoryDB {
+		if cve.ID == id {
+			return &cve
+		}
+	}
+	return nil
+}
+
 // GetStats returns database statistics.
 func GetStats() map[string]interface{} {
 	indexMu.RLock()
 	defer indexMu.RUnlock()
+	
+	var critical, high, medium, low int
+	for _, cve := range MemoryDB {
+		if cve.CVSS >= 9.0 {
+			critical++
+		} else if cve.CVSS >= 7.0 {
+			high++
+		} else if cve.CVSS >= 4.0 {
+			medium++
+		} else if cve.CVSS > 0 {
+			low++
+		}
+	}
+	
 	return map[string]interface{}{
 		"total_cves": len(MemoryDB),
 		"index_keys": len(productIndex),
 		"db_file":    FullDBFile,
+		"severity_counts": map[string]int{
+			"critical": critical,
+			"high":     high,
+			"medium":   medium,
+			"low":      low,
+		},
 	}
+}
+
+// GetThreatRadar returns the latest 10 Critical CVEs (by scanning backwards).
+func GetThreatRadar() []models.LocalCVE {
+	indexMu.RLock()
+	defer indexMu.RUnlock()
+	
+	var radar []models.LocalCVE
+	// Scan backwards assuming newer CVEs are near the end
+	for i := len(MemoryDB) - 1; i >= 0; i-- {
+		if MemoryDB[i].CVSS >= 9.0 {
+			radar = append(radar, MemoryDB[i])
+			if len(radar) >= 10 {
+				break
+			}
+		}
+	}
+	return radar
 }
 
 // GetFirst returns the first n CVE records (thread-safe).

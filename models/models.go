@@ -71,4 +71,5 @@ type LocalCVE struct {
 
 var DeepScanTarget func(targetURL string) *TechProfile
 var SearchLocalCVEs func(product, version string) []LocalCVE
+var GetCVEByID func(id string) *LocalCVE
 var SearchExploitDB func(query string) []string

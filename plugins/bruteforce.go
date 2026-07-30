@@ -151,6 +151,38 @@ var httpBasicEndpoints = []string{
 	"/console", "/dashboard",
 }
 
+func getCredsList() []struct{ User, Pass string } {
+	creds := make([]struct{ User, Pass string }, len(defaultCreds))
+	copy(creds, defaultCreds)
+
+	passwords := loadWordlistFile("10k-most-common.txt")
+	if len(passwords) > 0 {
+		// Limit to top 200 passwords to balance effectiveness and WAF evasion
+		maxP := 200
+		if len(passwords) < maxP {
+			maxP = len(passwords)
+		}
+		topPass := passwords[:maxP]
+		users := []string{"admin", "root", "user"}
+
+		uniqueMap := make(map[string]bool)
+		for _, c := range creds {
+			uniqueMap[c.User+":"+c.Pass] = true
+		}
+
+		for _, u := range users {
+			for _, p := range topPass {
+				key := u + ":" + p
+				if !uniqueMap[key] {
+					uniqueMap[key] = true
+					creds = append(creds, struct{ User, Pass string }{User: u, Pass: p})
+				}
+			}
+		}
+	}
+	return creds
+}
+
 func (p *BruteForcePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	switch target.Port {
 	case 22:
@@ -175,7 +207,7 @@ func bruteSSH(target models.ScanTarget) *models.Vulnerability {
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 5) // max 5 concurrent
 
-	for _, c := range defaultCreds {
+	for _, c := range getCredsList() {
 		wg.Add(1)
 		go func(user, pass string) {
 			defer wg.Done()
@@ -228,7 +260,7 @@ func bruteSSH(target models.ScanTarget) *models.Vulnerability {
 // ── FTP Brute Force ───────────────────────────────────────────────────────────
 
 func bruteFTP(target models.ScanTarget) *models.Vulnerability {
-	for _, c := range defaultCreds {
+	for _, c := range getCredsList() {
 		conn, err := ftp.Dial(
 			net.JoinHostPort(target.IP, fmt.Sprintf("%d", target.Port)),
 			ftp.DialWithTimeout(2*time.Second),
@@ -318,7 +350,7 @@ func bruteHTTPBasic(target models.ScanTarget) *models.Vulnerability {
 	// Try credentials on 401 endpoints
 	for _, ep := range protectedEndpoints {
 		targetURL := baseURL + ep
-		for _, c := range defaultCreds {
+		for _, c := range getCredsList() {
 			token := base64.StdEncoding.EncodeToString([]byte(c.User + ":" + c.Pass))
 			req, err := http.NewRequest("GET", targetURL, nil)
 			if err != nil {

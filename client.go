@@ -23,11 +23,14 @@ var GlobalProxyURL string = "http://127.0.0.1:8080"
 
 var (
 	baseTransport http.RoundTripper
-	transportOnce sync.Once
+	transportMu   sync.RWMutex
 )
 
 // InitTransport updates the global baseTransport, avoiding race conditions and connection pool exhaustion
 func InitTransport() {
+	transportMu.Lock()
+	defer transportMu.Unlock()
+
 	var proxyFunc func(*http.Request) (*url.URL, error) = nil
 
 	if GlobalProxyEnabled {
@@ -52,8 +55,6 @@ func InitTransport() {
 	}
 	baseTransport = customTransport
 }
-
-
 
 // --- PROXY MIDDLEWARE (The Brain) ---
 type UARoundTripper struct {
@@ -85,12 +86,18 @@ func (urt *UARoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 // Client Helper (Used by Plugins)
 func getClient() *http.Client {
 	// Fallback in case InitTransport wasn't called yet
+	transportMu.RLock()
 	if baseTransport == nil {
+		transportMu.RUnlock()
 		InitTransport()
+		transportMu.RLock()
 	}
 
+	bt := baseTransport
+	transportMu.RUnlock()
+
 	return &http.Client{
-		Transport: &UARoundTripper{Proxied: baseTransport},
+		Transport: &UARoundTripper{Proxied: bt},
 		Timeout:   10 * time.Second,
 	}
 }

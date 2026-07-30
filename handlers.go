@@ -109,13 +109,15 @@ func handleCVEDatabase(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	type CVEResponse struct {
-		Stats map[string]interface{} `json:"stats"`
-		CVEs  []models.LocalCVE      `json:"cves"`
+		Stats       map[string]interface{} `json:"stats"`
+		CVEs        []models.LocalCVE      `json:"cves"`
+		ThreatRadar []models.LocalCVE      `json:"threat_radar"`
 	}
 
 	json.NewEncoder(w).Encode(CVEResponse{
-		Stats: cve.GetStats(),
-		CVEs:  cve.GetFirst(500),
+		Stats:       cve.GetStats(),
+		CVEs:        cve.GetFirst(500),
+		ThreatRadar: cve.GetThreatRadar(),
 	})
 }
 
@@ -517,8 +519,6 @@ WaitLoop:
 	engine.AddPlugin(&plugins.WebCachePoisoningPlugin{})
 	engine.AddPlugin(&plugins.FileUploadPlugin{})
 	engine.AddPlugin(&plugins.WPEnumPlugin{})
-	engine.AddPlugin(&plugins.TLSCipherPlugin{})
-
 	engine.AddPlugin(&plugins.Bypass403Plugin{})
 	engine.AddPlugin(&plugins.BFLABOLAPlugin{}) // BFLA/BOLA — HTTP Method Tampering + Role Escalation
 	engine.AddPlugin(&plugins.IPSpoofPlugin{})  // IP Spoof — Rate-Limit & WAF Bypass
@@ -709,4 +709,14 @@ func handleDeleteAll(w http.ResponseWriter, r *http.Request) {
 	DB.DeleteAllSiteMaps()
 
 	fmt.Fprintf(w, `{"status":"success"}`)
+}
+
+func handleKEV(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	buckets, err := cve.GetRecentKEVs()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	json.NewEncoder(w).Encode(buckets)
 }

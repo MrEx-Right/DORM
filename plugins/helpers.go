@@ -2,6 +2,7 @@ package plugins
 
 import (
 	"DORM/models"
+	"bufio"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -9,6 +10,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -31,6 +34,26 @@ func getURL(target models.ScanTarget, path string) string {
 		path = "/" + path
 	}
 	return fmt.Sprintf("%s://%s:%d%s", proto, target.IP, target.Port, path)
+}
+
+// loadWordlistFile reads lines from wordlists/<filename>, filtering empty lines & comment lines starting with #
+func loadWordlistFile(filename string) []string {
+	filePath := filepath.Join("wordlists", filename)
+	f, err := os.Open(filePath)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" && !strings.HasPrefix(line, "#") {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 func min(a, b int) int {

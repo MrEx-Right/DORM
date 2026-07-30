@@ -35,6 +35,21 @@ func (p *LFIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		"php://filter/convert.base64-encode/resource=index.php",
 	}
 
+	// Dynamically load LFI-Jhaddix.txt wordlist if available
+	filePayloads := loadWordlistFile("LFI-Jhaddix.txt")
+	payloads = append(payloads, filePayloads...)
+
+	// Deduplicate payloads
+	uniquePayloads := make(map[string]bool)
+	var finalPayloads []string
+	for _, p := range payloads {
+		if !uniquePayloads[p] {
+			uniquePayloads[p] = true
+			finalPayloads = append(finalPayloads, p)
+		}
+	}
+	payloads = finalPayloads
+
 	for _, ep := range endpoints {
 		for _, param := range params {
 			for _, payload := range payloads {

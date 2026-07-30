@@ -79,6 +79,28 @@ func (p *WPEnumPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		"wordfence", "wp-mail-smtp", "jetpack", "yoast-seo",
 	}
 
+	// Dynamically load additional plugins if wordlist exists
+	extraWp := loadWordlistFile("wordpress.fuzz.txt")
+	for _, entry := range extraWp {
+		if strings.HasPrefix(entry, "wp-content/plugins/") {
+			parts := strings.Split(entry, "/")
+			if len(parts) >= 3 && parts[2] != "" {
+				plugins = append(plugins, parts[2])
+			}
+		}
+	}
+
+	// Deduplicate plugins
+	uniquePlugins := make(map[string]bool)
+	var finalPlugins []string
+	for _, pl := range plugins {
+		if !uniquePlugins[pl] {
+			uniquePlugins[pl] = true
+			finalPlugins = append(finalPlugins, pl)
+		}
+	}
+	plugins = finalPlugins
+
 	for _, plugin := range plugins {
 		pluginURL := fmt.Sprintf("%s/wp-content/plugins/%s/readme.txt", baseURL, plugin)
 		reqP, _ := http.NewRequest("GET", pluginURL, nil)

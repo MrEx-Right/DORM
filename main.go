@@ -16,6 +16,7 @@ func main() {
 	models.SearchLocalCVEs = func(product, version string) []models.LocalCVE {
 		return cve.Search(product, version)
 	}
+	models.GetCVEByID = cve.GetCVEByID
 	models.SearchExploitDB = SearchExploitDB
 	// 1. Initialize the Database
 	InitDB("dorm_engine.db")
@@ -52,6 +53,7 @@ func main() {
 	// CVE DB API Routes
 	http.HandleFunc("/api/cvedb", handleCVEDatabase)
 	http.HandleFunc("/api/cvedb/search", handleCVESearch)
+	http.HandleFunc("/api/kev", handleKEV)
 
 	// Sitemapper API Routes
 	http.HandleFunc("/api/sitemap", handleSiteMap)
@@ -69,7 +71,7 @@ func main() {
 ██║  ██║██║   ██║██████╔╝██╔████╔██║
 ██║  ██║██║   ██║██╔══██╗██║╚██╔╝██║
 ██████╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
-╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.20.0
+╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.21.0
 
        [ Security Engine • Active ]
 `

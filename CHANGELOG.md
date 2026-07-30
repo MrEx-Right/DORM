@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.21.0] - 2026-07-28
+### 🛡️ CVE Center & Plugin Pool Adjustments
+
+This release introduces the CVE Center as a comprehensive threat intelligence dashboard and optimizes the active plugin pool to reduce noise during default scans.
+
+---
+
+#### 📊 CVE Center (`web/dashboard.html` & `web/app.js`)
+- **CISA KEV Integration:** Added a real-time feed of Known Exploited Vulnerabilities (KEV) from CISA. The feed automatically organizes recent high-profile vulnerabilities into three buckets (Since Yesterday, Last 7 Days, Last 30 Days) and fetches live EPSS (Exploit Prediction Scoring System) probability scores from FIRST.
+- **Central Severity Chart:** Added a massive, centrally located Chart.js Donut Graph. This graph visually breaks down the entire indexed CVE database (~280K records) by severity (Critical, High, Medium, Low) and features a detailed, interactive legend.
+- **CVE Database Explorer:** Added a full-width CVE Database Explorer interface, providing a clean and wide view for searching and analyzing vulnerabilities in real-time.
+- **Thematic Iconography & Navigation:** Added the CVE Center to the left sidebar (positioned logically below DOM Crawler and above Sitemap) and assigned a distinct `fa-radiation` (☢️) icon to reflect its threat-intelligence focus.
+
+#### 🔧 Engine & Plugin Modifications (`handlers.go`)
+- **Weak TLS Cipher Removed from Active Pool:** Removed `TLSCheckPlugin` (which checks for Weak TLS Ciphers) from the default active scan pool. While accurate, modern WAFs/CDNs often artificially terminate or mimic weak ciphers, leading to noisy results on robust infrastructures. This plugin is no longer executed by default.
+
+#### 📚 Dynamic Wordlist Integrations (`wordlists/` & `plugins/`)
+- **DORM-BUSTER & Hybrid Scanning (`dirbuster.go`):** Automatically ingests all `.txt` dictionaries located under `wordlists/`, seamlessly incorporating `raft-large-files-lowercase.txt` (~35K file paths) and `wordpress.fuzz.txt` (~1.5K WordPress endpoints) into hybrid directory discovery.
+- **LFI / Directory Traversal (`lfi.go` & `LFI-Jhaddix.txt`):** Dynamically loads `wordlists/LFI-Jhaddix.txt` (900+ targeted LFI payloads) with deduplication and comment filtering, significantly expanding file inclusion attack vectors without hardcoding.
+- **Sensitive Database Backup Discovery (`backupfile.go` & `Common-DB-Backups.txt`):** Ingests `wordlists/Common-DB-Backups.txt` (300+ database dump file names and extension variants), performing magic byte verification (ZIP, GZIP, SQL) on all candidates.
+- **WordPress Plugin Radar (`wpenum.go` & `wordpress.fuzz.txt`):** Dynamically parses `wordpress.fuzz.txt` to extract and enumerate active WordPress plugins from `/wp-content/plugins/<plugin>/`, expanding coverage beyond default plugins.
+- **Credential Brute Force Engine (`bruteforce.go` & `10k-most-common.txt`):** Dynamically loads passwords from `wordlists/10k-most-common.txt`, testing top high-value passwords against default SSH/FTP/Telnet/HTTP accounts while enforcing stealth limits for WAF evasion.
+
+
 ## [v1.20.0] - 2026-07-23
 ### 🕷️ DOM Crawler Integration & Concurrency Refactor
 

@@ -30,7 +30,26 @@ func (p *BackupFilePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		"/.env.save",
 	}
 
-	for _, path := range commonBackups {
+	// Dynamically load Common-DB-Backups.txt wordlist if available
+	fileBackups := loadWordlistFile("Common-DB-Backups.txt")
+	for _, b := range fileBackups {
+		if !strings.HasPrefix(b, "/") {
+			b = "/" + b
+		}
+		commonBackups = append(commonBackups, b)
+	}
+
+	// Deduplicate backup paths
+	uniqueBackups := make(map[string]bool)
+	var finalBackups []string
+	for _, b := range commonBackups {
+		if !uniqueBackups[b] {
+			uniqueBackups[b] = true
+			finalBackups = append(finalBackups, b)
+		}
+	}
+
+	for _, path := range finalBackups {
 		fullURL := getURL(target, path)
 		resp, err := client.Get(fullURL)
 
