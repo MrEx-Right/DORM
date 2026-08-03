@@ -6,7 +6,7 @@ require (
 	github.com/chromedp/cdproto v0.0.0-20260719223732-95f6af754cfe
 	github.com/chromedp/chromedp v0.16.0
 	github.com/google/uuid v1.6.0
-	github.com/jlaffaye/ftp v0.2.1
+	github.com/jlaffaye/ftp v0.2.2
 	golang.org/x/crypto v0.54.0
 	golang.org/x/net v0.57.0
 	gorm.io/driver/sqlite v1.6.0
