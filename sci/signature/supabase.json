@@ -1,0 +1,5 @@
+{
+  "name": "Supabase",
+  "category": "Database",
+  "body_pattern": "supabase\\.co|supabase\\.js"
+}

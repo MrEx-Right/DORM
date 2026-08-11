@@ -1,0 +1,5 @@
+{
+  "name": "Three.js",
+  "category": "Frontend",
+  "body_pattern": "three(?:\\.min)?\\.js"
+}

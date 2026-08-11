@@ -1,0 +1,5 @@
+{
+  "name": "Firebase",
+  "category": "Database",
+  "body_pattern": "firebaseapp\\.com|firebase-app\\.js"
+}

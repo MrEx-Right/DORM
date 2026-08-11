@@ -1,0 +1,6 @@
+{
+  "name": "React",
+  "category": "Frontend",
+  "body_pattern": "react(?:\\.min)?\\.js|ReactDOM|__reactFiber",
+  "version_pattern": "react@([0-9]+\\.[0-9]+\\.[0-9]+)"
+}

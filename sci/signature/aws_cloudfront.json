@@ -1,0 +1,5 @@
+{
+  "name": "AWS CloudFront",
+  "category": "CDN",
+  "header_key": "X-Amz-Cf-Id"
+}

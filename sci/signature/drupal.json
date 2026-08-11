@@ -1,0 +1,7 @@
+{
+  "name": "Drupal",
+  "category": "CMS",
+  "header_key": "X-Generator",
+  "header_value": "Drupal",
+  "version_pattern": "Drupal ([0-9]+)"
+}

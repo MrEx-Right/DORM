@@ -1,0 +1,5 @@
+{
+  "name": "Spring Boot",
+  "category": "Backend",
+  "header_key": "X-Application-Context"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "cdnjs",
+  "category": "CDN",
+  "body_pattern": "cdnjs\\.cloudflare\\.com"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "HubSpot",
+  "category": "Analytics",
+  "body_pattern": "js\\.hs-scripts\\.com|hubspot"
+}

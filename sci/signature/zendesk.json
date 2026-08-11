@@ -1,0 +1,5 @@
+{
+  "name": "Zendesk",
+  "category": "Analytics",
+  "body_pattern": "zendesk\\.com|zdassets\\.com"
+}

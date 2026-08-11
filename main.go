@@ -55,6 +55,9 @@ func main() {
 	http.HandleFunc("/api/cvedb/search", handleCVESearch)
 	http.HandleFunc("/api/kev", handleKEV)
 
+	// Supply Chain Interface API
+	http.HandleFunc("/api/sci", handleSCI)
+
 	// Sitemapper API Routes
 	http.HandleFunc("/api/sitemap", handleSiteMap)
 	http.HandleFunc("/api/sitemap/list", handleSiteMapList)
@@ -71,7 +74,7 @@ func main() {
 ██║  ██║██║   ██║██████╔╝██╔████╔██║
 ██║  ██║██║   ██║██╔══██╗██║╚██╔╝██║
 ██████╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
-╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.21.0
+╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.22.0
 
        [ Security Engine • Active ]
 `

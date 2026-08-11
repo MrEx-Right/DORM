@@ -1,0 +1,5 @@
+{
+  "name": "Ghost",
+  "category": "CMS",
+  "body_pattern": "ghost\\.io|content\\.ghost\\.org"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Sucuri WAF",
+  "category": "Security",
+  "header_key": "X-Sucuri-ID"
+}

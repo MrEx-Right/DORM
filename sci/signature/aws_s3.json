@@ -1,0 +1,5 @@
+{
+  "name": "AWS S3",
+  "category": "Storage",
+  "body_pattern": "s3\\.amazonaws\\.com|\\.s3-website\\."
+}

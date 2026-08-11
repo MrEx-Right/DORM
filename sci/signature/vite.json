@@ -1,0 +1,5 @@
+{
+  "name": "Vite",
+  "category": "Build Tool",
+  "body_pattern": "\\/@vite\\/|vite\\/dist"
+}

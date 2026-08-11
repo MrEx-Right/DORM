@@ -1,0 +1,6 @@
+{
+  "name": "Vue.js",
+  "category": "Frontend",
+  "body_pattern": "vue(?:\\.min)?\\.js|Vue\\.component|__vue__",
+  "version_pattern": "vue@([0-9]+\\.[0-9]+\\.[0-9]+)"
+}

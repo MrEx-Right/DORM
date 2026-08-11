@@ -1,0 +1,5 @@
+{
+  "name": "Rollup",
+  "category": "Build Tool",
+  "body_pattern": "\\/rollup\\."
+}

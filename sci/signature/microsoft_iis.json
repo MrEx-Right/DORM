@@ -1,0 +1,7 @@
+{
+  "name": "Microsoft IIS",
+  "category": "Infrastructure",
+  "header_key": "Server",
+  "header_value": "Microsoft-IIS",
+  "version_pattern": "Microsoft-IIS/([0-9]+\\.[0-9]+)"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Symfony",
+  "category": "Backend",
+  "header_key": "X-Debug-Token"
+}

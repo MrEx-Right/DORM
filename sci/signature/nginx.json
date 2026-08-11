@@ -1,0 +1,7 @@
+{
+  "name": "Nginx",
+  "category": "Infrastructure",
+  "header_key": "Server",
+  "header_value": "nginx",
+  "version_pattern": "nginx/([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)"
+}

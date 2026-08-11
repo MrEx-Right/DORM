@@ -1,0 +1,5 @@
+{
+  "name": "Ember.js",
+  "category": "Frontend",
+  "body_pattern": "ember(?:\\.min)?\\.js|Ember\\.VERSION"
+}

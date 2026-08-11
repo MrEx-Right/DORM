@@ -1,0 +1,5 @@
+{
+  "name": "Cloudflare",
+  "category": "CDN",
+  "header_key": "CF-Ray"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Facebook Pixel",
+  "category": "Analytics",
+  "body_pattern": "connect\\.facebook\\.net|fbevents\\.js"
+}

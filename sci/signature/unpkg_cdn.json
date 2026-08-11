@@ -1,0 +1,5 @@
+{
+  "name": "unpkg CDN",
+  "category": "CDN",
+  "body_pattern": "unpkg\\.com"
+}

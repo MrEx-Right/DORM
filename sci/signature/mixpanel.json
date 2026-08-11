@@ -1,0 +1,5 @@
+{
+  "name": "Mixpanel",
+  "category": "Analytics",
+  "body_pattern": "mixpanel\\.com|mixpanel\\.init"
+}

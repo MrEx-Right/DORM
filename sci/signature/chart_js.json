@@ -1,0 +1,5 @@
+{
+  "name": "Chart.js",
+  "category": "Frontend",
+  "body_pattern": "chart(?:\\.min)?\\.js"
+}

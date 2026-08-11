@@ -1,0 +1,5 @@
+{
+  "name": "Datadog RUM",
+  "category": "Analytics",
+  "body_pattern": "datadoghq\\.com"
+}

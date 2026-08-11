@@ -19,7 +19,7 @@ func (p *CookieSecPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 	for _, cookie := range resp.Cookies() {
 		if !cookie.HttpOnly || !cookie.Secure {
-			return &models.Vulnerability{Target: target, Name: "Insecure Cookie", Severity: "LOW", CVSS: 3.0, Description: "HttpOnly or Secure flag missing.", Solution: "Harden cookie settings.", Reference: ""}
+			return &models.Vulnerability{Target: target, Name: "Insecure Cookie", Severity: "INFO", CVSS: 0.0, Description: "HttpOnly or Secure flag missing.", Solution: "Harden cookie settings.", Reference: ""}
 		}
 	}
 	return nil

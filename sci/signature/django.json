@@ -1,0 +1,7 @@
+{
+  "name": "Django",
+  "category": "Backend",
+  "header_key": "X-Frame-Options",
+  "header_value": "SAMEORIGIN",
+  "body_pattern": "csrfmiddlewaretoken|__django"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "jsDelivr CDN",
+  "category": "CDN",
+  "body_pattern": "cdn\\.jsdelivr\\.net"
+}

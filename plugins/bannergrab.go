@@ -25,7 +25,7 @@ func (p *BannerGrabPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	buf := make([]byte, 1024)
 	n, _ := conn.Read(buf)
 	if n > 0 {
-		return &models.Vulnerability{Target: target, Name: "Service Banner", Severity: "LOW", CVSS: 2.0, Description: fmt.Sprintf("Banner: %s", string(buf[:min(n, 50)])), Solution: "Hide banner.", Reference: ""}
+		return &models.Vulnerability{Target: target, Name: "Service Banner", Severity: "INFO", CVSS: 0.0, Description: fmt.Sprintf("Banner: %s", string(buf[:min(n, 50)])), Solution: "Hide banner.", Reference: ""}
 	}
 	return nil
 }

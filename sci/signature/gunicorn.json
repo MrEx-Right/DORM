@@ -1,0 +1,7 @@
+{
+  "name": "Gunicorn",
+  "category": "Infrastructure",
+  "header_key": "Server",
+  "header_value": "gunicorn",
+  "version_pattern": "gunicorn/([0-9]+\\.[0-9]+\\.[0-9]+)"
+}

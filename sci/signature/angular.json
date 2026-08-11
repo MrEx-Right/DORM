@@ -1,0 +1,6 @@
+{
+  "name": "Angular",
+  "category": "Frontend",
+  "body_pattern": "angular(?:\\.min)?\\.js|ng-version",
+  "version_pattern": "ng-version=\"([0-9]+\\.[0-9]+\\.[0-9]+)\""
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Stripe",
+  "category": "Payment",
+  "body_pattern": "js\\.stripe\\.com|stripe\\.initialize"
+}

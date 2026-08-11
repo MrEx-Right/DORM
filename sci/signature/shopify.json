@@ -1,0 +1,5 @@
+{
+  "name": "Shopify",
+  "category": "CMS",
+  "body_pattern": "cdn\\.shopify\\.com|Shopify\\.theme"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Webpack",
+  "category": "Build Tool",
+  "body_pattern": "__webpack_require__|webpackChunk"
+}

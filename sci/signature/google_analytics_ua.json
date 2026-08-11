@@ -1,0 +1,5 @@
+{
+  "name": "Google Analytics (UA)",
+  "category": "Analytics",
+  "body_pattern": "google-analytics\\.com\\/analytics\\.js"
+}

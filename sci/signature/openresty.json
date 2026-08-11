@@ -1,0 +1,7 @@
+{
+  "name": "OpenResty",
+  "category": "Infrastructure",
+  "header_key": "Server",
+  "header_value": "openresty",
+  "version_pattern": "openresty/([0-9]+\\.[0-9]+\\.[0-9]+)"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Svelte",
+  "category": "Frontend",
+  "body_pattern": "svelte|__svelte"
+}

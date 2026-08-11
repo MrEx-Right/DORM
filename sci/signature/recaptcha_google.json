@@ -1,0 +1,5 @@
+{
+  "name": "Recaptcha (Google)",
+  "category": "Security",
+  "body_pattern": "google\\.com\\/recaptcha|recaptcha\\/api\\.js"
+}

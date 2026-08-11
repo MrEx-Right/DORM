@@ -1,0 +1,5 @@
+{
+  "name": "FastAPI",
+  "category": "Backend",
+  "body_pattern": "\"openapi\":|FastAPI"
+}

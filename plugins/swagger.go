@@ -17,7 +17,7 @@ func (p *SwaggerPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		if err == nil && resp.StatusCode == 200 {
 			defer resp.Body.Close()
 			return &models.Vulnerability{
-				Target: target, Name: "API Documentation (Swagger)", Severity: "LOW", CVSS: 4.0,
+				Target: target, Name: "API Documentation (Swagger)", Severity: "INFO", CVSS: 0.0,
 				Description: "API endpoints are exposed: " + path,
 				Solution:    "Restrict public access.",
 				Reference:   "",

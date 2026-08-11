@@ -1,0 +1,5 @@
+{
+  "name": "PayPal",
+  "category": "Payment",
+  "body_pattern": "paypal\\.com\\/sdk\\/js"
+}

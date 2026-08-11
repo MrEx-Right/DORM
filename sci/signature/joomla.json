@@ -1,0 +1,6 @@
+{
+  "name": "Joomla",
+  "category": "CMS",
+  "body_pattern": "\\/media\\/jui\\/|com_content",
+  "version_pattern": "\u003cmeta name=\"generator\" content=\"Joomla! - Open Source Content Management - Version ([0-9]+\\.[0-9]+)\""
+}

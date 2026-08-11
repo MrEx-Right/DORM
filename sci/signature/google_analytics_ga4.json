@@ -1,0 +1,5 @@
+{
+  "name": "Google Analytics (GA4)",
+  "category": "Analytics",
+  "body_pattern": "gtag\\(|googletagmanager\\.com"
+}

@@ -37,7 +37,7 @@ func (p *HTTPHeaderPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 	if len(missing) > 0 {
 		return &models.Vulnerability{
-			Target: target, Name: "Missing Security Headers", Severity: "LOW", CVSS: 3.5,
+			Target: target, Name: "Missing Security Headers", Severity: "INFO", CVSS: 0.0,
 			Description: strings.Join(missing, "\n"),
 			Solution:    "Add recommended HTTP headers to server configuration.",
 		}

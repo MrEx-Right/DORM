@@ -1,0 +1,6 @@
+{
+  "name": "Laravel",
+  "category": "Backend",
+  "header_key": "Set-Cookie",
+  "header_value": "laravel_session"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Twitter/X Pixel",
+  "category": "Analytics",
+  "body_pattern": "static\\.ads-twitter\\.com|analytics\\.twitter\\.com"
+}

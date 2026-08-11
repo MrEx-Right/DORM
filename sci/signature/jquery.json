@@ -1,0 +1,6 @@
+{
+  "name": "jQuery",
+  "category": "Frontend",
+  "body_pattern": "jquery(?:\\.min)?\\.js|jQuery\\.fn\\.jquery",
+  "version_pattern": "jquery[/@]([0-9]+\\.[0-9]+\\.[0-9]+)"
+}

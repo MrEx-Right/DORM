@@ -24,7 +24,7 @@ func (p *S3BucketPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	content := string(body)
 
 	if strings.Contains(content, ".s3.amazonaws.com") {
-		return &models.Vulnerability{Target: target, Name: "S3 Bucket Link", Severity: "LOW", CVSS: 4.0, Description: "Amazon S3 link detected. Check permissions.", Solution: "Disable public access to bucket.", Reference: ""}
+		return &models.Vulnerability{Target: target, Name: "S3 Bucket Link", Severity: "INFO", CVSS: 0.0, Description: "Amazon S3 link detected. Check permissions.", Solution: "Disable public access to bucket.", Reference: ""}
 	}
 	return nil
 }

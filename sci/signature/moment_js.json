@@ -1,0 +1,6 @@
+{
+  "name": "Moment.js",
+  "category": "Frontend",
+  "body_pattern": "moment(?:\\.min)?\\.js",
+  "version_pattern": "moment@([0-9]+\\.[0-9]+\\.[0-9]+)"
+}

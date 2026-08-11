@@ -1,0 +1,5 @@
+{
+  "name": "Parcel",
+  "category": "Build Tool",
+  "body_pattern": "parcelRequire"
+}

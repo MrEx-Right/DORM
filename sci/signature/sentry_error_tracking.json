@@ -1,0 +1,5 @@
+{
+  "name": "Sentry (error tracking)",
+  "category": "Analytics",
+  "body_pattern": "browser\\.sentry-cdn\\.com|sentry\\.io"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Cloudflare Turnstile",
+  "category": "Security",
+  "body_pattern": "challenges\\.cloudflare\\.com\\/turnstile"
+}

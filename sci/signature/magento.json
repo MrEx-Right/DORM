@@ -1,0 +1,6 @@
+{
+  "name": "Magento",
+  "category": "CMS",
+  "body_pattern": "Mage\\.Cookies|Magento",
+  "version_pattern": "Magento/([0-9]+\\.[0-9]+\\.[0-9]+)"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "MooTools",
+  "category": "Frontend",
+  "body_pattern": "mootools(?:\\.min)?\\.js"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Backbone.js",
+  "category": "Frontend",
+  "body_pattern": "backbone(?:\\.min)?\\.js"
+}

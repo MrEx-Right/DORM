@@ -1,0 +1,5 @@
+{
+  "name": "Socket.io",
+  "category": "Frontend",
+  "body_pattern": "socket\\.io(?:\\.min)?\\.js"
+}

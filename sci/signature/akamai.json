@@ -1,0 +1,5 @@
+{
+  "name": "Akamai",
+  "category": "CDN",
+  "header_key": "X-Check-Cacheable"
+}

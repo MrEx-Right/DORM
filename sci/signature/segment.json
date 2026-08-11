@@ -1,0 +1,5 @@
+{
+  "name": "Segment",
+  "category": "Analytics",
+  "body_pattern": "segment\\.io|analytics\\.js"
+}

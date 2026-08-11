@@ -1,0 +1,5 @@
+{
+  "name": "GSAP",
+  "category": "Frontend",
+  "body_pattern": "gsap(?:\\.min)?\\.js|TweenMax"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "ASP.NET",
+  "category": "Backend",
+  "header_key": "X-Powered-By",
+  "header_value": "ASP.NET",
+  "version_pattern": "ASP\\.NET Version:([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)"
+}

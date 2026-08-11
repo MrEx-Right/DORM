@@ -1,0 +1,5 @@
+{
+  "name": "Google Tag Manager",
+  "category": "Analytics",
+  "body_pattern": "googletagmanager\\.com\\/gtm\\.js"
+}

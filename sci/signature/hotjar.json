@@ -1,0 +1,5 @@
+{
+  "name": "Hotjar",
+  "category": "Analytics",
+  "body_pattern": "hotjar\\.com|hjid"
+}

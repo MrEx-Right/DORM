@@ -7,6 +7,7 @@ import (
 	"DORM/dom"
 	"DORM/models"
 	"DORM/plugins"
+	"DORM/sci"
 	"DORM/sitemapper"
 	"context"
 	"encoding/json"
@@ -435,6 +436,7 @@ WaitLoop:
 		engine.AddPlugin(&plugins.PassiveCVEPlugin{}) // Passive CVE (Only if selected)
 	}
 
+	// Supply chain analysis is now strictly standalone via the sidebar.
 	engine.AddPlugin(&plugins.BannerGrabPlugin{})
 	engine.AddPlugin(&plugins.HTTPHeaderPlugin{})
 	engine.AddPlugin(&plugins.SSLCheckPlugin{})
@@ -719,4 +721,25 @@ func handleKEV(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	json.NewEncoder(w).Encode(buckets)
+}
+
+// handleSCI runs the Supply Chain Interface analysis for a given target URL.
+// GET /api/sci?target=https://example.com
+func handleSCI(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+
+	target := r.URL.Query().Get("target")
+	if target == "" {
+		http.Error(w, `{"error":"Missing 'target' parameter"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Normalize: add scheme if missing
+	if !strings.HasPrefix(target, "http://") && !strings.HasPrefix(target, "https://") {
+		target = "https://" + target
+	}
+
+	result := sci.AnalyzeTarget(target)
+	json.NewEncoder(w).Encode(result)
 }

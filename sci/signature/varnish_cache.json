@@ -1,0 +1,5 @@
+{
+  "name": "Varnish Cache",
+  "category": "CDN",
+  "header_key": "X-Varnish"
+}

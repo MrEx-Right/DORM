@@ -1,0 +1,6 @@
+{
+  "name": "D3.js",
+  "category": "Frontend",
+  "body_pattern": "d3(?:\\.min)?\\.js",
+  "version_pattern": "d3@([0-9]+\\.[0-9]+\\.[0-9]+)"
+}
