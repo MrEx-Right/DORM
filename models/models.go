@@ -1,7 +1,10 @@
 package models
 
 import (
+	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -73,3 +76,47 @@ var DeepScanTarget func(targetURL string) *TechProfile
 var SearchLocalCVEs func(product, version string) []LocalCVE
 var GetCVEByID func(id string) *LocalCVE
 var SearchExploitDB func(query string) []string
+
+// ==========================================
+// SHARED HELPERS FOR ENGINE SUB-PACKAGES
+// ==========================================
+
+// IsWebPort returns true if the port is a common web port.
+func IsWebPort(port int) bool {
+	return port == 80 || port == 443 || port == 8080 || port == 8443 || port == 3000 || port == 5000 || port == 9090
+}
+
+// GetURL constructs a full URL from a ScanTarget and optional path.
+func GetURL(target ScanTarget, path string) string {
+	proto := "http"
+	if target.Port == 443 || target.Port == 8443 {
+		proto = "https"
+	}
+	if !strings.HasPrefix(path, "/") && path != "" {
+		path = "/" + path
+	}
+	return fmt.Sprintf("%s://%s:%d%s", proto, target.IP, target.Port, path)
+}
+
+// ReadBody reads the response body up to maxBytes and closes it.
+func ReadBody(resp *http.Response, maxBytes int64) string {
+	if resp == nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, maxBytes))
+	return string(b)
+}
+
+// GetSharedString reads a string value from SharedData.
+func GetSharedString(key string) string {
+	v, ok := SharedData.Load(key)
+	if !ok {
+		return ""
+	}
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return s
+}

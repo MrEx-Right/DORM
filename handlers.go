@@ -7,6 +7,11 @@ import (
 	"DORM/dom"
 	"DORM/models"
 	"DORM/plugins"
+	"DORM/plugins/idorengine"
+	"DORM/plugins/nosqliengine"
+	"DORM/plugins/sqliengine"
+	"DORM/plugins/wafengine"
+	"DORM/plugins/xssengine"
 	"DORM/sci"
 	"DORM/sitemapper"
 	"context"
@@ -423,20 +428,25 @@ WaitLoop:
 	engine := NewEngine(10) // Concurrency 10
 	engine.Ctx = ctx        // PASS CONTEXT TO ENGINE
 
-	// PLUGINS REGISTRATION
-	engine.AddPlugin(&plugins.DOMScannerPlugin{}) //DOM Scanner
-	engine.AddPlugin(&plugins.UnnecessaryPortsPlugin{})
+	// ── Engine-Powered Plugins (Prioritized) ──
+	engine.AddPlugin(&wafengine.WAFDetectorPlugin{})  // WAF Detection — Runs FIRST
+	engine.AddPlugin(&xssengine.XSSPlugin{})          // XSS Engine
+	engine.AddPlugin(&sqliengine.SQLInjectionPlugin{}) // SQLi Engine
+	engine.AddPlugin(&nosqliengine.NoSQLPlugin{})     // NoSQLi Engine
+	engine.AddPlugin(&idorengine.IDORPlugin{})        // IDOR Engine
+
 	engine.AddPlugin(&plugins.FingerprintPlugin{}) //Fingerprinting
 	engine.AddPlugin(&plugins.TLSCheckPlugin{})    //TLS Check
 	engine.AddPlugin(&plugins.BruteForcePlugin{})  //Brute Force
 	engine.AddPlugin(&SpiderPlugin{})              //Spider
 	engine.AddPlugin(&plugins.EDBPlugin{})         //Exploit DB
-
+	
+	// Passive CVE Check
 	if cveRadarEnabled {
 		engine.AddPlugin(&plugins.PassiveCVEPlugin{}) // Passive CVE (Only if selected)
 	}
 
-	// Supply chain analysis is now strictly standalone via the sidebar.
+	// Active Core Scanners
 	engine.AddPlugin(&plugins.BannerGrabPlugin{})
 	engine.AddPlugin(&plugins.HTTPHeaderPlugin{})
 	engine.AddPlugin(&plugins.SSLCheckPlugin{})
@@ -444,11 +454,8 @@ WaitLoop:
 	engine.AddPlugin(&plugins.CORSCheckPlugin{})
 	engine.AddPlugin(&plugins.WPUserEnumPlugin{})
 	engine.AddPlugin(&plugins.PHPInfoPlugin{})
-	engine.AddPlugin(&plugins.WAFDetectorPlugin{})
 	engine.AddPlugin(&plugins.OpenRedirectPlugin{})
 
-	engine.AddPlugin(&plugins.SQLInjectionPlugin{})
-	engine.AddPlugin(&plugins.XSSPlugin{})
 	engine.AddPlugin(&plugins.LFIPlugin{})
 	engine.AddPlugin(&plugins.SpringBootPlugin{})
 	engine.AddPlugin(&plugins.GitConfigPlugin{})
@@ -488,7 +495,6 @@ WaitLoop:
 	engine.AddPlugin(&plugins.PrototypePollutionPlugin{})
 	engine.AddPlugin(&plugins.TraversalPlugin{})
 	engine.AddPlugin(&plugins.ConfigJsonPlugin{})
-	engine.AddPlugin(&plugins.IDORPlugin{})
 
 	engine.AddPlugin(&plugins.KubeletPlugin{})
 	engine.AddPlugin(&plugins.DockerRegistryPlugin{})
@@ -511,7 +517,6 @@ WaitLoop:
 	engine.AddPlugin(&plugins.SSRFMetadataPlugin{})
 	engine.AddPlugin(&plugins.JWTWeaknessPlugin{})
 	engine.AddPlugin(&plugins.StrutsPlugin{})
-	engine.AddPlugin(&plugins.NoSQLPlugin{})
 	engine.AddPlugin(&plugins.TerraformPlugin{})
 	engine.AddPlugin(&plugins.WebSocketPlugin{})
 	engine.AddPlugin(&plugins.ShadowAPIPlugin{})

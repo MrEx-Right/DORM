@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.23.0] - 2026-08-17
+### ⚙️ Plugin Enhancement Pack 2.1
+
+This major architectural release refactors the five heaviest monolithic plugins into scalable, multi-phase Engine packages and introduces the "Deep Sentinel" cross-engine WAF integration framework.
+
+---
+
+#### 🏗️ Architectural Overhaul (`plugins/`)
+- **Monoliths Retired:** Deleted the original 5 monolithic plugin files (`xss.go`, `sqlinjection.go`, `nosql.go`, `wafdetector.go`, `idor.go`).
+- **Engine Sub-Packages:** Migrated functionality into 5 dedicated packages (`wafengine`, `xssengine`, `sqliengine`, `nosqliengine`, `idorengine`), breaking them down into 33 highly focused, maintainable files.
+- **Shared Dependencies:** Standardized and relocated common helper functions (`IsWebPort`, `GetURL`, `ReadBody`) to `models.go` to prevent circular dependencies across the new packages.
+
+#### 🛡️ Deep Sentinel WAF Integration
+- **Cross-Engine Intelligence:** Introduced a priority-based execution model where the `wafengine` runs first.
+- **Shared State:** The WAF engine fingerprints the target firewall/CDN and writes the `waf_type` to `models.SharedData`.
+- **Adaptive Payloads:** `xssengine` and `sqliengine` now read this shared state to dynamically inject WAF-specific bypass payloads (e.g., ModSecurity, Cloudflare, AWS WAF) when a firewall is detected.
+
+#### 🧩 Engine Deep Dives
+- **WAF Engine:** Detects 50+ WAF signatures and differentiates between pure CDNs (like Fastly) and security-enabled CDNs (like Cloudflare). Includes behavioral probes that analyze how the server blocks malicious payloads.
+- **XSS Engine:** Features a context-aware injector that auto-applies Double URL, Unicode, and HTML entity encodings. Includes a static DOM Analyzer with multi-hop taint tracking to detect sources (`location.hash`) flowing into sinks (`.innerHTML`).
+- **SQLi Engine "Omni-SQLi":** Detects Error-based, UNION-based (auto column counting), Time-based blind, Boolean blind, and Header injections. Includes POST differential analysis for login bypasses and over 120 WAF-adaptive payloads.
+- **NoSQLi Engine "Mongo Mayhem":** Targets auth bypass via JSON body injection (`$gt`, `$ne`, `$regex`), Server-Side JS evaluation (`$where` with `sleep()`), CouchDB unauthorized probe, and Data Leak detection via `$regex` size differentials.
+- **IDOR Engine "Auth Matrix":** Performs Dual-Profile BOLA checks, replaying User 1's requests as User 2 to detect PII leaks. Also features a UUID Harvester that crawls API index endpoints for valid test IDs and GraphQL BOLA detection.
+
 ## [v1.22.0] - 2026-08-04
 ### 🚀 Supply Chain Interface (SCI) and Patch Update
 

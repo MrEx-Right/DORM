@@ -270,5 +270,28 @@ func GetPluginInventory() map[string][]string {
 	}
 }
 
+// readBody reads the response body up to maxBytes and closes it.
+func readBody(resp *http.Response, maxBytes int64) string {
+	if resp == nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, maxBytes))
+	return string(b)
+}
+
+// getSharedString reads a string value from models.SharedData
+func getSharedString(key string) string {
+	v, ok := models.SharedData.Load(key)
+	if !ok {
+		return ""
+	}
+	s, ok := v.(string)
+	if !ok {
+		return ""
+	}
+	return s
+}
+
 func IsWebPort(port int) bool                             { return isWebPort(port) }
 func GetURL(target models.ScanTarget, path string) string { return getURL(target, path) }

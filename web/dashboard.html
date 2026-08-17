@@ -1465,7 +1465,7 @@
 
         .sci-stat-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
         }
 
         .sci-stat-value {
@@ -1509,7 +1509,7 @@
 
         .sci-category-count {
             margin-left: auto;
-            background: rgba(255,255,255,0.06);
+            background: rgba(255, 255, 255, 0.06);
             padding: 2px 8px;
             border-radius: 8px;
             font-size: 10px;
@@ -1537,15 +1537,32 @@
         .sci-component-card:hover {
             transform: translateY(-2px);
             border-color: rgba(59, 130, 246, 0.3);
-            box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
         }
 
-        .sci-component-card.risk-critical { border-left: 3px solid #EF4444; }
-        .sci-component-card.risk-high     { border-left: 3px solid #F97316; }
-        .sci-component-card.risk-medium   { border-left: 3px solid #F59E0B; }
-        .sci-component-card.risk-low      { border-left: 3px solid #3B82F6; }
-        .sci-component-card.risk-safe     { border-left: 3px solid #10B981; }
-        .sci-component-card.risk-unknown  { border-left: 3px solid #6B7280; }
+        .sci-component-card.risk-critical {
+            border-left: 3px solid #EF4444;
+        }
+
+        .sci-component-card.risk-high {
+            border-left: 3px solid #F97316;
+        }
+
+        .sci-component-card.risk-medium {
+            border-left: 3px solid #F59E0B;
+        }
+
+        .sci-component-card.risk-low {
+            border-left: 3px solid #3B82F6;
+        }
+
+        .sci-component-card.risk-safe {
+            border-left: 3px solid #10B981;
+        }
+
+        .sci-component-card.risk-unknown {
+            border-left: 3px solid #6B7280;
+        }
 
         .sci-card-header {
             display: flex;
@@ -1602,12 +1619,41 @@
             letter-spacing: 0.5px;
         }
 
-        .sci-risk-badge.risk-critical { background: rgba(239,68,68,0.2); color: #FCA5A5; border: 1px solid rgba(239,68,68,0.4); }
-        .sci-risk-badge.risk-high     { background: rgba(249,115,22,0.2); color: #FDBA74; border: 1px solid rgba(249,115,22,0.4); }
-        .sci-risk-badge.risk-medium   { background: rgba(245,158,11,0.2); color: #FCD34D; border: 1px solid rgba(245,158,11,0.4); }
-        .sci-risk-badge.risk-low      { background: rgba(59,130,246,0.2); color: #93C5FD; border: 1px solid rgba(59,130,246,0.4); }
-        .sci-risk-badge.risk-safe     { background: rgba(16,185,129,0.2); color: #6EE7B7; border: 1px solid rgba(16,185,129,0.4); }
-        .sci-risk-badge.risk-unknown  { background: rgba(107,114,128,0.2); color: #9CA3AF; border: 1px solid rgba(107,114,128,0.3); }
+        .sci-risk-badge.risk-critical {
+            background: rgba(239, 68, 68, 0.2);
+            color: #FCA5A5;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+        }
+
+        .sci-risk-badge.risk-high {
+            background: rgba(249, 115, 22, 0.2);
+            color: #FDBA74;
+            border: 1px solid rgba(249, 115, 22, 0.4);
+        }
+
+        .sci-risk-badge.risk-medium {
+            background: rgba(245, 158, 11, 0.2);
+            color: #FCD34D;
+            border: 1px solid rgba(245, 158, 11, 0.4);
+        }
+
+        .sci-risk-badge.risk-low {
+            background: rgba(59, 130, 246, 0.2);
+            color: #93C5FD;
+            border: 1px solid rgba(59, 130, 246, 0.4);
+        }
+
+        .sci-risk-badge.risk-safe {
+            background: rgba(16, 185, 129, 0.2);
+            color: #6EE7B7;
+            border: 1px solid rgba(16, 185, 129, 0.4);
+        }
+
+        .sci-risk-badge.risk-unknown {
+            background: rgba(107, 114, 128, 0.2);
+            color: #9CA3AF;
+            border: 1px solid rgba(107, 114, 128, 0.3);
+        }
 
         /* CVE Count Footer */
         .sci-card-footer {
@@ -1642,27 +1688,37 @@
             margin-top: 8px;
             max-height: 300px;
             overflow-y: auto;
-            border: 1px solid rgba(255,255,255,0.06);
+            border: 1px solid rgba(255, 255, 255, 0.06);
             border-radius: 8px;
-            background: rgba(0,0,0,0.2);
+            background: rgba(0, 0, 0, 0.2);
         }
 
         .sci-cve-list.open {
             display: block;
         }
 
-        .sci-cve-list::-webkit-scrollbar { width: 4px; }
-        .sci-cve-list::-webkit-scrollbar-thumb { background: rgba(59,130,246,0.3); border-radius: 4px; }
+        .sci-cve-list::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .sci-cve-list::-webkit-scrollbar-thumb {
+            background: rgba(59, 130, 246, 0.3);
+            border-radius: 4px;
+        }
 
         .sci-cve-item {
             padding: 10px 12px;
-            border-bottom: 1px solid rgba(255,255,255,0.04);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
             font-size: 11px;
         }
 
-        .sci-cve-item:last-child { border-bottom: none; }
+        .sci-cve-item:last-child {
+            border-bottom: none;
+        }
 
-        .sci-cve-item:hover { background: rgba(255,255,255,0.03); }
+        .sci-cve-item:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
 
         .sci-cve-top {
             display: flex;
@@ -1708,12 +1764,13 @@
 
         .sci-empty-icon {
             font-size: 56px;
-            background: linear-gradient(135deg, rgba(59,130,246,0.4), rgba(16,185,129,0.3));
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.4), rgba(16, 185, 129, 0.3));
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
             display: block;
             margin-bottom: 20px;
-            filter: drop-shadow(0 0 20px rgba(59,130,246,0.3));
+            filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.3));
         }
 
         /* SCI Scan Input */
@@ -1725,7 +1782,7 @@
 
         .sci-search-row input {
             flex: 1;
-            background: rgba(0,0,0,0.25);
+            background: rgba(0, 0, 0, 0.25);
             border: 1px solid var(--panel-border);
             border-radius: 10px;
             padding: 14px 18px;
@@ -1738,12 +1795,14 @@
 
         .sci-search-row input:focus {
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
         }
 
         /* SCI Loading */
         @keyframes sciSpin {
-            to { transform: rotate(360deg); }
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .sci-loading {
@@ -1760,7 +1819,7 @@
         .sci-loading-ring {
             width: 36px;
             height: 36px;
-            border: 3px solid rgba(59,130,246,0.2);
+            border: 3px solid rgba(59, 130, 246, 0.2);
             border-top-color: var(--accent);
             border-radius: 50%;
             animation: sciSpin 0.8s linear infinite;
@@ -1777,12 +1836,14 @@
             letter-spacing: 1px;
             padding: 6px 14px;
             border-radius: 20px;
-            background: rgba(16,185,129,0.1);
-            border: 1px solid rgba(16,185,129,0.25);
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.25);
             color: #34D399;
         }
 
-        .sci-scan-indicator.visible { display: flex; }
+        .sci-scan-indicator.visible {
+            display: flex;
+        }
 
         .sci-scan-dot {
             width: 7px;
@@ -1841,7 +1902,8 @@
             </div>
             <div class="nav-item" id="nav-sci" onclick="switchView('sci')">
                 <i class="fas fa-link"></i> Supply Chain
-                <span id="sci-nav-badge" style="display:none; margin-left:auto; background: linear-gradient(135deg,#ef4444,#dc2626); color:#fff; font-size:9px; font-weight:800; padding:2px 6px; border-radius:10px; letter-spacing:0.5px;">RISK</span>
+                <span id="sci-nav-badge"
+                    style="display:none; margin-left:auto; background: linear-gradient(135deg,#ef4444,#dc2626); color:#fff; font-size:9px; font-weight:800; padding:2px 6px; border-radius:10px; letter-spacing:0.5px;">RISK</span>
             </div>
             <div class="nav-item" onclick="switchView('sitemap')">
                 <i class="fas fa-sitemap"></i> Sitemap
@@ -1855,7 +1917,7 @@
         </div>
 
         <div style="margin-top:auto; font-size:12px; color:rgba(255,255,255,0.3); text-align:center; font-weight: 600;">
-            v1.22.0
+            v1.23.0
         </div>
     </div>
 
@@ -2267,14 +2329,18 @@
 
                 <!-- Header -->
                 <div class="control-panel" style="margin-bottom: 20px; padding: 20px 28px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
                         <div style="display: flex; align-items: center; gap: 14px;">
-                            <div style="width:44px; height:44px; border-radius:12px; background: linear-gradient(135deg,rgba(59,130,246,0.25),rgba(16,185,129,0.15)); border: 1px solid rgba(59,130,246,0.3); display:flex; align-items:center; justify-content:center; font-size:20px; color:var(--accent);">
+                            <div
+                                style="width:44px; height:44px; border-radius:12px; background: linear-gradient(135deg,rgba(59,130,246,0.25),rgba(16,185,129,0.15)); border: 1px solid rgba(59,130,246,0.3); display:flex; align-items:center; justify-content:center; font-size:20px; color:var(--accent);">
                                 <i class="fas fa-link"></i>
                             </div>
                             <div>
-                                <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #fff;">Supply Chain Interface</h2>
-                                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-dim);">Deep component fingerprinting & CVE enrichment for any target</p>
+                                <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #fff;">Supply Chain
+                                    Interface</h2>
+                                <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-dim);">Deep component
+                                    fingerprinting & CVE enrichment for any target</p>
                             </div>
                         </div>
                         <div style="display:flex; align-items:center; gap: 12px;">
@@ -2334,10 +2400,13 @@
                     <!-- Empty state -->
                     <div class="sci-empty" id="sciEmptyState">
                         <i class="fas fa-link sci-empty-icon"></i>
-                        <p style="font-size: 17px; font-weight: 700; color: var(--text-main); margin: 0 0 8px;">Supply Chain Analysis</p>
-                        <p style="font-size: 13px; margin: 0 0 20px;">Enter a target URL above and click Analyze to detect all components — frameworks, libraries, CDN, analytics, and their CVEs.</p>
+                        <p style="font-size: 17px; font-weight: 700; color: var(--text-main); margin: 0 0 8px;">Supply
+                            Chain Analysis</p>
+                        <p style="font-size: 13px; margin: 0 0 20px;">Enter a target URL above and click Analyze to
+                            detect all components — frameworks, libraries, CDN, analytics, and their CVEs.</p>
                         <p style="font-size: 12px; color: rgba(148,163,184,0.6);">
-                            <i class="fas fa-info-circle"></i> Results also auto-populate when an active scan detects supply chain risks.
+                            <i class="fas fa-info-circle"></i> Results also auto-populate when an active scan detects
+                            supply chain risks.
                         </p>
                     </div>
                 </div>
@@ -2371,104 +2440,124 @@
                     <div style="margin-top: 20px;">
                         <!-- KEV Section -->
                         <div style="margin-bottom: 20px;">
-                            <div style="color: var(--accent); font-size: 16px; font-weight: bold; margin-bottom: 15px; text-transform: uppercase;">
-                                <i class="fas fa-fire-flame-curved"></i> Known Exploited Vulnerabilities (CISA KEV) & EPSS
+                            <div
+                                style="color: var(--accent); font-size: 16px; font-weight: bold; margin-bottom: 15px; text-transform: uppercase;">
+                                <i class="fas fa-fire-flame-curved"></i> Known Exploited Vulnerabilities (CISA KEV) &
+                                EPSS
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
                                 <!-- Column 1: Since Yesterday -->
-                                <div style="background: rgba(0,0,0,0.4); border-radius: 8px; border: 1px solid var(--panel-border); display: flex; flex-direction: column;">
-                                    <div style="background: rgba(220, 38, 38, 0.2); border-bottom: 1px solid rgba(220, 38, 38, 0.3); padding: 10px; border-radius: 8px 8px 0 0; color: #FCA5A5; font-size: 13px; font-weight: bold; text-align: center;">
+                                <div
+                                    style="background: rgba(0,0,0,0.4); border-radius: 8px; border: 1px solid var(--panel-border); display: flex; flex-direction: column;">
+                                    <div
+                                        style="background: rgba(220, 38, 38, 0.2); border-bottom: 1px solid rgba(220, 38, 38, 0.3); padding: 10px; border-radius: 8px 8px 0 0; color: #FCA5A5; font-size: 13px; font-weight: bold; text-align: center;">
                                         <i class="fas fa-clock"></i> Since Yesterday
                                     </div>
-                                    <div id="kev-bucket-1" style="padding: 10px; display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto;">
-                                        <div style="text-align: center; color: var(--text-dim); padding: 20px; font-size: 12px;"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+                                    <div id="kev-bucket-1"
+                                        style="padding: 10px; display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto;">
+                                        <div
+                                            style="text-align: center; color: var(--text-dim); padding: 20px; font-size: 12px;">
+                                            <i class="fas fa-spinner fa-spin"></i> Loading...</div>
                                     </div>
                                 </div>
-                                
+
                                 <!-- Column 2: Last 7 Days -->
-                                <div style="background: rgba(0,0,0,0.4); border-radius: 8px; border: 1px solid var(--panel-border); display: flex; flex-direction: column;">
-                                    <div style="background: rgba(245, 158, 11, 0.2); border-bottom: 1px solid rgba(245, 158, 11, 0.3); padding: 10px; border-radius: 8px 8px 0 0; color: #FCD34D; font-size: 13px; font-weight: bold; text-align: center;">
+                                <div
+                                    style="background: rgba(0,0,0,0.4); border-radius: 8px; border: 1px solid var(--panel-border); display: flex; flex-direction: column;">
+                                    <div
+                                        style="background: rgba(245, 158, 11, 0.2); border-bottom: 1px solid rgba(245, 158, 11, 0.3); padding: 10px; border-radius: 8px 8px 0 0; color: #FCD34D; font-size: 13px; font-weight: bold; text-align: center;">
                                         <i class="fas fa-calendar-week"></i> Last 7 Days
                                     </div>
-                                    <div id="kev-bucket-2" style="padding: 10px; display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto;">
-                                        <div style="text-align: center; color: var(--text-dim); padding: 20px; font-size: 12px;"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+                                    <div id="kev-bucket-2"
+                                        style="padding: 10px; display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto;">
+                                        <div
+                                            style="text-align: center; color: var(--text-dim); padding: 20px; font-size: 12px;">
+                                            <i class="fas fa-spinner fa-spin"></i> Loading...</div>
                                     </div>
                                 </div>
-                                
+
                                 <!-- Column 3: Last 30 Days -->
-                                <div style="background: rgba(0,0,0,0.4); border-radius: 8px; border: 1px solid var(--panel-border); display: flex; flex-direction: column;">
-                                    <div style="background: rgba(16, 185, 129, 0.2); border-bottom: 1px solid rgba(16, 185, 129, 0.3); padding: 10px; border-radius: 8px 8px 0 0; color: #6EE7B7; font-size: 13px; font-weight: bold; text-align: center;">
+                                <div
+                                    style="background: rgba(0,0,0,0.4); border-radius: 8px; border: 1px solid var(--panel-border); display: flex; flex-direction: column;">
+                                    <div
+                                        style="background: rgba(16, 185, 129, 0.2); border-bottom: 1px solid rgba(16, 185, 129, 0.3); padding: 10px; border-radius: 8px 8px 0 0; color: #6EE7B7; font-size: 13px; font-weight: bold; text-align: center;">
                                         <i class="fas fa-calendar-days"></i> Last 30 Days
                                     </div>
-                                    <div id="kev-bucket-3" style="padding: 10px; display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto;">
-                                        <div style="text-align: center; color: var(--text-dim); padding: 20px; font-size: 12px;"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+                                    <div id="kev-bucket-3"
+                                        style="padding: 10px; display: flex; flex-direction: column; gap: 10px; max-height: 400px; overflow-y: auto;">
+                                        <div
+                                            style="text-align: center; color: var(--text-dim); padding: 20px; font-size: 12px;">
+                                            <i class="fas fa-spinner fa-spin"></i> Loading...</div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                    <div style="display: flex; justify-content: center;">
-                        <!-- Severity Distribution Chart -->
-                        <div
-                            style="background: rgba(0,0,0,0.4); border-radius: 8px; border: 1px solid var(--panel-border); overflow: hidden; display: flex; flex-direction: column; align-items: center; padding: 25px; width: 100%;">
+                        <div style="display: flex; justify-content: center;">
+                            <!-- Severity Distribution Chart -->
                             <div
-                                style="color: var(--accent); font-size: 16px; font-weight: bold; margin-bottom: 20px; align-self: center; text-transform: uppercase;">
-                                <i class="fas fa-chart-pie"></i> CVE Severity Distribution
-                            </div>
-                            <div style="width: 100%; max-width: 400px; height: 300px; position: relative;">
-                                <canvas id="cveSeverityChart"></canvas>
+                                style="background: rgba(0,0,0,0.4); border-radius: 8px; border: 1px solid var(--panel-border); overflow: hidden; display: flex; flex-direction: column; align-items: center; padding: 25px; width: 100%;">
+                                <div
+                                    style="color: var(--accent); font-size: 16px; font-weight: bold; margin-bottom: 20px; align-self: center; text-transform: uppercase;">
+                                    <i class="fas fa-chart-pie"></i> CVE Severity Distribution
+                                </div>
+                                <div style="width: 100%; max-width: 400px; height: 300px; position: relative;">
+                                    <canvas id="cveSeverityChart"></canvas>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <div style="display: flex; flex-direction: column; gap: 20px;">
-                    <!-- DB Search Panel -->
-                    <div class="control-panel" style="padding: 20px; display: flex; flex-direction: column;">
-                        <h3 style="margin: 0 0 15px 0; font-size: 16px; color: var(--accent);"><i
-                                class="fas fa-database"></i> CVE Database Explorer</h3>
+                    <div style="display: flex; flex-direction: column; gap: 20px;">
+                        <!-- DB Search Panel -->
+                        <div class="control-panel" style="padding: 20px; display: flex; flex-direction: column;">
+                            <h3 style="margin: 0 0 15px 0; font-size: 16px; color: var(--accent);"><i
+                                    class="fas fa-database"></i> CVE Database Explorer</h3>
 
-                        <div class="input-group" style="margin-bottom: 15px;">
-                            <input type="text" id="cveSearchInput"
-                                placeholder="Search by Product, Technology, or CVE ID... e.g. wordpress, nginx, CVE-2023"
-                                style="flex-grow: 1; background-color: rgba(0, 0, 0, 0.2); color: #fff; border: 1px solid var(--panel-border); border-radius: 8px; padding: 12px; font-size: 13px; outline: none;"
-                                onkeypress="if(event.key === 'Enter') searchCVE()">
-                            <button onclick="searchCVE()"
-                                style="background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color: #fff; padding: 12px 20px; border-radius: 8px; cursor: pointer;">
-                                <i class="fas fa-search"></i>
-                            </button>
-                        </div>
+                            <div class="input-group" style="margin-bottom: 15px;">
+                                <input type="text" id="cveSearchInput"
+                                    placeholder="Search by Product, Technology, or CVE ID... e.g. wordpress, nginx, CVE-2023"
+                                    style="flex-grow: 1; background-color: rgba(0, 0, 0, 0.2); color: #fff; border: 1px solid var(--panel-border); border-radius: 8px; padding: 12px; font-size: 13px; outline: none;"
+                                    onkeypress="if(event.key === 'Enter') searchCVE()">
+                                <button onclick="searchCVE()"
+                                    style="background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color: #fff; padding: 12px 20px; border-radius: 8px; cursor: pointer;">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
 
-                        <div
-                            style="flex-grow: 1; overflow-y: auto; max-height: 400px; border: 1px solid var(--panel-border); border-radius: 8px;">
-                            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-                                <thead style="background: rgba(255,255,255,0.05); position: sticky; top: 0;">
-                                    <tr>
-                                        <th style="padding: 10px; text-align: left; color: var(--text-dim);">CVE ID</th>
-                                        <th style="padding: 10px; text-align: center; color: var(--text-dim);">CVSS</th>
-                                        <th style="padding: 10px; text-align: left; color: var(--text-dim);">PRODUCT
-                                        </th>
-                                        <th style="padding: 10px; text-align: right; color: var(--text-dim);">ACTION
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody id="cveDbResults">
-                                    <tr>
-                                        <td colspan="4"
-                                            style="text-align: center; padding: 30px; color: var(--text-dim);">Search
-                                            the database to explore CVEs...</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                            <div
+                                style="flex-grow: 1; overflow-y: auto; max-height: 400px; border: 1px solid var(--panel-border); border-radius: 8px;">
+                                <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                                    <thead style="background: rgba(255,255,255,0.05); position: sticky; top: 0;">
+                                        <tr>
+                                            <th style="padding: 10px; text-align: left; color: var(--text-dim);">CVE ID
+                                            </th>
+                                            <th style="padding: 10px; text-align: center; color: var(--text-dim);">CVSS
+                                            </th>
+                                            <th style="padding: 10px; text-align: left; color: var(--text-dim);">PRODUCT
+                                            </th>
+                                            <th style="padding: 10px; text-align: right; color: var(--text-dim);">ACTION
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="cveDbResults">
+                                        <tr>
+                                            <td colspan="4"
+                                                style="text-align: center; padding: 30px; color: var(--text-dim);">
+                                                Search
+                                                the database to explore CVEs...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+
         </div>
 
-    </div>
-
-    <script src="app.js"></script>
+        <script src="app.js"></script>
 
 </body>
 
