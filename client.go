@@ -15,35 +15,25 @@ import (
 // CLIENT & MIDDLEWARE LOGIC (AUTH & EVASION)
 // ==========================================
 
-// Global Variables (Controlled by main.go/handleScan)
-
-var GlobalAuthHeader string = ""
-var GlobalProxyEnabled bool = false
-var GlobalProxyURL string = "http://127.0.0.1:8080"
-
 var (
-	baseTransport http.RoundTripper
-	transportMu   sync.RWMutex
+	activeClient   *http.Client
+	activeClientMu sync.RWMutex
 )
 
-// InitTransport updates the global baseTransport, avoiding race conditions and connection pool exhaustion
-func InitTransport() {
-	transportMu.Lock()
-	defer transportMu.Unlock()
-
+// SetActiveClient creates a brand new HTTP client with isolated proxy and auth settings for the current scan.
+func SetActiveClient(auth string, proxyEnabled bool, proxyURLStr string) {
 	var proxyFunc func(*http.Request) (*url.URL, error) = nil
 
-	if GlobalProxyEnabled {
-		// Parse proxy
-		proxyURL, err := url.Parse(GlobalProxyURL)
-		if err != nil || GlobalProxyURL == "" {
-			// Fallback to default if somehow broken
-			proxyURL, _ = url.Parse("http://127.0.0.1:8080")
+	if proxyEnabled {
+		if proxyURLStr == "" {
+			proxyURLStr = "http://127.0.0.1:8080"
 		}
-		proxyFunc = http.ProxyURL(proxyURL)
+		proxyURL, err := url.Parse(proxyURLStr)
+		if err == nil {
+			proxyFunc = http.ProxyURL(proxyURL)
+		}
 	}
 
-	// Create custom transport with Proxy and disabled TLS verify (useful for intercepts)
 	customTransport := &http.Transport{
 		Proxy: proxyFunc,
 		TLSClientConfig: &tls.Config{
@@ -53,12 +43,24 @@ func InitTransport() {
 		MaxIdleConnsPerHost: 100,
 		IdleConnTimeout:     90 * time.Second,
 	}
-	baseTransport = customTransport
+
+	client := &http.Client{
+		Transport: &UARoundTripper{
+			Proxied:    customTransport,
+			AuthHeader: auth,
+		},
+		Timeout: 10 * time.Second,
+	}
+
+	activeClientMu.Lock()
+	activeClient = client
+	activeClientMu.Unlock()
 }
 
 // --- PROXY MIDDLEWARE (The Brain) ---
 type UARoundTripper struct {
-	Proxied http.RoundTripper
+	Proxied    http.RoundTripper
+	AuthHeader string
 }
 
 func (urt *UARoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -67,9 +69,9 @@ func (urt *UARoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 	req.Header.Set("User-Agent", bypassers.GetRandomUserAgent())
 
 	// 2. Auth Injection (Cookie/Token)
-	if GlobalAuthHeader != "" {
+	if urt.AuthHeader != "" {
 		// Splits the incoming data formatted as "Cookie: SESSID=..."
-		parts := strings.SplitN(GlobalAuthHeader, ":", 2)
+		parts := strings.SplitN(urt.AuthHeader, ":", 2)
 		if len(parts) == 2 {
 			key := strings.TrimSpace(parts[0])
 			val := strings.TrimSpace(parts[1])
@@ -85,19 +87,13 @@ func (urt *UARoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 
 // Client Helper (Used by Plugins)
 func getClient() *http.Client {
-	// Fallback in case InitTransport wasn't called yet
-	transportMu.RLock()
-	if baseTransport == nil {
-		transportMu.RUnlock()
-		InitTransport()
-		transportMu.RLock()
+	activeClientMu.RLock()
+	defer activeClientMu.RUnlock()
+	
+	if activeClient == nil {
+		// Fallback for background tasks running outside an active scan (if any)
+		return &http.Client{Timeout: 10 * time.Second}
 	}
-
-	bt := baseTransport
-	transportMu.RUnlock()
-
-	return &http.Client{
-		Transport: &UARoundTripper{Proxied: bt},
-		Timeout:   10 * time.Second,
-	}
+	
+	return activeClient
 }

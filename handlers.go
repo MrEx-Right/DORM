@@ -171,14 +171,11 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	selectedPluginsStr := r.URL.Query().Get("plugins")
 
 	// --- UPDATE CLIENT SETTINGS (Located in client.go) ---
-	GlobalAuthHeader = r.URL.Query().Get("auth")
+	authHeader := r.URL.Query().Get("auth")
+	proxyEnabled := r.URL.Query().Get("proxyEnabled") == "true"
+	proxyUrl := r.URL.Query().Get("proxyUrl")
 
-	// Proxy Setup
-	GlobalProxyEnabled = r.URL.Query().Get("proxyEnabled") == "true"
-	if proxyUrl := r.URL.Query().Get("proxyUrl"); proxyUrl != "" {
-		GlobalProxyURL = proxyUrl
-	}
-	InitTransport() // Initialize proxy transport and connection pool safely
+	SetActiveClient(authHeader, proxyEnabled, proxyUrl)
 
 	// --- WAF BYPASS SETTINGS ---
 	bypassers.GlobalDelayConfig.BaseDelayMs = 0

@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.23.1] - 2026-08-24
+### 🔒 Security Patch 
+
+- **Global Proxy & Auth Poisoning:** Fixed a critical vulnerability where global variables (`GlobalAuthHeader`, `GlobalProxyURL`, `GlobalProxyEnabled`) could be overwritten during an active scan or by a malicious CSRF payload, hijacking subsequent scans.
+- **Client Isolation:** Refactored `client.go` to generate a dedicated, atomic `http.Client` state per scan via `SetActiveClient()`. `UARoundTripper` is now stateful per client. Global proxy and auth settings have been completely eradicated.
+
 ## [v1.23.0] - 2026-08-17
 ### ⚙️ Plugin Enhancement Pack 2.1
 
