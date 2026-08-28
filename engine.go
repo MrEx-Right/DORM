@@ -153,7 +153,7 @@ func DeepScanTarget(targetURL string) *models.TechProfile {
 	}
 	defer resp.Body.Close()
 
-	re := regexp.MustCompile(`(?i)([a-zA-Z0-9\-]+)(?:/|\s+v?)([0-9]+(?:\.[0-9]+)*)`)
+	re := regexp.MustCompile(`(?i)([a-zA-Z0-9\-\.]+)(?:/|\s+v?)([0-9]+(?:\.[0-9]+)+)`)
 	headersToScan := []string{"Server", "X-Powered-By", "X-Generator"}
 
 	for _, h := range headersToScan {

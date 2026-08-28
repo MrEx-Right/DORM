@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -167,6 +168,23 @@ func AnalyzeTarget(targetURL string) SupplyChainResult {
 		}
 	}
 
+	// ── Step 3.5: Manifest Extraction (package.json, composer.json) ────────
+	manifestComps := fetchManifests(targetURL)
+	for _, mc := range manifestComps {
+		found := false
+		for i := range detected {
+			if strings.EqualFold(detected[i].Name, mc.Name) {
+				detected[i].Version = mc.Version
+				detected[i].Source = mc.Source
+				found = true
+				break
+			}
+		}
+		if !found {
+			detected = append(detected, mc)
+		}
+	}
+
 	// ── Step 4: CVE Enrichment ─────────────────────────────────────────────
 	if models.SearchLocalCVEs != nil {
 		for i := range detected {
@@ -221,6 +239,96 @@ func AnalyzeTarget(targetURL string) SupplyChainResult {
 	}
 	result.ScanDuration = time.Since(start).Round(time.Millisecond).String()
 	return result
+}
+
+// ─── Manifest Extraction ───────────────────────────────────────────────────────
+
+func cleanVersion(v string) string {
+	v = strings.TrimSpace(v)
+	// Remove prefixes like ^, ~, <, >, = and spaces. 
+	// Also converts 'x' to '0' to handle versions like 1.x -> 1.0
+	re := regexp.MustCompile(`^[~^<>=]*\s*v?([0-9]+(?:\.[0-9x\*]+)*)`)
+	m := re.FindStringSubmatch(v)
+	if len(m) > 1 {
+		return strings.ReplaceAll(strings.ReplaceAll(m[1], "x", "0"), "*", "0")
+	}
+	return v
+}
+
+func fetchManifests(targetURL string) []SCIComponent {
+	var comps []SCIComponent
+
+	u, err := url.Parse(targetURL)
+	if err != nil {
+		return comps
+	}
+	baseURL := fmt.Sprintf("%s://%s", u.Scheme, u.Host)
+
+	// 1. Fetch package.json
+	pkgURL := baseURL + "/package.json"
+	req, err := http.NewRequest("GET", pkgURL, nil)
+	if err == nil {
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+		if resp, err := sciClient.Do(req); err == nil {
+			if resp.StatusCode == 200 && strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "json") {
+				var pkg struct {
+					Dependencies    map[string]string `json:"dependencies"`
+					DevDependencies map[string]string `json:"devDependencies"`
+				}
+				if json.NewDecoder(io.LimitReader(resp.Body, 1*1024*1024)).Decode(&pkg) == nil {
+					for name, ver := range pkg.Dependencies {
+						comps = append(comps, SCIComponent{
+							Name:     name,
+							Version:  cleanVersion(ver),
+							Category: "Frontend",
+							Source:   "package.json",
+						})
+					}
+					for name, ver := range pkg.DevDependencies {
+						comps = append(comps, SCIComponent{
+							Name:     name,
+							Version:  cleanVersion(ver),
+							Category: "Frontend",
+							Source:   "package.json",
+						})
+					}
+				}
+			}
+			resp.Body.Close()
+		}
+	}
+
+	// 2. Fetch composer.json
+	compURL := baseURL + "/composer.json"
+	req2, err2 := http.NewRequest("GET", compURL, nil)
+	if err2 == nil {
+		req2.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+		if resp2, err2 := sciClient.Do(req2); err2 == nil {
+			if resp2.StatusCode == 200 && strings.Contains(strings.ToLower(resp2.Header.Get("Content-Type")), "json") {
+				var comp struct {
+					Require map[string]string `json:"require"`
+				}
+				if json.NewDecoder(io.LimitReader(resp2.Body, 1*1024*1024)).Decode(&comp) == nil {
+					for name, ver := range comp.Require {
+						if name == "php" {
+							continue
+						}
+						parts := strings.Split(name, "/")
+						pkgName := parts[len(parts)-1]
+						comps = append(comps, SCIComponent{
+							Name:     pkgName,
+							Version:  cleanVersion(ver),
+							Category: "Backend",
+							Source:   "composer.json",
+						})
+					}
+				}
+			}
+			resp2.Body.Close()
+		}
+	}
+
+	return comps
 }
 
 // ─── HTTP Fetch ────────────────────────────────────────────────────────────────
