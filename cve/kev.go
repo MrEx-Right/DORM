@@ -130,15 +130,17 @@ func fetchAndBuildKEVBuckets() (*KEVBuckets, error) {
 
 		daysDiff := now.Sub(addedDate).Hours() / 24.0
 
-		// Bucket logic as requested by user
+		// Bucket logic: Cumulative!
 		if daysDiff <= 2.0 {
 			// Since Yesterday (Up to 48 hours to be safe with timezones)
 			bucket1 = append(bucket1, v)
-		} else if daysDiff <= 7.0 {
-			// Last 7 days
+		}
+		if daysDiff <= 7.0 {
+			// Last 7 days (includes <= 2.0)
 			bucket2 = append(bucket2, v)
-		} else if daysDiff <= 30.0 {
-			// Last 30 days
+		}
+		if daysDiff <= 30.0 {
+			// Last 30 days (includes <= 7.0)
 			bucket3 = append(bucket3, v)
 		}
 	}

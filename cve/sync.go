@@ -44,6 +44,10 @@ type cve5Root struct {
 				} `json:"versions"`
 			} `json:"affected"`
 			Metrics []struct {
+				CvssV40 *struct {
+					BaseScore    float64 `json:"baseScore"`
+					BaseSeverity string  `json:"baseSeverity"`
+				} `json:"cvssV4_0"`
 				CvssV31 *struct {
 					BaseScore    float64 `json:"baseScore"`
 					BaseSeverity string  `json:"baseSeverity"`
@@ -52,6 +56,10 @@ type cve5Root struct {
 					BaseScore    float64 `json:"baseScore"`
 					BaseSeverity string  `json:"baseSeverity"`
 				} `json:"cvssV3_0"`
+				CvssV20 *struct {
+					BaseScore    float64 `json:"baseScore"`
+					BaseSeverity string  `json:"baseSeverity"`
+				} `json:"cvssV2_0"`
 			} `json:"metrics"`
 		} `json:"cna"`
 	} `json:"containers"`
@@ -452,14 +460,22 @@ func parseCVE5(data []byte) (*models.LocalCVE, string) {
 	var cvss float64
 	severity := ""
 	for _, m := range root.Containers.CNA.Metrics {
-		if m.CvssV31 != nil && m.CvssV31.BaseScore > 0 {
+		if m.CvssV40 != nil && m.CvssV40.BaseScore > 0 {
+			cvss = m.CvssV40.BaseScore
+			severity = strings.ToUpper(m.CvssV40.BaseSeverity)
+			break
+		}
+		if m.CvssV31 != nil && m.CvssV31.BaseScore > 0 && cvss == 0 {
 			cvss = m.CvssV31.BaseScore
 			severity = strings.ToUpper(m.CvssV31.BaseSeverity)
-			break
 		}
 		if m.CvssV30 != nil && m.CvssV30.BaseScore > 0 && cvss == 0 {
 			cvss = m.CvssV30.BaseScore
 			severity = strings.ToUpper(m.CvssV30.BaseSeverity)
+		}
+		if m.CvssV20 != nil && m.CvssV20.BaseScore > 0 && cvss == 0 {
+			cvss = m.CvssV20.BaseScore
+			severity = strings.ToUpper(m.CvssV20.BaseSeverity)
 		}
 	}
 	if cvss == 0 {
@@ -504,7 +520,10 @@ func parseCVE5(data []byte) (*models.LocalCVE, string) {
 	}
 
 	if len(desc) > 400 {
-		desc = desc[:397] + "..."
+		runes := []rune(desc)
+		if len(runes) > 397 {
+			desc = string(runes[:397]) + "..."
+		}
 	}
 
 	return &models.LocalCVE{
@@ -598,8 +617,7 @@ func loadFromDisk() {
 // --- Search ---
 
 // Search performs a fast indexed CVE lookup by product name.
-// It queries both the plain product key and any vendor:product composite key,
-// returning up to 50 deduplicated results for the caller to filter further.
+// It limits results to 50 for UI queries (version == ""), but returns all matches for engine scans.
 func Search(product, version string) []models.LocalCVE {
 	product = strings.ToLower(strings.TrimSpace(product))
 	if product == "" {
@@ -613,35 +631,34 @@ func Search(product, version string) []models.LocalCVE {
 		return searchLinear(product)
 	}
 
-	seen := make(map[int]struct{})
 	var matches []models.LocalCVE
+	limit := 50
+	if version != "" {
+		limit = 0 // No limit for engine scans, let plugins filter by version accurately
+	}
 
-	// 1. Check CVE IDs first (linear scan is fast enough ~2-5ms)
-	for i, cve := range MemoryDB {
-		if strings.Contains(strings.ToLower(cve.ID), product) {
-			matches = append(matches, cve)
-			seen[i] = struct{}{}
-			if len(matches) >= 50 {
-				return matches
+	// 1. If searching for CVE ID explicitly (e.g. from UI)
+	if strings.HasPrefix(product, "cve-") {
+		for _, cve := range MemoryDB {
+			if strings.Contains(strings.ToLower(cve.ID), product) {
+				matches = append(matches, cve)
+				if limit > 0 && len(matches) >= limit {
+					return matches
+				}
 			}
 		}
-	}
-
-	// If the user explicitly typed a CVE pattern and we found matches, return them immediately
-	if strings.HasPrefix(product, "cve-") && len(matches) > 0 {
-		return matches
-	}
-
-	// 2. Collect candidate index positions from all matching keys.
-	// Keys to probe: exact product, and any "vendor:product" entry.
-	keysToProbe := []string{product}
-	for k := range productIndex {
-		// vendor:product composite keys contain a colon
-		if strings.HasSuffix(k, ":"+product) {
-			keysToProbe = append(keysToProbe, k)
+		if len(matches) > 0 {
+			return matches
 		}
 	}
 
+	// 2. O(1) Index Lookup by product name
+	// productIndex[product] already contains ALL records where Product == product.
+	seen := make(map[int]struct{})
+	
+	// Probe the direct product key.
+	keysToProbe := []string{product}
+	
 	for _, key := range keysToProbe {
 		for _, idx := range productIndex[key] {
 			if _, ok := seen[idx]; ok {
@@ -649,7 +666,7 @@ func Search(product, version string) []models.LocalCVE {
 			}
 			seen[idx] = struct{}{}
 			matches = append(matches, MemoryDB[idx])
-			if len(matches) >= 50 {
+			if limit > 0 && len(matches) >= limit {
 				return matches
 			}
 		}

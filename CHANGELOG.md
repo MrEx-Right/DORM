@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.23.2] - 2026-08-28
+### 🚀 CVE Engine Overhaul & KEV Fixes
+
+This release focuses on dramatically improving the accuracy, performance, and stability of the CVE and KEV intelligence systems.
+
+---
+
+#### 🧠 CVE Engine Optimizations (`cve/sync.go`)
+- **Accurate Version Matching:** Fixed a critical bug where `cve.Search` would prematurely truncate results to 50 items *before* plugins could apply version filtering. The engine now fetches all matching CVEs for a product in O(1) time and allows the caller (like SCI or Passive CVE plugins) to accurately filter out non-vulnerable versions, ensuring highly popular products (like Nginx, Apache) no longer report false negatives.
+- **O(1) Search Refactoring:** Eliminated a severe performance bottleneck during CVE searches. Removed the O(N) linear scans and massive map iterations that were causing excessive memory allocations and CPU spikes. Searches are now instantaneous.
+- **Modern CVSS Support:** Updated the CVE JSON 5.0 parser to natively support and extract `CvssV4_0` and `CvssV2_0` scores, reducing reliance on inaccurate heuristics for new and legacy vulnerabilities.
+- **Unicode Safety:** Fixed a string truncation issue in vulnerability descriptions that could lead to malformed UTF-8 characters.
+
+#### 📊 CISA KEV Enhancements (`cve/kev.go` & `web/dashboard.html`)
+- **Cumulative Bucketing:** Rewrote the KEV timeline logic so that "Last 7 Days" and "Last 30 Days" buckets are now fully cumulative, preventing recent vulnerabilities from disappearing from broader timeline views.
+- **Reliable Data Source:** Reverted the CISA KEV JSON feed to the highly stable EugenMayer GitHub mirror to bypass frequent Cloudflare blocks and rate limits from the official CISA API.
+- **Dashboard Overflow Fix:** Applied `min-width: 0` to CSS Grid columns in the KEV UI to prevent extremely long product names or descriptions from overflowing into adjacent columns.
+
 ## [v1.23.1] - 2026-08-24
 ### 🔒 Security Patch 
 
