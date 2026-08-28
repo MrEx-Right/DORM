@@ -125,7 +125,7 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				if strings.Contains(body, probe.Expected) && !strings.Contains(body, probe.Payload) {
 					sev := "CRITICAL"
 					cvss := 9.9
-					name := "Server Side Template Injection (SSTI)"
+					var name string
 
 					if probe.IsRCE && strings.Contains(body, "uid=") {
 						name = fmt.Sprintf("SSTI RCE Confirmed (%s)", probe.Engine)

@@ -202,7 +202,7 @@ func runBooleanBlind(client *http.Client, baseURL string, target models.ScanTarg
 					continue
 				}
 				trueBody, _ := io.ReadAll(io.LimitReader(trueResp.Body, 65536))
-				trueResp.Body.Close()
+				_ = trueResp.Body.Close()
 				trueSize := len(trueBody)
 
 				// False condition
@@ -212,7 +212,7 @@ func runBooleanBlind(client *http.Client, baseURL string, target models.ScanTarg
 					continue
 				}
 				falseBody, _ := io.ReadAll(io.LimitReader(falseResp.Body, 65536))
-				falseResp.Body.Close()
+				_ = falseResp.Body.Close()
 				falseSize := len(falseBody)
 
 				// True response should be similar to baseline, false should differ

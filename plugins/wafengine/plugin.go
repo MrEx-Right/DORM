@@ -60,18 +60,18 @@ func (p *WAFDetectorPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 		cvss := 0.0
 
 		var desc strings.Builder
-		desc.WriteString(fmt.Sprintf("Active Web Application Firewall detected: %s\n", wafName))
-		desc.WriteString(fmt.Sprintf("Detection Confidence: %s\n\n", confidence))
+		fmt.Fprintf(&desc, "Active Web Application Firewall detected: %s\n", wafName)
+		fmt.Fprintf(&desc, "Detection Confidence: %s\n\n", confidence)
 
 		if details != "" {
-			desc.WriteString(fmt.Sprintf("Detection Details:\n%s\n\n", details))
+			fmt.Fprintf(&desc, "Detection Details:\n%s\n\n", details)
 		}
 
 		if cdnName != "" {
-			desc.WriteString(fmt.Sprintf("CDN Layer: %s\n", cdnName))
+			fmt.Fprintf(&desc, "CDN Layer: %s\n", cdnName)
 		}
 
-		desc.WriteString(fmt.Sprintf("Bypass Advisory: %s", bypassHints))
+		fmt.Fprintf(&desc, "Bypass Advisory: %s", bypassHints)
 
 		return &models.Vulnerability{
 			Target:      target,

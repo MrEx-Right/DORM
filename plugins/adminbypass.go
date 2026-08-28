@@ -26,7 +26,7 @@ func (p *AdminBypassPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 		return nil
 	}
 	baseStatus := respBase.StatusCode
-	respBase.Body.Close()
+	_ = respBase.Body.Close()
 
 	if baseStatus != 403 && baseStatus != 401 {
 		return nil
@@ -61,7 +61,7 @@ func (p *AdminBypassPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 			respSpoof, err := client.Do(reqSpoof)
 			if err == nil {
 				spoofStatus := respSpoof.StatusCode
-				respSpoof.Body.Close()
+				_ = respSpoof.Body.Close()
 
 				if spoofStatus == 200 {
 					return &models.Vulnerability{

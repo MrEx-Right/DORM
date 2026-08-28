@@ -208,7 +208,7 @@ func fetchEPSSScores(client *http.Client, cveIDs []string) map[string]float64 {
 
 	for _, d := range epssResp.Data {
 		var score float64
-		fmt.Sscanf(d.EPSS, "%f", &score)
+		_, _ = fmt.Sscanf(d.EPSS, "%f", &score)
 		epssMap[d.CVE] = score
 	}
 

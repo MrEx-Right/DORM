@@ -14,7 +14,6 @@ package plugins
 import (
 	"DORM/models"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -498,8 +497,3 @@ func containsSensitiveAdminData(body string) bool {
 	return count >= 2 // Require at least 2 admin keywords to reduce false positives
 }
 
-// parseBFLAJSON attempts to decode a response body as JSON for structural validation
-func parseBFLAJSON(body string) bool {
-	var m map[string]interface{}
-	return json.Unmarshal([]byte(body), &m) == nil
-}

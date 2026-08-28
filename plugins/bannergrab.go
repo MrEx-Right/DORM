@@ -19,9 +19,9 @@ func (p *BannerGrabPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer conn.Close()
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	fmt.Fprintf(conn, "HEAD / HTTP/1.0\r\n\r\n")
+	defer func() { _ = conn.Close() }()
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, _ = fmt.Fprintf(conn, "HEAD / HTTP/1.0\r\n\r\n")
 	buf := make([]byte, 1024)
 	n, _ := conn.Read(buf)
 	if n > 0 {

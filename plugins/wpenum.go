@@ -32,8 +32,8 @@ func (p *WPEnumPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 
 	var findings []string
-	var highestCVSS float64 = 0.0
-	var severity string = "INFO"
+	highestCVSS := 0.0
+	var severity string
 
 	checkCVEs := func(product string, version string) {
 		if version == "" {
@@ -45,7 +45,11 @@ func (p *WPEnumPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 			if isVersionVulnerable(version, cve.Description) {
 				if cve.CVSS >= 7.0 {
-					findings = append(findings, fmt.Sprintf("- [%s] %s v%s (CVSS: %.1f)\n  %s", cve.ID, strings.Title(product), version, cve.CVSS, cve.Description))
+					titleProduct := product
+					if len(product) > 0 {
+						titleProduct = strings.ToUpper(product[:1]) + product[1:]
+					}
+					findings = append(findings, fmt.Sprintf("- [%s] %s v%s (CVSS: %.1f)\n  %s", cve.ID, titleProduct, version, cve.CVSS, cve.Description))
 					if cve.CVSS > highestCVSS {
 						highestCVSS = cve.CVSS
 					}

@@ -28,7 +28,7 @@ func RunRegexLeak(client *http.Client, baseURL string, target models.ScanTarget)
 				continue
 			}
 			baseBody, _ := io.ReadAll(io.LimitReader(baseResp.Body, 65536))
-			baseResp.Body.Close()
+			_ = baseResp.Body.Close()
 			baseLen := len(baseBody)
 
 			// 2. Attack - regex wildcard to match all records
@@ -38,7 +38,7 @@ func RunRegexLeak(client *http.Client, baseURL string, target models.ScanTarget)
 				continue
 			}
 			attackBody, _ := io.ReadAll(io.LimitReader(attackResp.Body, 65536))
-			attackResp.Body.Close()
+			_ = attackResp.Body.Close()
 			attackLen := len(attackBody)
 
 			// If wildcard returns significantly more data than baseline, it's a leak

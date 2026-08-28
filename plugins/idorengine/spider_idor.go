@@ -46,7 +46,7 @@ func RunSpiderIDOR(client *http.Client, target models.ScanTarget, user1, user2 s
 					continue
 				}
 				body1, _ := io.ReadAll(io.LimitReader(resp1.Body, 65536))
-				resp1.Body.Close()
+				_ = resp1.Body.Close()
 				len1 := len(body1)
 
 				if resp1.StatusCode == 200 {
@@ -57,7 +57,7 @@ func RunSpiderIDOR(client *http.Client, target models.ScanTarget, user1, user2 s
 						continue
 					}
 					body2, _ := io.ReadAll(io.LimitReader(resp2.Body, 65536))
-					resp2.Body.Close()
+					_ = resp2.Body.Close()
 					len2 := len(body2)
 
 					diff := math.Abs(float64(len1 - len2))

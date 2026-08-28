@@ -25,7 +25,7 @@ func (p *AspNetCorePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		return nil
 	}
 	probeBody, _ := io.ReadAll(probeResp.Body)
-	probeResp.Body.Close()
+	_ = probeResp.Body.Close()
 
 	xPowered := probeResp.Header.Get("X-Powered-By")
 	xAspNet := probeResp.Header.Get("X-AspNet-Version")
@@ -55,7 +55,7 @@ func (p *AspNetCorePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	randResp, err := client.Get(baseURL + "/dorm-aspnet-probe-xyz-notfound")
 	if err == nil {
 		randBody, _ := io.ReadAll(randResp.Body)
-		randResp.Body.Close()
+		_ = randResp.Body.Close()
 		bodyStr := string(randBody)
 		if strings.Contains(bodyStr, "Microsoft.AspNetCore.Diagnostics") ||
 			strings.Contains(bodyStr, "DeveloperExceptionPage") ||
@@ -74,7 +74,7 @@ func (p *AspNetCorePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	traceResp, err := client.Get(baseURL + "/Trace.axd")
 	if err == nil {
 		traceBody, _ := io.ReadAll(traceResp.Body)
-		traceResp.Body.Close()
+		_ = traceResp.Body.Close()
 		if traceResp.StatusCode == 200 && strings.Contains(string(traceBody), "Application Trace") {
 			findings = append(findings, finding{
 				name:     "ASP.NET Trace.axd Exposed",
@@ -91,7 +91,7 @@ func (p *AspNetCorePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		elmahResp, err := client.Get(baseURL + ep)
 		if err == nil {
 			elmahBody, _ := io.ReadAll(elmahResp.Body)
-			elmahResp.Body.Close()
+			_ = elmahResp.Body.Close()
 			bodyStr := string(elmahBody)
 			if elmahResp.StatusCode == 200 && (strings.Contains(bodyStr, "Error Log for") || strings.Contains(bodyStr, "ELMAH")) {
 				findings = append(findings, finding{
@@ -111,7 +111,7 @@ func (p *AspNetCorePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		bResp, err := client.Get(baseURL + bp)
 		if err == nil {
 			bBody, _ := io.ReadAll(bResp.Body)
-			bResp.Body.Close()
+			_ = bResp.Body.Close()
 			bodyStr := string(bBody)
 			if bResp.StatusCode == 200 && (strings.Contains(bodyStr, "<configuration>") || strings.Contains(bodyStr, "connectionString") || strings.Contains(bodyStr, "appSettings")) {
 				findings = append(findings, finding{
@@ -129,7 +129,7 @@ func (p *AspNetCorePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	blazorResp, err := client.Get(baseURL + "/_framework/blazor.boot.json")
 	if err == nil {
 		blazorBody, _ := io.ReadAll(blazorResp.Body)
-		blazorResp.Body.Close()
+		_ = blazorResp.Body.Close()
 		if blazorResp.StatusCode == 200 && strings.Contains(string(blazorBody), `"assemblies"`) {
 			findings = append(findings, finding{
 				name:     "Blazor WebAssembly Boot Manifest Exposed",
@@ -146,7 +146,7 @@ func (p *AspNetCorePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		sResp, err := client.Get(baseURL + sp)
 		if err == nil {
 			sBody, _ := io.ReadAll(sResp.Body)
-			sResp.Body.Close()
+			_ = sResp.Body.Close()
 			bodyLow2 := strings.ToLower(string(sBody))
 			if sResp.StatusCode == 200 && (strings.Contains(bodyLow2, `"openapi"`) || strings.Contains(bodyLow2, "swagger") || strings.Contains(bodyLow2, `"paths"`)) {
 				findings = append(findings, finding{
@@ -166,7 +166,7 @@ func (p *AspNetCorePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		hResp, err := client.Get(baseURL + hp)
 		if err == nil {
 			hBody, _ := io.ReadAll(hResp.Body)
-			hResp.Body.Close()
+			_ = hResp.Body.Close()
 			bodyStr := string(hBody)
 			bodyLow3 := strings.ToLower(bodyStr)
 			if hResp.StatusCode == 200 && (strings.Contains(bodyLow3, "unhealthy") || strings.Contains(bodyLow3, "degraded") || strings.Contains(bodyLow3, "connectionstring") || strings.Contains(bodyLow3, "database") || strings.Contains(bodyLow3, "redis")) {
@@ -187,7 +187,7 @@ func (p *AspNetCorePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		srResp, err := client.Get(baseURL + srp)
 		if err == nil {
 			srBody, _ := io.ReadAll(srResp.Body)
-			srResp.Body.Close()
+			_ = srResp.Body.Close()
 			if srResp.StatusCode == 200 && strings.Contains(string(srBody), "connectionToken") {
 				findings = append(findings, finding{
 					name:     "SignalR Hub Negotiation Endpoint Exposed",

@@ -3,7 +3,6 @@ package plugins
 import (
 	"DORM/models"
 	"net/http"
-	"strings"
 )
 
 // 76. APACHE STRUTS RCE (OGNL Injection)
@@ -22,9 +21,9 @@ func (p *StrutsPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	resp, err := client.Do(req)
 	if err == nil {
 		defer resp.Body.Close()
-		if resp.StatusCode == 500 && strings.Contains(req.Header.Get("Content-Type"), "html") {
-
-		}
+		// if resp.StatusCode == 500 && strings.Contains(req.Header.Get("Content-Type"), "html") {
+		// 
+		// }
 	}
 	return nil
 }

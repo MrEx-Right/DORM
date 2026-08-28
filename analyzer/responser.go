@@ -5,15 +5,12 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
-	"strings"
 )
 
 // Regex patterns for Information Leakage
 var (
 	awsKeyRegex       = regexp.MustCompile(`AKIA[0-9A-Z]{16}`)
-	emailRegex        = regexp.MustCompile(`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`)
 	privateKeyRegex   = regexp.MustCompile(`-----BEGIN (RSA|OPENSSH|DSA|EC|PGP) PRIVATE KEY-----`)
-	socialSecRegex    = regexp.MustCompile(`\b\d{3}-\d{2}-\d{4}\b`)
 )
 
 // AnalyzeResponse parses the HTTP response to detect passive vulnerabilities
@@ -35,28 +32,6 @@ func AnalyzeResponse(req *http.Request, resp *http.Response, bodyBytes []byte) {
 	// checkServerDisclosure(target, resp)
 }
 
-func checkSecurityHeaders(target models.ScanTarget, resp *http.Response) {
-	headers := map[string]string{
-		"Strict-Transport-Security": "HSTS Missing",
-		"X-Content-Type-Options":    "X-Content-Type-Options Missing",
-		"X-Frame-Options":           "X-Frame-Options Missing",
-	}
-
-	for header, issueName := range headers {
-		if resp.Header.Get(header) == "" {
-			OnVulnFound(&models.Vulnerability{
-				Target:      target,
-				Name:        issueName,
-				Severity:    "INFO",
-				CVSS:        0.0,
-				Description: "The response is missing the '" + header + "' security header, which protects against certain attacks.",
-				Solution:    "Implement the '" + header + "' header in the server configuration.",
-				Reference:   "https://owasp.org/www-project-secure-headers/",
-				Status:      "Open",
-			})
-		}
-	}
-}
 
 func checkInformationLeakage(target models.ScanTarget, bodyStr string) {
 	if awsKeyRegex.MatchString(bodyStr) {
@@ -68,17 +43,6 @@ func checkInformationLeakage(target models.ScanTarget, bodyStr string) {
 	// Note: Emails can be noisy, so we might want to skip or make it INFO.
 }
 
-func checkServerDisclosure(target models.ScanTarget, resp *http.Response) {
-	serverHeader := resp.Header.Get("Server")
-	if serverHeader != "" && (strings.Contains(serverHeader, "/") || len(serverHeader) > 10) {
-		reportVuln(target, "Server Version Disclosure", "INFO", 0.0, "The server exposes its version in the Server header: "+serverHeader, "Configure the web server to hide version information.")
-	}
-
-	poweredBy := resp.Header.Get("X-Powered-By")
-	if poweredBy != "" {
-		reportVuln(target, "Technology Disclosure (X-Powered-By)", "INFO", 0.0, "The server exposes underlying technology: "+poweredBy, "Remove the X-Powered-By header.")
-	}
-}
 
 func reportVuln(target models.ScanTarget, name, severity string, cvss float64, desc, solution string) {
 	OnVulnFound(&models.Vulnerability{

@@ -41,7 +41,7 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Host == "" && r.URL.Scheme == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`<!DOCTYPE html>
+		_, _ = w.Write([]byte(`<!DOCTYPE html>
 <html lang="en">
 <head>
 	<meta charset="UTF-8">
@@ -186,9 +186,9 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(resp.StatusCode)
 
 	// Write the intercepted body, then stream any remaining parts
-	w.Write(bodyBytes)
+	_, _ = w.Write(bodyBytes)
 	if resp.Body != nil {
-		io.Copy(w, resp.Body)
+		_, _ = io.Copy(w, resp.Body)
 	}
 }
 

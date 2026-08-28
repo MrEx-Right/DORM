@@ -125,7 +125,7 @@ func DetectCDN(client *http.Client, baseURL string) (cdnName string, isCDNOnly b
 		return "", false
 	}
 	defer resp.Body.Close()
-	io.ReadAll(io.LimitReader(resp.Body, 1024)) // drain
+	_, _ = io.ReadAll(io.LimitReader(resp.Body, 1024)) // drain
 
 	bestScore := 0
 	bestCDN := ""

@@ -28,7 +28,7 @@ func RunMongoJSONInjection(client *http.Client, baseURL string, target models.Sc
 			continue
 		}
 		baseBytes, _ := io.ReadAll(io.LimitReader(baseResp.Body, 65536))
-		baseResp.Body.Close()
+		_ = baseResp.Body.Close()
 		baseCode := baseResp.StatusCode
 		baseLen := len(baseBytes)
 
@@ -39,7 +39,7 @@ func RunMongoJSONInjection(client *http.Client, baseURL string, target models.Sc
 				continue
 			}
 			respBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			attackCode := resp.StatusCode
 			attackLen := len(respBytes)
 

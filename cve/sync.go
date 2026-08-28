@@ -190,7 +190,7 @@ func getLatestURLs() (fullURL, deltaURL string, publishedAt time.Time, err error
 // SyncFullDatabase downloads and loads the CVEProject nightly snapshot.
 // Blocks until complete; safe to call at startup.
 func SyncFullDatabase() {
-	os.MkdirAll("cve", os.ModePerm)
+	_ = os.MkdirAll("cve", os.ModePerm)
 
 	fileInfo, err := os.Stat(FullDBFile)
 	hasLocal := err == nil
@@ -340,7 +340,7 @@ func downloadAndProcessDelta(zipURL string) error {
 	err = os.WriteFile(FullDBFile, outBytes, 0644)
 	if err == nil {
 		now := time.Now()
-		os.Chtimes(FullDBFile, now, now)
+		_ = os.Chtimes(FullDBFile, now, now)
 	}
 	return err
 }
@@ -364,7 +364,7 @@ func processEntries(zipReader *zip.Reader) ([]models.LocalCVE, error) {
 				continue
 			}
 			innerData, err := io.ReadAll(rc)
-			rc.Close()
+			_ = rc.Close()
 			if err != nil {
 				continue
 			}
@@ -389,7 +389,7 @@ func processEntries(zipReader *zip.Reader) ([]models.LocalCVE, error) {
 			continue
 		}
 		data, err := io.ReadAll(rc)
-		rc.Close()
+		_ = rc.Close()
 		if err != nil {
 			continue
 		}

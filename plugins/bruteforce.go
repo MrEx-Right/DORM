@@ -230,7 +230,7 @@ func bruteSSH(target models.ScanTarget) *models.Vulnerability {
 			}
 			client, err := ssh.Dial("tcp", net.JoinHostPort(target.IP, fmt.Sprintf("%d", target.Port)), cfg)
 			if err == nil {
-				client.Close()
+				_ = client.Close()
 				select {
 				case found <- result{fmt.Sprintf("User: '%s'  Pass: '%s'", user, pass)}:
 				default:
@@ -270,8 +270,8 @@ func bruteFTP(target models.ScanTarget) *models.Vulnerability {
 		}
 		err = conn.Login(c.User, c.Pass)
 		if err == nil {
-			conn.Logout()
-			conn.Quit()
+			_ = conn.Logout()
+			_ = conn.Quit()
 			return &models.Vulnerability{
 				Target:      target,
 				Name:        "Brute Force: FTP Default Credentials",
@@ -282,7 +282,7 @@ func bruteFTP(target models.ScanTarget) *models.Vulnerability {
 				Reference:   "CWE-521: Weak Password Requirements",
 			}
 		}
-		conn.Quit()
+		_ = conn.Quit()
 	}
 	return nil
 }

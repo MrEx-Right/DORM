@@ -103,7 +103,7 @@ func ReadBody(resp *http.Response, maxBytes int64) string {
 	if resp == nil {
 		return ""
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, maxBytes))
 	return string(b)
 }

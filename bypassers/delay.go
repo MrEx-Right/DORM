@@ -17,9 +17,6 @@ var GlobalDelayConfig = DelayConfig{
 	JitterMs:    0,
 }
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
 
 // Sleep executes a pause based on the GlobalDelayConfig.
 // It applies a base delay plus a random jitter to simulate human/random traffic.

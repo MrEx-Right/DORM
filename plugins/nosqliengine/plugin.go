@@ -46,7 +46,7 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				continue
 			}
 			bodyBase, _ := io.ReadAll(io.LimitReader(respBase.Body, 65536))
-			respBase.Body.Close()
+			_ = respBase.Body.Close()
 			lenBase := len(bodyBase)
 			codeBase := respBase.StatusCode
 
@@ -59,7 +59,7 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				continue
 			}
 			bodyAttack, _ := io.ReadAll(io.LimitReader(respAttack.Body, 65536))
-			respAttack.Body.Close()
+			_ = respAttack.Body.Close()
 			lenAttack := len(bodyAttack)
 			codeAttack := respAttack.StatusCode
 
@@ -172,7 +172,7 @@ func runFormInjection(client *http.Client, baseURL string, target models.ScanTar
 			if err != nil {
 				continue
 			}
-			baseResp.Body.Close()
+			_ = baseResp.Body.Close()
 			baseCode := baseResp.StatusCode
 
 			// Attack: user[$ne]=invalid_dorm
@@ -185,7 +185,7 @@ func runFormInjection(client *http.Client, baseURL string, target models.ScanTar
 			if err != nil {
 				continue
 			}
-			attackResp.Body.Close()
+			_ = attackResp.Body.Close()
 			attackCode := attackResp.StatusCode
 
 			if baseCode != 200 && attackCode == 200 {

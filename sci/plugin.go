@@ -103,7 +103,7 @@ func (p *SupplyChainPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 		}
 	}
 
-	severity := "MEDIUM"
+	var severity string
 	switch {
 	case highestCVSS >= 9.0:
 		severity = "CRITICAL"

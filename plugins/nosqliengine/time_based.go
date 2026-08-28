@@ -19,7 +19,7 @@ func RunTimeBased(client *http.Client, baseURL string, target models.ScanTarget)
 	respBase, err := client.Get(baseURL + "/?q=dorm_baseline_check_999")
 	baseLatency := time.Since(startBase)
 	if err == nil && respBase != nil {
-		respBase.Body.Close()
+		_ = respBase.Body.Close()
 	}
 
 	endpoints := []string{"/api/users", "/search", "/items", "/products", "/"}
@@ -45,7 +45,7 @@ func RunTimeBased(client *http.Client, baseURL string, target models.ScanTarget)
 				respAtk, errAtk := client.Get(targetURL)
 				atkLatency := time.Since(startAtk)
 				if errAtk == nil && respAtk != nil {
-					respAtk.Body.Close()
+					_ = respAtk.Body.Close()
 				}
 
 				if atkLatency >= threshold {
@@ -54,7 +54,7 @@ func RunTimeBased(client *http.Client, baseURL string, target models.ScanTarget)
 					respVerify, errVerify := client.Get(targetURL)
 					verifyLatency := time.Since(startVerify)
 					if errVerify == nil && respVerify != nil {
-						respVerify.Body.Close()
+						_ = respVerify.Body.Close()
 					}
 
 					if verifyLatency >= threshold {

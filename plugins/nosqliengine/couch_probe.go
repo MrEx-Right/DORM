@@ -29,7 +29,7 @@ func RunCouchProbe(client *http.Client, baseURL string, target models.ScanTarget
 			continue
 		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		bodyStr := string(body)
 
 		if resp.StatusCode == 200 {

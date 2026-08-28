@@ -513,10 +513,10 @@ func isVersionLE(v1, v2 string) bool {
 	for i := 0; i < maxLen; i++ {
 		var n1, n2 int
 		if i < len(p1) {
-			fmt.Sscanf(p1[i], "%d", &n1)
+			_, _ = fmt.Sscanf(p1[i], "%d", &n1)
 		}
 		if i < len(p2) {
-			fmt.Sscanf(p2[i], "%d", &n2)
+			_, _ = fmt.Sscanf(p2[i], "%d", &n2)
 		}
 		if n1 < n2 {
 			return true
