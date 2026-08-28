@@ -25,7 +25,7 @@ jobs:
     - name: Run Linter (GolangCI)
       uses: golangci/golangci-lint-action@v6
       with:
-        version: v1.68.0 
+        version: v2.13.2 
         args: --timeout=5m
 
     - name: Build
