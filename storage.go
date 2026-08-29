@@ -446,7 +446,7 @@ func LoadExploitDB() error {
 
 func SearchExploitDB(query string) []string {
 	if !isExploitLoaded {
-		LoadExploitDB()
+		_ = LoadExploitDB()
 	}
 
 	query = strings.ToLower(query)

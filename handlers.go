@@ -243,7 +243,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		recordTitle = recordTitle[:47] + "..."
 	}
 	record := NewScanRecord(recordTitle)
-	DB.SaveScan(record)
+	_ = DB.SaveScan(record)
 
 	// Stream the generated ScanID back to the frontend immediately so live updates work!
 	_, _ = fmt.Fprintf(w, "data: {\"Status\": \"STARTED\", \"ScanID\": \"%s\"}\n\n", record.ID)
@@ -549,7 +549,7 @@ WaitLoop:
 		flusher.Flush()
 		record.Status = "Failed"
 		record.EndTime = time.Now()
-		DB.UpdateScan(record.ID, record)
+		_ = DB.UpdateScan(record.ID, record)
 		return
 	}
 
@@ -588,7 +588,7 @@ WaitLoop:
 	}
 	record.SeverityStats = stats
 
-	DB.UpdateScan(record.ID, record)
+	_ = DB.UpdateScan(record.ID, record)
 	// --- STORAGE INTEGRATION END ---
 
 	_, _ = fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
@@ -691,7 +691,7 @@ func handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Also delete any associated sitemaps
-	DB.DeleteSiteMapsByScanID(scanID)
+	_ = DB.DeleteSiteMapsByScanID(scanID)
 
 	_, _ = fmt.Fprintf(w, `{"status":"success"}`)
 }
@@ -710,7 +710,7 @@ func handleDeleteAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Clear all sitemaps as well
-	DB.DeleteAllSiteMaps()
+	_ = DB.DeleteAllSiteMaps()
 
 	_, _ = fmt.Fprintf(w, `{"status":"success"}`)
 }
