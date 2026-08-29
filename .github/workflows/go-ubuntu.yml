@@ -1,4 +1,4 @@
-name: DORM Builder
+name: Tests (Ubuntu)
 
 on:
   push:

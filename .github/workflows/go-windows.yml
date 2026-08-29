@@ -1,4 +1,4 @@
-name: DORM Builder (Windows)
+name: Tests (Windows)
 
 on:
   push:
