@@ -21,7 +21,7 @@ func (p *ConfigJsonPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		if err == nil && resp.StatusCode == 200 {
 			defer resp.Body.Close()
 			buf := make([]byte, 500)
-			resp.Body.Read(buf)
+			_, _ = resp.Body.Read(buf)
 			if strings.Contains(string(buf), "api_key") || strings.Contains(string(buf), "secret") || strings.Contains(string(buf), "db_host") {
 				return &models.Vulnerability{
 					Target: target, Name: "Config File Disclosure", Severity: "HIGH", CVSS: 7.5,

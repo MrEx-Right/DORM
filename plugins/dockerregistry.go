@@ -18,7 +18,7 @@ func (p *DockerRegistryPlugin) Run(target models.ScanTarget) *models.Vulnerabili
 	if err == nil {
 		defer resp.Body.Close()
 		buf := make([]byte, 1024)
-		resp.Body.Read(buf)
+		_, _ = resp.Body.Read(buf)
 		if strings.Contains(string(buf), "repositories") {
 			return &models.Vulnerability{
 				Target: target, Name: "Open Docker Registry", Severity: "HIGH", CVSS: 7.5,

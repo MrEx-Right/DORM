@@ -297,10 +297,10 @@ func bruteTelnet(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
 	banner := make([]byte, 256)
 	n, _ := conn.Read(banner)
-	conn.Close()
+	_ = conn.Close()
 
 	bannerStr := string(banner[:n])
 	// Telnet validation: Must contain IAC (0xFF) or "login:" / "Password:"

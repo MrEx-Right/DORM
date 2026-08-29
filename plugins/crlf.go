@@ -118,7 +118,7 @@ func (p *CRLFPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		xssPayload := buildXSSPayload(variant.Encoded)
 		respXSS, err := client.Get(baseURL + xssPayload)
 		if err == nil {
-			defer respXSS.Body.Close()
+			defer func() { _ = respXSS.Body.Close() }()
 			ct := respXSS.Header.Get("Content-Type")
 			if strings.Contains(ct, "text/html") && respXSS.StatusCode == 200 {
 				return &models.Vulnerability{

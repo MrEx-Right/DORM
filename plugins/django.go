@@ -27,7 +27,7 @@ func (p *DjangoPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	adminResp, err := client.Get(baseURL + "/admin/")
 	if err == nil {
 		adminBody, _ := io.ReadAll(adminResp.Body)
-		adminResp.Body.Close()
+		_ = adminResp.Body.Close()
 		if strings.Contains(strings.ToLower(string(adminBody)), "django administration") ||
 			strings.Contains(strings.ToLower(string(adminBody)), "csrfmiddlewaretoken") {
 			isDjango = true
@@ -38,7 +38,7 @@ func (p *DjangoPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		randResp, err2 := client.Get(baseURL + "/dorm-django-probe-xyz-404")
 		if err2 == nil {
 			randBody, _ := io.ReadAll(randResp.Body)
-			randResp.Body.Close()
+			_ = randResp.Body.Close()
 			bodyLow := strings.ToLower(string(randBody))
 			if strings.Contains(bodyLow, "django") ||
 				strings.Contains(bodyLow, "disallowedhost") ||
@@ -64,7 +64,7 @@ func (p *DjangoPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	errResp, err := client.Get(baseURL + "/dorm-debug-probe-" + fmt.Sprintf("%d", 99999))
 	if err == nil {
 		body, _ := io.ReadAll(errResp.Body)
-		errResp.Body.Close()
+		_ = errResp.Body.Close()
 		bodyStr := string(body)
 		bodyLow := strings.ToLower(bodyStr)
 		if strings.Contains(bodyLow, "disallowedhost") ||
@@ -93,7 +93,7 @@ func (p *DjangoPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	aResp, err := client.Get(baseURL + "/admin/")
 	if err == nil {
 		aBody, _ := io.ReadAll(aResp.Body)
-		aResp.Body.Close()
+		_ = aResp.Body.Close()
 		bodyLow := strings.ToLower(string(aBody))
 		if aResp.StatusCode == 200 && strings.Contains(bodyLow, "django administration") {
 			findings = append(findings, finding{
@@ -109,7 +109,7 @@ func (p *DjangoPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	dtResp, err := client.Get(baseURL + "/__debug__/")
 	if err == nil {
 		dtBody, _ := io.ReadAll(dtResp.Body)
-		dtResp.Body.Close()
+		_ = dtResp.Body.Close()
 		bodyLow := strings.ToLower(string(dtBody))
 		if dtResp.StatusCode == 200 && (strings.Contains(bodyLow, "djdt") || strings.Contains(bodyLow, "django debug toolbar")) {
 			findings = append(findings, finding{
@@ -125,7 +125,7 @@ func (p *DjangoPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	apiResp, err := client.Get(baseURL + "/api/?format=api")
 	if err == nil {
 		apiBody, _ := io.ReadAll(apiResp.Body)
-		apiResp.Body.Close()
+		_ = apiResp.Body.Close()
 		bodyLow := strings.ToLower(string(apiBody))
 		if apiResp.StatusCode == 200 && (strings.Contains(bodyLow, "django rest framework") || strings.Contains(bodyLow, "browsable")) {
 			findings = append(findings, finding{
@@ -143,7 +143,7 @@ func (p *DjangoPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		sResp, err := client.Get(baseURL + ep)
 		if err == nil {
 			sBody, _ := io.ReadAll(sResp.Body)
-			sResp.Body.Close()
+			_ = sResp.Body.Close()
 			bodyLow := strings.ToLower(string(sBody))
 			if sResp.StatusCode == 200 && (strings.Contains(bodyLow, "openapi") || strings.Contains(bodyLow, "swagger") || strings.Contains(bodyLow, `"paths"`)) {
 				findings = append(findings, finding{
@@ -161,7 +161,7 @@ func (p *DjangoPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	staticResp, err := client.Get(baseURL + "/static/")
 	if err == nil {
 		staticBody, _ := io.ReadAll(staticResp.Body)
-		staticResp.Body.Close()
+		_ = staticResp.Body.Close()
 		bodyLow := strings.ToLower(string(staticBody))
 		if staticResp.StatusCode == 200 && strings.Contains(bodyLow, "index of") {
 			findings = append(findings, finding{

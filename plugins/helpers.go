@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -193,38 +192,6 @@ func findJWT(content string, headers http.Header) string {
 	return ""
 }
 
-// getPostResponseLength sends a POST request with credentials and returns body size.
-// This is used to detect Auth Bypass (e.g. if size changes drastically).
-func getPostResponseLength(client *http.Client, urlStr, user, pass string) (int, error) {
-	data := url.Values{}
-
-	data.Set("username", user)
-	data.Set("user", user)
-	data.Set("email", user)
-	data.Set("login", user)
-	data.Set("txtUser", user)
-
-	data.Set("password", pass)
-	data.Set("pass", pass)
-	data.Set("txtPassword", pass)
-
-	req, err := http.NewRequest("POST", urlStr, strings.NewReader(data.Encode()))
-	if err != nil {
-		return 0, err
-	}
-
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", "DORM-Scanner/Enterprise")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	return len(bodyBytes), nil
-}
 
 // ==========================================
 // INVENTORY LIST FOR UI

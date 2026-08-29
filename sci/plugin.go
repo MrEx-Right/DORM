@@ -45,24 +45,24 @@ func (p *SupplyChainPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 
 	// Build structured report
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Supply chain analysis detected %d components, %d with known CVEs (total: %d CVEs)\n\n",
+	fmt.Fprintf(&sb, "Supply chain analysis detected %d components, %d with known CVEs (total: %d CVEs)\n\n",
 		result.RiskSummary.TotalComponents,
 		result.RiskSummary.WithCVEs,
 		result.TotalCVEs,
-	))
+	)
 
 	// Risk breakdown
 	if result.RiskSummary.Critical > 0 {
-		sb.WriteString(fmt.Sprintf("🔴 CRITICAL risk components: %d\n", result.RiskSummary.Critical))
+		fmt.Fprintf(&sb, "🔴 CRITICAL risk components: %d\n", result.RiskSummary.Critical)
 	}
 	if result.RiskSummary.High > 0 {
-		sb.WriteString(fmt.Sprintf("🟠 HIGH risk components: %d\n", result.RiskSummary.High))
+		fmt.Fprintf(&sb, "🟠 HIGH risk components: %d\n", result.RiskSummary.High)
 	}
 	if result.RiskSummary.Medium > 0 {
-		sb.WriteString(fmt.Sprintf("🟡 MEDIUM risk components: %d\n", result.RiskSummary.Medium))
+		fmt.Fprintf(&sb, "🟡 MEDIUM risk components: %d\n", result.RiskSummary.Medium)
 	}
 	if result.RiskSummary.Low > 0 {
-		sb.WriteString(fmt.Sprintf("🔵 LOW risk components: %d\n", result.RiskSummary.Low))
+		fmt.Fprintf(&sb, "🔵 LOW risk components: %d\n", result.RiskSummary.Low)
 	}
 	sb.WriteString("\n")
 
@@ -75,8 +75,8 @@ func (p *SupplyChainPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 		if version == "" {
 			version = "unknown version"
 		}
-		sb.WriteString(fmt.Sprintf("▶ [%s] %s %s (%s) — %d CVE(s), CVSS max: %.1f\n",
-			c.RiskLevel, c.Name, version, c.Category, c.CVECount, c.HighestCVSS))
+		fmt.Fprintf(&sb, "▶ [%s] %s %s (%s) — %d CVE(s), CVSS max: %.1f\n",
+			c.RiskLevel, c.Name, version, c.Category, c.CVECount, c.HighestCVSS)
 
 		// List up to 5 CVEs per component to keep output readable
 		limit := c.CVECount
@@ -85,12 +85,12 @@ func (p *SupplyChainPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 		}
 		for i := 0; i < limit; i++ {
 			cve := c.CVEs[i]
-			sb.WriteString(fmt.Sprintf("   - [%s] %s (CVSS: %.1f) — %s\n",
+			fmt.Fprintf(&sb, "   - [%s] %s (CVSS: %.1f) — %s\n",
 				cve.ID, cve.Severity, cve.CVSS,
-				truncate(cve.Description, 120)))
+				truncate(cve.Description, 120))
 		}
 		if c.CVECount > 5 {
-			sb.WriteString(fmt.Sprintf("   ... and %d more CVEs. Use Supply Chain Interface for full details.\n", c.CVECount-5))
+			fmt.Fprintf(&sb, "   ... and %d more CVEs. Use Supply Chain Interface for full details.\n", c.CVECount-5)
 		}
 		sb.WriteString("\n")
 	}

@@ -19,7 +19,7 @@ func AnalyzeHeaders(client *http.Client, baseURL string) (wafName, confidence, d
 	if err != nil {
 		return "", "", ""
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
 	bodyStr := string(bodyBytes)

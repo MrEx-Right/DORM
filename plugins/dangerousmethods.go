@@ -22,7 +22,7 @@ func (p *DangerousMethodsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 	reqOptions, _ := http.NewRequest("OPTIONS", getURL(target, "/"), nil)
 	respOptions, err := models.GetClient().Do(reqOptions)
 	if err == nil {
-		defer respOptions.Body.Close()
+		defer func() { _ = respOptions.Body.Close() }()
 		allowHeader := respOptions.Header.Get("Allow")
 
 		if strings.Contains(allowHeader, "TRACE") {
@@ -49,7 +49,7 @@ func (p *DangerousMethodsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 	if err != nil {
 		return nil
 	}
-	respPut.Body.Close()
+	_ = respPut.Body.Close()
 
 	if respPut.StatusCode == 201 || respPut.StatusCode == 200 {
 
@@ -57,7 +57,7 @@ func (p *DangerousMethodsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 		respGet, err := models.GetClient().Do(reqGet)
 
 		if err == nil {
-			defer respGet.Body.Close()
+			defer func() { _ = respGet.Body.Close() }()
 
 			bodyBytes, _ := io.ReadAll(respGet.Body)
 			uploadedContent := string(bodyBytes)
@@ -65,7 +65,7 @@ func (p *DangerousMethodsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 			if strings.Contains(uploadedContent, testContent) {
 
 				reqDel, _ := http.NewRequest("DELETE", getURL(target, testFileName), nil)
-				models.GetClient().Do(reqDel)
+				_, _ = models.GetClient().Do(reqDel)
 
 				return &models.Vulnerability{
 					Target:      target,

@@ -84,7 +84,7 @@ func (p *Bypass403Plugin) Run(target models.ScanTarget) *models.Vulnerability {
 			respHeader, err := client.Do(reqHeader)
 			if err == nil {
 				if respHeader.StatusCode == 200 || respHeader.StatusCode == 302 {
-					respHeader.Body.Close()
+					_ = respHeader.Body.Close()
 					return &models.Vulnerability{
 						Target:      target,
 						Name:        "HTTP 403/401 Header Bypass",
@@ -95,7 +95,7 @@ func (p *Bypass403Plugin) Run(target models.ScanTarget) *models.Vulnerability {
 						Reference:   "CWE-285",
 					}
 				}
-				respHeader.Body.Close()
+				_ = respHeader.Body.Close()
 			}
 		}
 
@@ -105,7 +105,7 @@ func (p *Bypass403Plugin) Run(target models.ScanTarget) *models.Vulnerability {
 			respPath, err := client.Do(reqPath)
 			if err == nil {
 				if respPath.StatusCode == 200 || respPath.StatusCode == 302 {
-					respPath.Body.Close()
+					_ = respPath.Body.Close()
 					return &models.Vulnerability{
 						Target:      target,
 						Name:        "HTTP 403/401 Path Bypass",
@@ -116,7 +116,7 @@ func (p *Bypass403Plugin) Run(target models.ScanTarget) *models.Vulnerability {
 						Reference:   "CWE-285",
 					}
 				}
-				respPath.Body.Close()
+				_ = respPath.Body.Close()
 			}
 		}
 	}

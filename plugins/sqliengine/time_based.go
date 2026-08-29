@@ -22,7 +22,7 @@ func RunTimeBasedBlind(client *http.Client, baseURL string, target models.ScanTa
 	baseResp, err := client.Get(baseURL + "/?id=1")
 	baseLatency := time.Since(baseStart)
 	if err == nil && baseResp != nil {
-		baseResp.Body.Close()
+		_ = baseResp.Body.Close()
 	}
 
 	// Adaptive threshold: sleep time + baseline + buffer

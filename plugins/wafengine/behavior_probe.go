@@ -21,7 +21,7 @@ func BehaviorProbe(client *http.Client, baseURL string) (wafName, confidence, de
 		return "", "", ""
 	}
 	baseBody, _ := io.ReadAll(io.LimitReader(baseResp.Body, 32768))
-	baseResp.Body.Close()
+	_ = baseResp.Body.Close()
 	baseStatus := baseResp.StatusCode
 	baseSize := len(baseBody)
 
@@ -74,7 +74,7 @@ func BehaviorProbe(client *http.Client, baseURL string) (wafName, confidence, de
 		}
 
 		probeBody, _ := io.ReadAll(io.LimitReader(resp.Body, 32768))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		probeStatus := resp.StatusCode
 		probeSize := len(probeBody)
 

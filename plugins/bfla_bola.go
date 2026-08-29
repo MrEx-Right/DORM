@@ -193,7 +193,7 @@ func testRoleEscalation(client *http.Client, baseURL string, target models.ScanT
 			continue
 		}
 		baseStatus := respBase.StatusCode
-		respBase.Body.Close()
+		_ = respBase.Body.Close()
 
 		// If anonymous access already returns 200 and it is not an admin path, skip
 		if baseStatus == 200 && !strings.Contains(ep, "admin") {

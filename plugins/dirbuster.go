@@ -56,7 +56,7 @@ func (p *DirBusterPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 							uniqueWords[word] = true
 						}
 					}
-					f.Close()
+					_ = f.Close()
 				}
 			}
 		}

@@ -96,7 +96,7 @@ func (p *CORSCheckPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 					if optsACAO == origin || optsACAO == "*" {
 						vulns = append(vulns, fmt.Sprintf("[CRITICAL] Preflight (OPTIONS) also trusts malicious origin: %s", origin))
 					}
-					respOpts.Body.Close()
+					_ = respOpts.Body.Close()
 				}
 			}
 		}

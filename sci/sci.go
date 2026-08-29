@@ -324,7 +324,7 @@ func fetchManifests(targetURL string) []SCIComponent {
 					}
 				}
 			}
-			resp2.Body.Close()
+			_ = resp2.Body.Close()
 		}
 	}
 

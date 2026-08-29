@@ -85,9 +85,6 @@ type DOMCrawler struct {
 	visited sync.Map // map[string]bool — visited URLs/routes
 	result  *DOMResult
 
-	// xhrMu protects the XHR listener map (chromedp event listeners are not
-	// goroutine-safe when the tab context is shared)
-	xhrMu sync.Mutex
 }
 
 // queueItem is a BFS work unit.

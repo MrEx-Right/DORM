@@ -25,11 +25,6 @@ type DOMParseResult struct {
 	Endpoints []Endpoint
 }
 
-// domBridgeCrawler is a minimal wrapper around the existing Crawler that
-// allows HTML parsing without any HTTP client or SiteMap dependency.
-type domBridgeCrawler struct {
-	BaseURL *url.URL
-}
 
 // NewCrawlerForDOM creates a lightweight HTML parser bound to the given base URL.
 // It returns a *DOMBridgeCrawler that exposes ExtractAll for parsing an HTML string.

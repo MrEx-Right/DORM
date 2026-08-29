@@ -186,7 +186,7 @@ func runBooleanBlind(client *http.Client, baseURL string, target models.ScanTarg
 				continue
 			}
 			baseBody, _ := io.ReadAll(io.LimitReader(baseResp.Body, 65536))
-			baseResp.Body.Close()
+			_ = baseResp.Body.Close()
 			baseSize := len(baseBody)
 
 			for i, tp := range truePayloads {

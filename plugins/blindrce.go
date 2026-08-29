@@ -143,7 +143,7 @@ func (p *BlindRCEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				resp2, err2 := client.Get(confirmURL)
 				t2 := time.Since(start2)
 				if err2 == nil {
-					resp2.Body.Close()
+					_ = resp2.Body.Close()
 				}
 
 				// Proportionality check: t2 should be ~3.5x t1 (7/2=3.5) ±20%
@@ -215,7 +215,7 @@ func (p *BlindRCEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 					resp2, err2 := client.Get(parsedURL.String())
 					t2 := time.Since(start2)
 					if err2 == nil {
-						resp2.Body.Close()
+						_ = resp2.Body.Close()
 					}
 
 					ratio := float64(t2) / float64(t1)

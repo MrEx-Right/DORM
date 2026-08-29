@@ -18,7 +18,7 @@ func (p *ElasticPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err == nil {
 		defer resp.Body.Close()
 		buf := make([]byte, 1024)
-		resp.Body.Read(buf)
+		_, _ = resp.Body.Read(buf)
 		if strings.Contains(string(buf), "health") && strings.Contains(string(buf), "index") {
 			return &models.Vulnerability{
 				Target: target, Name: "Elasticsearch Data Leak", Severity: "HIGH", CVSS: 7.5,

@@ -22,13 +22,13 @@ func (p *EDBPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if target.Port == 80 || target.Port == 443 || target.Port == 8080 {
-		fmt.Fprintf(conn, "HEAD / HTTP/1.0\r\n\r\n")
+		_, _ = fmt.Fprintf(conn, "HEAD / HTTP/1.0\r\n\r\n")
 	}
 
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	buf := make([]byte, 1024)
 	n, _ := conn.Read(buf)
 

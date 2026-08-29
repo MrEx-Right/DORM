@@ -53,18 +53,6 @@ func (r *DOMResult) addForm(f sitemapper.Form) {
 	r.mu.Unlock()
 }
 
-// addXHR records a dynamically discovered API endpoint under the lock.
-// Deduplication is performed here to avoid noisy results.
-func (r *DOMResult) addXHR(rawURL string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, x := range r.XHREndpoints {
-		if x == rawURL {
-			return
-		}
-	}
-	r.XHREndpoints = append(r.XHREndpoints, rawURL)
-}
 
 // addJSRoute records a client-side route discovered via pushState intercept.
 func (r *DOMResult) addJSRoute(route string) {

@@ -28,7 +28,7 @@ func (p *CodeIgniterPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 		return nil
 	}
 	probeBody, _ := io.ReadAll(probeResp.Body)
-	probeResp.Body.Close()
+	_ = probeResp.Body.Close()
 
 	setCookie := probeResp.Header.Get("Set-Cookie")
 	bodyLow := strings.ToLower(string(probeBody))
@@ -42,7 +42,7 @@ func (p *CodeIgniterPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 		idxResp, err := client.Get(baseURL + "/index.php/welcome")
 		if err == nil {
 			idxBody, _ := io.ReadAll(idxResp.Body)
-			idxResp.Body.Close()
+			_ = idxResp.Body.Close()
 			bodyLow2 := strings.ToLower(string(idxBody))
 			if idxResp.StatusCode == 200 && strings.Contains(bodyLow2, "codeigniter") {
 				isCI = true
@@ -66,7 +66,7 @@ func (p *CodeIgniterPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 	errResp, err := client.Get(baseURL + "/dorm-ci-probe-notfound-xyz")
 	if err == nil {
 		errBody, _ := io.ReadAll(errResp.Body)
-		errResp.Body.Close()
+		_ = errResp.Body.Close()
 		bodyStr := string(errBody)
 		if strings.Contains(bodyStr, "A PHP Error was encountered") ||
 			strings.Contains(bodyStr, "CI Error") ||
@@ -91,7 +91,7 @@ func (p *CodeIgniterPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 		dbResp, err := client.Get(baseURL + dp)
 		if err == nil {
 			dbBody, _ := io.ReadAll(dbResp.Body)
-			dbResp.Body.Close()
+			_ = dbResp.Body.Close()
 			bodyStr := string(dbBody)
 			if dbResp.StatusCode == 200 && (strings.Contains(bodyStr, "$db") || strings.Contains(bodyStr, "hostname") || strings.Contains(bodyStr, "password") || strings.Contains(bodyStr, "database")) {
 				findings = append(findings, finding{
@@ -111,7 +111,7 @@ func (p *CodeIgniterPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 		cfgResp, err := client.Get(baseURL + cp)
 		if err == nil {
 			cfgBody, _ := io.ReadAll(cfgResp.Body)
-			cfgResp.Body.Close()
+			_ = cfgResp.Body.Close()
 			bodyStr := string(cfgBody)
 			if cfgResp.StatusCode == 200 && (strings.Contains(bodyStr, "$config") || strings.Contains(bodyStr, "encryption_key") || strings.Contains(bodyStr, "base_url")) {
 				findings = append(findings, finding{
@@ -131,7 +131,7 @@ func (p *CodeIgniterPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 		dirResp, err := client.Get(baseURL + dp)
 		if err == nil {
 			dirBody, _ := io.ReadAll(dirResp.Body)
-			dirResp.Body.Close()
+			_ = dirResp.Body.Close()
 			bodyLow3 := strings.ToLower(string(dirBody))
 			if dirResp.StatusCode == 200 && strings.Contains(bodyLow3, "index of") {
 				findings = append(findings, finding{
@@ -151,7 +151,7 @@ func (p *CodeIgniterPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 		ppResp, err := client.Get(baseURL + pp)
 		if err == nil {
 			ppBody, _ := io.ReadAll(ppResp.Body)
-			ppResp.Body.Close()
+			_ = ppResp.Body.Close()
 			bodyStr := string(ppBody)
 			if ppResp.StatusCode == 200 && (strings.Contains(bodyStr, "phpinfo()") || strings.Contains(bodyStr, "PHP Version") && strings.Contains(bodyStr, "php.ini")) {
 				findings = append(findings, finding{
@@ -194,7 +194,7 @@ func (p *CodeIgniterPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 		sparkResp, err := client.Get(baseURL + sp)
 		if err == nil {
 			sparkBody, _ := io.ReadAll(sparkResp.Body)
-			sparkResp.Body.Close()
+			_ = sparkResp.Body.Close()
 			bodyStr := string(sparkBody)
 			if sparkResp.StatusCode == 200 && (strings.Contains(bodyStr, "CodeIgniter") || strings.Contains(bodyStr, "Spark") || strings.Contains(bodyStr, "CLI")) {
 				findings = append(findings, finding{

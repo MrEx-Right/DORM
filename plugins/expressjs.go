@@ -25,7 +25,7 @@ func (p *ExpressJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		return nil
 	}
 	probeBody, _ := io.ReadAll(probeResp.Body)
-	probeResp.Body.Close()
+	_ = probeResp.Body.Close()
 
 	xPowered := probeResp.Header.Get("X-Powered-By")
 	setCookie := probeResp.Header.Get("Set-Cookie")
@@ -64,7 +64,7 @@ func (p *ExpressJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	pkgResp, err := client.Get(baseURL + "/package.json")
 	if err == nil {
 		pkgBody, _ := io.ReadAll(pkgResp.Body)
-		pkgResp.Body.Close()
+		_ = pkgResp.Body.Close()
 		bodyStr := string(pkgBody)
 		if pkgResp.StatusCode == 200 && strings.Contains(bodyStr, `"dependencies"`) {
 			findings = append(findings, finding{
@@ -82,7 +82,7 @@ func (p *ExpressJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		lResp, err := client.Get(baseURL + lf)
 		if err == nil {
 			lBody, _ := io.ReadAll(lResp.Body)
-			lResp.Body.Close()
+			_ = lResp.Body.Close()
 			bodyStr := string(lBody)
 			if lResp.StatusCode == 200 && (strings.Contains(bodyStr, `"lockfileVersion"`) || strings.Contains(bodyStr, "__metadata")) {
 				findings = append(findings, finding{
@@ -100,7 +100,7 @@ func (p *ExpressJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	nmResp, err := client.Get(baseURL + "/node_modules/")
 	if err == nil {
 		nmBody, _ := io.ReadAll(nmResp.Body)
-		nmResp.Body.Close()
+		_ = nmResp.Body.Close()
 		bodyLow2 := strings.ToLower(string(nmBody))
 		if nmResp.StatusCode == 200 && (strings.Contains(bodyLow2, "index of") || strings.Contains(bodyLow2, "<a href=")) {
 			findings = append(findings, finding{
@@ -116,7 +116,7 @@ func (p *ExpressJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	envResp, err := client.Get(baseURL + "/.env")
 	if err == nil {
 		envBody, _ := io.ReadAll(envResp.Body)
-		envResp.Body.Close()
+		_ = envResp.Body.Close()
 		bodyStr := string(envBody)
 		if envResp.StatusCode == 200 && (strings.Contains(bodyStr, "NODE_ENV") || strings.Contains(bodyStr, "DB_PASSWORD") || strings.Contains(bodyStr, "SECRET") || strings.Contains(bodyStr, "API_KEY")) {
 			findings = append(findings, finding{

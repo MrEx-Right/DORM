@@ -50,17 +50,6 @@ var spoofHeaders = []struct {
 	{"Forwarded", "for=127.0.0.1;proto=http;by=127.0.0.1"},
 }
 
-// Alternative IP addresses rotated through bypass attempts
-var spoofIPs = []string{
-	"127.0.0.1",
-	"::1",
-	"10.0.0.1",
-	"10.0.0.100",
-	"172.16.0.1",
-	"192.168.1.1",
-	"192.168.0.1",
-	"localhost",
-}
 
 // Rate-limit response header signatures used for passive detection
 var rateLimitHeaderSigs = []string{
