@@ -21,7 +21,7 @@ func (p *SSLCheckPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if time.Now().After(conn.ConnectionState().PeerCertificates[0].NotAfter) {
 		return &models.Vulnerability{Target: target, Name: "Expired SSL Certificate", Severity: "MEDIUM", CVSS: 5.0, Description: "Certificate has expired.", Solution: "Renew certificate.", Reference: ""}
 	}

@@ -45,7 +45,7 @@ func (p *ColdFusionPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		}
 
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 50*1024))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		bodyStr := string(bodyBytes)
 
 		if resp.StatusCode != 200 {

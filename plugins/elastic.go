@@ -16,7 +16,7 @@ func (p *ElasticPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 	resp, err := models.GetClient().Get(getURL(target, "/_cat/indices?v"))
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		buf := make([]byte, 1024)
 		_, _ = resp.Body.Read(buf)
 		if strings.Contains(string(buf), "health") && strings.Contains(string(buf), "index") {

@@ -171,7 +171,7 @@ func (c *Crawler) fetchAndParse(rawURL string, depth int) *crawlResult {
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Collect headers (subset only)
 	headers := map[string]string{}

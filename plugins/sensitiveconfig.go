@@ -15,7 +15,7 @@ func (p *SensitiveConfigPlugin) Run(target models.ScanTarget) *models.Vulnerabil
 	for _, f := range files {
 		resp, err := models.GetClient().Get(getURL(target, f))
 		if err == nil && resp.StatusCode == 200 {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			return &models.Vulnerability{Target: target, Name: "Sensitive Config File", Severity: "MEDIUM", CVSS: 5.0, Description: "File found: " + f, Solution: "Block access.", Reference: ""}
 		}
 	}

@@ -19,7 +19,7 @@ func (p *ApacheStatusPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode == 200 && strings.Contains(string(body), "Apache Server Status") {
 		return &models.Vulnerability{Target: target, Name: "Apache Status Page", Severity: "INFO", CVSS: 0.0, Description: "Server status is accessible.", Solution: "Disable it.", Reference: ""}

@@ -100,7 +100,7 @@ func FetchAndAnalyzeJS(client *http.Client, jsURL string, baseURL *url.URL) JSFi
 	if err != nil {
 		return jsFile
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Limit JS file size to 2MB to avoid memory issues
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))

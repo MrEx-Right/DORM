@@ -49,7 +49,7 @@ func RunUnionDetection(client *http.Client, baseURL string, target models.ScanTa
 					continue
 				}
 				body, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-				resp.Body.Close()
+				_ = resp.Body.Close()
 
 				if strings.Contains(string(body), canary) {
 					return &models.Vulnerability{
@@ -81,7 +81,7 @@ func detectColumnCount(client *http.Client, baseURL, ep, param string, baseBody 
 			break
 		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		// Error means i-1 columns
 		for _, errMsg := range DBErrors {

@@ -162,7 +162,7 @@ func discoverAdminEndpoints(client *http.Client, baseURL string, target models.S
 		if err != nil {
 			continue
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		// 401/403 → endpoint exists but access is restricted (record for testing)
 		// 200/204 → already accessible (record for method tampering tests)
 		if resp.StatusCode == 401 || resp.StatusCode == 403 ||

@@ -120,7 +120,7 @@ func (p *FastAPIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		resp, err := client.Do(req)
 		if err == nil {
 			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			bodyStr := string(body)
 			// Pydantic v2 returns {"detail":[{"loc":[...],"msg":"...","type":"..."}]}
 			if strings.Contains(bodyStr, `"loc"`) && strings.Contains(bodyStr, `"msg"`) && strings.Contains(bodyStr, `"type"`) {
@@ -145,7 +145,7 @@ func (p *FastAPIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		resp, err := client.Do(req)
 		if err == nil {
 			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			bodyStr := string(body)
 			if strings.Contains(bodyStr, "Traceback (most recent call last)") || strings.Contains(bodyStr, `File "`) && strings.Contains(bodyStr, "line ") {
 				findings = append(findings, finding{

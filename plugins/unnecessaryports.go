@@ -174,7 +174,7 @@ func (p *UnnecessaryPortsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 				return nil
 			}
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 10240))
 		bodyLower := strings.ToLower(string(bodyBytes))

@@ -151,7 +151,7 @@ func DeepScanTarget(targetURL string) *models.TechProfile {
 	if err != nil {
 		return profile
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	re := regexp.MustCompile(`(?i)([a-zA-Z0-9\-\.]+)(?:/|\s+v?)([0-9]+(?:\.[0-9]+)+)`)
 	headersToScan := []string{"Server", "X-Powered-By", "X-Generator"}

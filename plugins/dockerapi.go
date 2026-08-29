@@ -20,7 +20,7 @@ func (p *DockerAPIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 
 	if strings.Contains(string(body), "Platform") && strings.Contains(string(body), "GoVersion") {

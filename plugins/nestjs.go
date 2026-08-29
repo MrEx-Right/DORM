@@ -109,7 +109,7 @@ func (p *NestJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		resp, err := client.Do(req)
 		if err == nil {
 			body, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			bodyStr := string(body)
 			if strings.Contains(bodyStr, "@nestjs/") || strings.Contains(bodyStr, "TypeOrmModule") || strings.Contains(bodyStr, "Nest") {
 				findings = append(findings, finding{

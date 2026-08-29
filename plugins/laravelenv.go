@@ -16,9 +16,9 @@ func (p *LaravelEnvPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 	resp, err := models.GetClient().Get(getURL(target, "/.env"))
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		buf := make([]byte, 1024)
-		resp.Body.Read(buf)
+		_, _ = resp.Body.Read(buf)
 		if strings.Contains(string(buf), "APP_KEY=") {
 			return &models.Vulnerability{
 				Target: target, Name: "Laravel .env Disclosure", Severity: "CRITICAL", CVSS: 10.0,

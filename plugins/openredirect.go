@@ -24,7 +24,7 @@ func (p *OpenRedirectPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
 		locURL, err := url.Parse(resp.Header.Get("Location"))
 		if err == nil && locURL.Host == "example.com" {
@@ -50,7 +50,7 @@ func (p *OpenRedirectPlugin) Run(target models.ScanTarget) *models.Vulnerability
 					targetURL := parsedUrl.String()
 					resp, err := client.Get(targetURL)
 					if err == nil {
-						resp.Body.Close()
+						_ = resp.Body.Close()
 						if resp.StatusCode >= 300 && resp.StatusCode < 400 {
 							locURL, err := url.Parse(resp.Header.Get("Location"))
 							if err == nil && locURL.Host == "example.com" {

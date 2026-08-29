@@ -19,7 +19,7 @@ func (p *JavaDeserializationPlugin) Run(target models.ScanTarget) *models.Vulner
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	for _, cookie := range resp.Cookies() {
 

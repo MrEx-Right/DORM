@@ -46,7 +46,7 @@ func (p *CORSCheckPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		acao := resp.Header.Get("Access-Control-Allow-Origin")
 		acac := resp.Header.Get("Access-Control-Allow-Credentials")
 		vary := resp.Header.Get("Vary")
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if acao == "*" {
 

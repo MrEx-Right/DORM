@@ -56,7 +56,7 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 					continue
 				}
 				bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				bodyStr := string(bodyBytes)
 
 				for _, errMsg := range DBErrors {
@@ -111,7 +111,7 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 							continue
 						}
 						bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-						resp.Body.Close()
+						_ = resp.Body.Close()
 						bodyStr := string(bodyBytes)
 
 						for _, errMsg := range DBErrors {

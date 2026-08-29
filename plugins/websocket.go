@@ -24,7 +24,7 @@ func (p *WebSocketPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 	resp, err := models.GetClient().Do(req)
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode == 101 {
 			return &models.Vulnerability{
 				Target: target, Name: "Cross-Site WebSocket Hijacking", Severity: "HIGH", CVSS: 8.1,

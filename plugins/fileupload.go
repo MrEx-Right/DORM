@@ -55,7 +55,7 @@ func (p *FileUploadPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		if err != nil {
 			continue
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		if resp.StatusCode == 200 || resp.StatusCode == 201 || resp.StatusCode == 302 || resp.StatusCode == 303 {
 

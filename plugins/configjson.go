@@ -19,7 +19,7 @@ func (p *ConfigJsonPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	for _, f := range files {
 		resp, err := models.GetClient().Get(getURL(target, f))
 		if err == nil && resp.StatusCode == 200 {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			buf := make([]byte, 500)
 			_, _ = resp.Body.Read(buf)
 			if strings.Contains(string(buf), "api_key") || strings.Contains(string(buf), "secret") || strings.Contains(string(buf), "db_host") {

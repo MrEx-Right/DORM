@@ -82,7 +82,7 @@ func (p *DirBusterPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 				foundPaths = append(foundPaths, fmt.Sprintf("%s (Code: %d)%s", word, resp.StatusCode, statusMark))
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 
 	}

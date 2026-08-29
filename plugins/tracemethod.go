@@ -19,7 +19,7 @@ func (p *TraceMethodPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == 200 {
 		return &models.Vulnerability{Target: target, Name: "TRACE Method Enabled", Severity: "MEDIUM", CVSS: 4.5, Description: "Vulnerable to XST attacks.", Solution: "Set TraceEnable Off.", Reference: ""}
 	}

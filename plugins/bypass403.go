@@ -55,7 +55,7 @@ func (p *Bypass403Plugin) Run(target models.ScanTarget) *models.Vulnerability {
 			continue
 		}
 		origStatus := resp.StatusCode
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		// If it's already accessible or not found, bypass is irrelevant
 		if origStatus != 403 && origStatus != 401 && origStatus != 400 {

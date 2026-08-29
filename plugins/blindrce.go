@@ -79,7 +79,7 @@ func measureBaseline(target models.ScanTarget, endpoint string) time.Duration {
 		resp, err := client.Get(u)
 		elapsed := time.Since(start)
 		if err == nil {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			total += elapsed
 			samples++
 		}
@@ -126,7 +126,7 @@ func (p *BlindRCEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				resp, err := client.Get(targetURL)
 				t1 := time.Since(start)
 				if err == nil {
-					resp.Body.Close()
+					_ = resp.Body.Close()
 				}
 
 				minDelta := 2*time.Second - (baseline / 2)
@@ -198,7 +198,7 @@ func (p *BlindRCEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 					resp, err := client.Get(parsedURL.String())
 					t1 := time.Since(start)
 					if err == nil {
-						resp.Body.Close()
+						_ = resp.Body.Close()
 					}
 
 					minDelta := 2*time.Second - (baseline / 2)
@@ -252,7 +252,7 @@ func (p *BlindRCEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 					resp, err := client.PostForm(ep.URL, formData)
 					t1 := time.Since(start)
 					if err == nil {
-						resp.Body.Close()
+						_ = resp.Body.Close()
 					}
 
 					minDelta := 2*time.Second - (baseline / 2)

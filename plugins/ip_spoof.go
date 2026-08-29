@@ -179,7 +179,7 @@ func passiveRateLimitDetect(client *http.Client, baseURL string, target models.S
 		if err != nil {
 			continue
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		// Passively scan all response headers for rate-limit signatures
 		for _, sig := range rateLimitHeaderSigs {
@@ -260,7 +260,7 @@ func minimalActiveProbe(client *http.Client, baseURL string, target models.ScanT
 			}
 
 			if resp.StatusCode == 429 {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				// Rate-limit confirmed via 429 — proceed to bypass phase
 				return &activeProbeResult{endpoint: ep, statusCode: 429}
 			}
@@ -281,7 +281,7 @@ func minimalActiveProbe(client *http.Client, baseURL string, target models.ScanT
 				endpointReachable = true
 			}
 
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			probeCount++
 
 			// Brief inter-request delay to avoid appearing aggressive

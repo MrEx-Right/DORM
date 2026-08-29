@@ -19,6 +19,6 @@ func (p *PortCheckPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	conn.Close()
+	_ = conn.Close()
 	return &models.Vulnerability{Target: target, Name: "Open TCP Port", Severity: "INFO", CVSS: 0.0, Description: fmt.Sprintf("Port %d is open.", target.Port), Solution: "Close if not required.", Reference: ""}
 }

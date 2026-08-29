@@ -118,7 +118,7 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 					continue
 				}
 				bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				body := string(bodyBytes)
 
 				// Math/fingerprint canary match
@@ -193,7 +193,7 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 							continue
 						}
 						bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-						resp.Body.Close()
+						_ = resp.Body.Close()
 						body := string(bodyBytes)
 
 						if strings.Contains(body, probe.Expected) && !strings.Contains(body, probe.Payload) {
@@ -226,7 +226,7 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 							continue
 						}
 						bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-						resp.Body.Close()
+						_ = resp.Body.Close()
 						body := string(bodyBytes)
 
 						if strings.Contains(body, probe.Expected) && !strings.Contains(body, probe.Payload) {

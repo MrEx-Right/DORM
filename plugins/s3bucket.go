@@ -19,7 +19,7 @@ func (p *S3BucketPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	content := string(body)
 

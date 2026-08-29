@@ -25,7 +25,7 @@ func (p *WPEnumPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode != 200 && resp.StatusCode != 403 {
 		return nil
@@ -65,7 +65,7 @@ func (p *WPEnumPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err1 == nil && resp1.StatusCode == 200 {
 
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp1.Body, 2048))
-		resp1.Body.Close()
+		_ = resp1.Body.Close()
 
 		re := regexp.MustCompile(`(?i)Version\s+([0-9\.]+)`)
 		m := re.FindStringSubmatch(string(bodyBytes))
@@ -112,7 +112,7 @@ func (p *WPEnumPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 		if errP == nil && respP.StatusCode == 200 {
 			bodyBytes, _ := io.ReadAll(io.LimitReader(respP.Body, 2048))
-			respP.Body.Close()
+			_ = respP.Body.Close()
 
 			reStable := regexp.MustCompile(`(?i)Stable tag:\s*([0-9\.]+)`)
 			m := reStable.FindStringSubmatch(string(bodyBytes))

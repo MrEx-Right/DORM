@@ -27,7 +27,7 @@ func (p *RailsPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		return nil
 	}
 	probeBody, _ := io.ReadAll(probeResp.Body)
-	probeResp.Body.Close()
+	_ = probeResp.Body.Close()
 
 	xRuntime := probeResp.Header.Get("X-Runtime")
 	setCookie := probeResp.Header.Get("Set-Cookie")
@@ -54,7 +54,7 @@ func (p *RailsPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	ripResp, err := client.Get(baseURL + "/rails/info/properties")
 	if err == nil {
 		ripBody, _ := io.ReadAll(ripResp.Body)
-		ripResp.Body.Close()
+		_ = ripResp.Body.Close()
 		bodyStr := string(ripBody)
 		if ripResp.StatusCode == 200 && (strings.Contains(bodyStr, "Ruby version") || strings.Contains(bodyStr, "Rails version")) {
 			findings = append(findings, finding{
@@ -70,7 +70,7 @@ func (p *RailsPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	rrResp, err := client.Get(baseURL + "/rails/info/routes")
 	if err == nil {
 		rrBody, _ := io.ReadAll(rrResp.Body)
-		rrResp.Body.Close()
+		_ = rrResp.Body.Close()
 		bodyStr := string(rrBody)
 		if rrResp.StatusCode == 200 && (strings.Contains(bodyStr, "GET") || strings.Contains(bodyStr, "POST")) && strings.Contains(bodyStr, "Path") {
 			findings = append(findings, finding{
@@ -86,7 +86,7 @@ func (p *RailsPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	randResp, err := client.Get(baseURL + "/dorm-rails-probe-xyz-notfound")
 	if err == nil {
 		randBody, _ := io.ReadAll(randResp.Body)
-		randResp.Body.Close()
+		_ = randResp.Body.Close()
 		bodyStr := string(randBody)
 		if strings.Contains(bodyStr, "ActionController::RoutingError") || strings.Contains(bodyStr, "Rails.root") {
 			findings = append(findings, finding{
@@ -102,7 +102,7 @@ func (p *RailsPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	mailResp, err := client.Get(baseURL + "/rails/mailers/")
 	if err == nil {
 		mailBody, _ := io.ReadAll(mailResp.Body)
-		mailResp.Body.Close()
+		_ = mailResp.Body.Close()
 		bodyLow2 := strings.ToLower(string(mailBody))
 		if mailResp.StatusCode == 200 && (strings.Contains(bodyLow2, "mailer preview") || strings.Contains(bodyLow2, "mailers")) {
 			findings = append(findings, finding{
@@ -120,7 +120,7 @@ func (p *RailsPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		mapResp, err := client.Get(baseURL + mp)
 		if err == nil {
 			mapBody, _ := io.ReadAll(mapResp.Body)
-			mapResp.Body.Close()
+			_ = mapResp.Body.Close()
 			if mapResp.StatusCode == 200 && strings.Contains(string(mapBody), `"mappings"`) {
 				findings = append(findings, finding{
 					name:     "Rails Asset Source Map Exposed",
@@ -139,7 +139,7 @@ func (p *RailsPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		authResp, err := client.Get(baseURL + ap)
 		if err == nil {
 			authBody, _ := io.ReadAll(authResp.Body)
-			authResp.Body.Close()
+			_ = authResp.Body.Close()
 			bodyLow3 := strings.ToLower(string(authBody))
 			if authResp.StatusCode == 200 && strings.Contains(bodyLow3, "sign_in") && strings.Contains(bodyLow3, "password") {
 				findings = append(findings, finding{

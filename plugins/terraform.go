@@ -19,7 +19,7 @@ func (p *TerraformPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	for _, path := range paths {
 		resp, err := models.GetClient().Get(getURL(target, path))
 		if err == nil {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			body, _ := io.ReadAll(resp.Body)
 			if resp.StatusCode == 200 && (strings.Contains(string(body), "\"version\":") && strings.Contains(string(body), "\"resources\":")) {
 				return &models.Vulnerability{

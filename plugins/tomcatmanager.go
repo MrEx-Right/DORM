@@ -125,7 +125,7 @@ func deployWAR(client *http.Client, baseURL, contextPath string, warBytes []byte
 		return false
 	}
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	return resp.StatusCode == 200 && strings.HasPrefix(strings.TrimSpace(string(body)), "OK")
 }
@@ -144,7 +144,7 @@ func deployWARForm(client *http.Client, baseURL, contextPath string, warBytes []
 		_, err = fw.Write(warBytes)
 		return err
 	}()
-	mw.Close()
+	_ = mw.Close()
 
 	deployURL := baseURL + "/manager/html/upload"
 	req, err := http.NewRequest("POST", deployURL, &body)
@@ -159,7 +159,7 @@ func deployWARForm(client *http.Client, baseURL, contextPath string, warBytes []
 		return false
 	}
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	return resp.StatusCode == 200 && strings.Contains(string(respBody), contextPath)
 }
@@ -171,7 +171,7 @@ func undeployWAR(client *http.Client, baseURL, contextPath, user, pass string) {
 	req.SetBasicAuth(user, pass)
 	resp, err := client.Do(req)
 	if err == nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 }
 
@@ -186,7 +186,7 @@ func verifyRCE(client *http.Client, baseURL, contextPath, user, pass string) (bo
 		return false, ""
 	}
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	output := string(body)
 	if strings.Contains(output, "uid=") || strings.Contains(output, "NT AUTHORITY") {
@@ -224,7 +224,7 @@ func (p *TomcatManagerPlugin) Run(target models.ScanTarget) *models.Vulnerabilit
 			continue
 		}
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		bodyStr := string(bodyBytes)
 		authHeader := resp.Header.Get("WWW-Authenticate")
 
@@ -278,7 +278,7 @@ func (p *TomcatManagerPlugin) Run(target models.ScanTarget) *models.Vulnerabilit
 			continue
 		}
 		bodyAuth, _ := io.ReadAll(io.LimitReader(respAuth.Body, 65536))
-		respAuth.Body.Close()
+		_ = respAuth.Body.Close()
 
 		if respAuth.StatusCode == 200 && strings.Contains(string(bodyAuth), "Tomcat") {
 			validUser = cred.User

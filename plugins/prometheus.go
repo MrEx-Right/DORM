@@ -16,9 +16,9 @@ func (p *PrometheusPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 	resp, err := models.GetClient().Get(getURL(target, "/metrics"))
 	if err == nil && resp.StatusCode == 200 {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		buf := make([]byte, 500)
-		resp.Body.Read(buf)
+		_, _ = resp.Body.Read(buf)
 		if strings.Contains(string(buf), "go_goroutines") || strings.Contains(string(buf), "process_cpu_seconds") {
 			return &models.Vulnerability{
 				Target: target, Name: "System Metrics Exposure", Severity: "MEDIUM", CVSS: 5.0,

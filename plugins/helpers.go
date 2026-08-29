@@ -134,7 +134,7 @@ func isVersionLessThan(v1, v2 string) bool {
 func signHS256(header, payload string, secret []byte) string {
 	unsignedToken := header + "." + payload
 	h := hmac.New(sha256.New, secret)
-	h.Write([]byte(unsignedToken))
+	_, _ = h.Write([]byte(unsignedToken))
 	signature := base64.RawURLEncoding.EncodeToString(h.Sum(nil))
 	return unsignedToken + "." + signature
 }
@@ -242,7 +242,7 @@ func readBody(resp *http.Response, maxBytes int64) string {
 	if resp == nil {
 		return ""
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, maxBytes))
 	return string(b)
 }

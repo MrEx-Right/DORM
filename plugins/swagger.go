@@ -15,7 +15,7 @@ func (p *SwaggerPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	for _, path := range paths {
 		resp, err := models.GetClient().Get(getURL(target, path))
 		if err == nil && resp.StatusCode == 200 {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			return &models.Vulnerability{
 				Target: target, Name: "API Documentation (Swagger)", Severity: "INFO", CVSS: 0.0,
 				Description: "API endpoints are exposed: " + path,

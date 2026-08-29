@@ -282,7 +282,7 @@ func (s *Spider) fetchBody(target string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Record paths that returned access-denied responses for later analysis.
 	if resp.StatusCode == 401 || resp.StatusCode == 403 || resp.StatusCode == 400 {

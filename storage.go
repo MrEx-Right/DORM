@@ -99,10 +99,10 @@ func (r *DBScanRecord) toAppModel() ScanRecord {
 	var stats map[string]int
 
 	if len(r.Vulnerabilities) > 0 {
-		json.Unmarshal(r.Vulnerabilities, &vulns)
+		_ = json.Unmarshal(r.Vulnerabilities, &vulns)
 	}
 	if len(r.SeverityStats) > 0 {
-		json.Unmarshal(r.SeverityStats, &stats)
+		_ = json.Unmarshal(r.SeverityStats, &stats)
 	}
 
 	if stats == nil {
@@ -359,13 +359,13 @@ func dbSiteMapToModel(r *DBSiteMap) *sitemapper.SiteMap {
 		},
 	}
 
-	json.Unmarshal([]byte(r.Technologies), &sm.Stats.Technologies)
-	json.Unmarshal([]byte(r.RobotDisallows), &sm.RobotDisallows)
-	json.Unmarshal([]byte(r.SitemapURLs), &sm.SitemapURLs)
-	json.Unmarshal(r.PagesJSON, &sm.Pages)
-	json.Unmarshal(r.EndpointsJSON, &sm.Endpoints)
-	json.Unmarshal(r.FormsJSON, &sm.Forms)
-	json.Unmarshal(r.JSFilesJSON, &sm.JSFiles)
+	_ = json.Unmarshal([]byte(r.Technologies), &sm.Stats.Technologies)
+	_ = json.Unmarshal([]byte(r.RobotDisallows), &sm.RobotDisallows)
+	_ = json.Unmarshal([]byte(r.SitemapURLs), &sm.SitemapURLs)
+	_ = json.Unmarshal(r.PagesJSON, &sm.Pages)
+	_ = json.Unmarshal(r.EndpointsJSON, &sm.Endpoints)
+	_ = json.Unmarshal(r.FormsJSON, &sm.Forms)
+	_ = json.Unmarshal(r.JSFilesJSON, &sm.JSFiles)
 
 	if sm.RobotDisallows == nil {
 		sm.RobotDisallows = []string{}
@@ -418,7 +418,7 @@ func LoadExploitDB() error {
 	if err != nil {
 		return fmt.Errorf("download error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	reader := csv.NewReader(resp.Body)
 	records, err := reader.ReadAll()

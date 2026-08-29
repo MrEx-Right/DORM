@@ -42,7 +42,7 @@ func (p *RaceConditionPlugin) Run(target models.ScanTarget) *models.Vulnerabilit
 		if err != nil {
 			continue
 		}
-		probeResp.Body.Close()
+		_ = probeResp.Body.Close()
 
 		if probeResp.StatusCode == 404 || probeResp.StatusCode == 405 {
 			continue
@@ -69,7 +69,7 @@ func (p *RaceConditionPlugin) Run(target models.ScanTarget) *models.Vulnerabilit
 
 				resp, err := client.Do(req)
 				if err == nil {
-					defer resp.Body.Close()
+					defer func() { _ = resp.Body.Close() }()
 					statusCodes[index] = resp.StatusCode
 
 					body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))

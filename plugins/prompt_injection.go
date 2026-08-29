@@ -230,7 +230,7 @@ func (p *PromptInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerabil
 			continue
 		}
 		liveStatus := checkResp.StatusCode
-		checkResp.Body.Close()
+		_ = checkResp.Body.Close()
 		if liveStatus == 404 {
 			continue
 		}
@@ -255,7 +255,7 @@ func (p *PromptInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerabil
 			// ── Body analysis — STATUS CODE IS IGNORED ──
 			// Read the full response body regardless of HTTP status.
 			rawBytes, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			rawStr := string(rawBytes)
 			// Strip HTML markup before grepping

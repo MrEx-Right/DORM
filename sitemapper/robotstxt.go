@@ -40,7 +40,7 @@ func FetchRobotsTxt(client *http.Client, baseURL *url.URL) RobotsResult {
 	if err != nil {
 		return result
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return result
@@ -137,7 +137,7 @@ func ParseSitemapXML(client *http.Client, sitemapURL string, depth int) []string
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil
@@ -221,7 +221,7 @@ func DiscoverSitemaps(client *http.Client, baseURL *url.URL, robotsSitemaps []st
 		if err != nil {
 			continue
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode == http.StatusOK {
 			valid = append(valid, u)
 		}

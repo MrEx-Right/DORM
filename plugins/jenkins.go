@@ -16,9 +16,9 @@ func (p *JenkinsPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 	resp, err := models.GetClient().Get(getURL(target, "/script"))
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		buf := make([]byte, 1024)
-		resp.Body.Read(buf)
+		_, _ = resp.Body.Read(buf)
 		if strings.Contains(string(buf), "println") || strings.Contains(string(buf), "Groovy") {
 			return &models.Vulnerability{
 				Target: target, Name: "Jenkins Script Console Open", Severity: "CRITICAL", CVSS: 9.8,

@@ -337,7 +337,7 @@ func bruteHTTPBasic(target models.ScanTarget) *models.Vulnerability {
 		if err != nil {
 			continue
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.StatusCode == 401 {
 			protectedEndpoints = append(protectedEndpoints, ep)
 		}
@@ -363,7 +363,7 @@ func bruteHTTPBasic(target models.ScanTarget) *models.Vulnerability {
 				continue
 			}
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			// 200 + "admin" content or not a redirect
 			if resp.StatusCode == 200 && !containsAny(string(body), "Invalid", "Unauthorized", "denied", "Wrong") {

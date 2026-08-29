@@ -13,7 +13,7 @@ func (p *DSStorePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 	resp, err := models.GetClient().Get(getURL(target, "/.DS_Store"))
 	if err == nil && resp.StatusCode == 200 && resp.ContentLength > 0 {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return &models.Vulnerability{Target: target, Name: ".DS_Store File", Severity: "INFO", CVSS: 0.0, Description: "Mac file index found.", Solution: "Delete it.", Reference: ""}
 	}
 	return nil

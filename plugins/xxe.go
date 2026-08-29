@@ -111,7 +111,7 @@ func (p *XXEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 					continue
 				}
 				bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 131072))
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				body := string(bodyBytes)
 
 				if strings.Contains(body, pl.Sig) {
@@ -147,7 +147,7 @@ func (p *XXEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 						continue
 					}
 					bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 131072))
-					resp.Body.Close()
+					_ = resp.Body.Close()
 					body := string(bodyBytes)
 
 					if strings.Contains(body, pl.Sig) {

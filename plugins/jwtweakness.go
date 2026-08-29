@@ -84,7 +84,7 @@ func fetchRSAPublicKey(baseURL string) *rsa.PublicKey {
 			continue
 		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 32768))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		var jwks struct {
 			Keys []struct {
@@ -206,7 +206,7 @@ func (p *JWTWeaknessPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 			continue
 		}
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 131072))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		t := findJWT(string(bodyBytes), resp.Header)
 		if t == "" {

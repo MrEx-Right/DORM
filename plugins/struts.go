@@ -20,7 +20,7 @@ func (p *StrutsPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	req.Header.Set("Content-Type", payload)
 	resp, err := client.Do(req)
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		// if resp.StatusCode == 500 && strings.Contains(req.Header.Get("Content-Type"), "html") {
 		// 
 		// }

@@ -17,9 +17,9 @@ func (p *KubeletPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 	resp, err := models.GetClient().Get(getURL(target, "/pods"))
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		buf := make([]byte, 1024)
-		resp.Body.Read(buf)
+		_, _ = resp.Body.Read(buf)
 
 		if strings.Contains(string(buf), "\"kind\":\"PodList\"") {
 			return &models.Vulnerability{

@@ -16,9 +16,9 @@ func (p *PythonServerPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	}
 	resp, err := models.GetClient().Get(getURL(target, "/"))
 	if err == nil && resp.StatusCode == 200 {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		buf := make([]byte, 1024)
-		resp.Body.Read(buf)
+		_, _ = resp.Body.Read(buf)
 		if strings.Contains(string(buf), "Directory listing for") {
 			return &models.Vulnerability{
 				Target: target, Name: "Directory Listing Enabled", Severity: "MEDIUM", CVSS: 5.0,

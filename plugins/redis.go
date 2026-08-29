@@ -21,9 +21,9 @@ func (p *RedisPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
-	conn.Write([]byte("PING\r\n"))
+	_, _ = conn.Write([]byte("PING\r\n"))
 	buf := make([]byte, 1024)
 	n, _ := conn.Read(buf)
 	if strings.Contains(string(buf[:n]), "PONG") {

@@ -31,7 +31,7 @@ func (p *SpringBootPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		if err == nil {
 
 			bodyBytes, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			bodyString := string(bodyBytes)
 
 			isVerified := resp.StatusCode == 200 && (strings.Contains(bodyString, "\"propertySources\"") ||

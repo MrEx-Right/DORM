@@ -16,7 +16,7 @@ func (p *GitLabPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 	resp, err := models.GetClient().Get(getURL(target, "/api/v4/users?per_page=1"))
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		buf := make([]byte, 1024)
 		_, _ = resp.Body.Read(buf)
 		if strings.Contains(string(buf), "\"username\":") {

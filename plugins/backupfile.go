@@ -54,7 +54,7 @@ func (p *BackupFilePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		resp, err := client.Get(fullURL)
 
 		if err == nil {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			if resp.StatusCode != 200 {
 				continue

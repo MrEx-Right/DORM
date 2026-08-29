@@ -197,7 +197,7 @@ func fetchEPSSScores(client *http.Client, cveIDs []string) map[string]float64 {
 	if err != nil {
 		return epssMap
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	
 	body, _ := io.ReadAll(resp.Body)
 

@@ -15,7 +15,7 @@ func (p *HSTSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.Header.Get("Strict-Transport-Security") == "" {
 		return &models.Vulnerability{Target: target, Name: "HSTS Missing", Severity: "INFO", CVSS: 0.0, Description: "Strict-Transport-Security header is missing.", Solution: "Enable HSTS.", Reference: ""}
 	}

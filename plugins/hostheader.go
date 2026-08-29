@@ -21,7 +21,7 @@ func (p *HostHeaderPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	buf := make([]byte, 1024)
 	_, _ = resp.Body.Read(buf)
 	if strings.Contains(string(buf), "evil.com") || resp.Header.Get("Location") == "evil.com" {

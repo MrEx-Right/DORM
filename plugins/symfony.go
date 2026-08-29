@@ -29,7 +29,7 @@ func (p *SymfonyPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		return nil
 	}
 	probeBody, _ := io.ReadAll(probeResp.Body)
-	probeResp.Body.Close()
+	_ = probeResp.Body.Close()
 
 	xDebugToken := probeResp.Header.Get("X-Debug-Token")
 	bodyLow := strings.ToLower(string(probeBody))
@@ -41,7 +41,7 @@ func (p *SymfonyPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		randResp, err := client.Get(baseURL + "/dorm-symfony-probe-xyz")
 		if err == nil {
 			randBody, _ := io.ReadAll(randResp.Body)
-			randResp.Body.Close()
+			_ = randResp.Body.Close()
 			bodyStr := string(randBody)
 			if strings.Contains(bodyStr, "Symfony\\Component") || strings.Contains(bodyStr, "Symfony\\Bundle") {
 				isSymfony = true
@@ -65,7 +65,7 @@ func (p *SymfonyPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	wdtResp, err := client.Get(baseURL + "/_wdt/")
 	if err == nil {
 		wdtBody, _ := io.ReadAll(wdtResp.Body)
-		wdtResp.Body.Close()
+		_ = wdtResp.Body.Close()
 		bodyStr := string(wdtBody)
 		bodyLow2 := strings.ToLower(bodyStr)
 		if wdtResp.StatusCode == 200 && (strings.Contains(bodyLow2, "sf-toolbar") || strings.Contains(bodyLow2, "symfony") || strings.Contains(bodyLow2, "wdt")) {
@@ -82,7 +82,7 @@ func (p *SymfonyPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	profilerResp, err := client.Get(baseURL + "/_profiler/")
 	if err == nil {
 		profilerBody, _ := io.ReadAll(profilerResp.Body)
-		profilerResp.Body.Close()
+		_ = profilerResp.Body.Close()
 		bodyStr := string(profilerBody)
 		bodyLow3 := strings.ToLower(bodyStr)
 		if profilerResp.StatusCode == 200 && (strings.Contains(bodyLow3, "symfony profiler") || strings.Contains(bodyLow3, "request / response") || strings.Contains(bodyStr, "_profiler")) {
@@ -101,7 +101,7 @@ func (p *SymfonyPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		dcResp, err := client.Get(baseURL + dc)
 		if err == nil {
 			dcBody, _ := io.ReadAll(dcResp.Body)
-			dcResp.Body.Close()
+			_ = dcResp.Body.Close()
 			bodyLow4 := strings.ToLower(string(dcBody))
 			if dcResp.StatusCode == 200 && (strings.Contains(bodyLow4, "symfony") || strings.Contains(bodyLow4, "sf-dump")) {
 				findings = append(findings, finding{
@@ -119,7 +119,7 @@ func (p *SymfonyPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	randResp, err := client.Get(baseURL + "/dorm-symfony-probe-notfound-xyz")
 	if err == nil {
 		randBody, _ := io.ReadAll(randResp.Body)
-		randResp.Body.Close()
+		_ = randResp.Body.Close()
 		bodyStr := string(randBody)
 		if strings.Contains(bodyStr, "Symfony\\Component\\HttpKernel\\Exception") ||
 			strings.Contains(bodyStr, "Symfony\\Component\\Routing") ||
@@ -139,7 +139,7 @@ func (p *SymfonyPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		efResp, err := client.Get(baseURL + ef)
 		if err == nil {
 			efBody, _ := io.ReadAll(efResp.Body)
-			efResp.Body.Close()
+			_ = efResp.Body.Close()
 			bodyStr := string(efBody)
 			if efResp.StatusCode == 200 && (strings.Contains(bodyStr, "APP_SECRET") || strings.Contains(bodyStr, "DATABASE_URL") || strings.Contains(bodyStr, "APP_ENV") || strings.Contains(bodyStr, "MAILER_DSN")) {
 				findings = append(findings, finding{
@@ -159,7 +159,7 @@ func (p *SymfonyPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		apResp, err := client.Get(baseURL + ap)
 		if err == nil {
 			apBody, _ := io.ReadAll(apResp.Body)
-			apResp.Body.Close()
+			_ = apResp.Body.Close()
 			bodyStr := string(apBody)
 			if apResp.StatusCode == 200 && (strings.Contains(bodyStr, `"@context"`) || strings.Contains(bodyStr, "hydra:") || strings.Contains(bodyStr, "ApiPlatform")) {
 				findings = append(findings, finding{

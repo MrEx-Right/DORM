@@ -19,7 +19,7 @@ func (p *GitConfigPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode == 200 && strings.Contains(string(body), "[core]") {
 		return &models.Vulnerability{Target: target, Name: "Git Disclosure (.git)", Severity: "HIGH", CVSS: 7.5, Description: "Git config file is accessible.", Solution: "Block access.", Reference: ""}

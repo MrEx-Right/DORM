@@ -137,7 +137,7 @@ func getLatestURLs() (fullURL, deltaURL string, publishedAt time.Time, err error
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return "", "", time.Time{}, fmt.Errorf("github api returned %d", resp.StatusCode)
@@ -242,7 +242,7 @@ func downloadAndProcess(zipURL string) error {
 	if err != nil {
 		return fmt.Errorf("network error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("download failed with HTTP %d for URL: %s", resp.StatusCode, zipURL)
@@ -280,7 +280,7 @@ func downloadAndProcessDelta(zipURL string) error {
 	if err != nil {
 		return fmt.Errorf("network error: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("HTTP %d from GitHub", resp.StatusCode)

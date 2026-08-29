@@ -14,7 +14,7 @@ func (p *NginxTraversalPlugin) Run(target models.ScanTarget) *models.Vulnerabili
 
 	resp, err := models.GetClient().Get(getURL(target, "/static../"))
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode == 200 || resp.StatusCode == 403 {
 

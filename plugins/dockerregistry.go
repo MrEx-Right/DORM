@@ -16,7 +16,7 @@ func (p *DockerRegistryPlugin) Run(target models.ScanTarget) *models.Vulnerabili
 	}
 	resp, err := models.GetClient().Get(getURL(target, "/v2/_catalog"))
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		buf := make([]byte, 1024)
 		_, _ = resp.Body.Read(buf)
 		if strings.Contains(string(buf), "repositories") {

@@ -294,7 +294,7 @@ func fetchManifests(targetURL string) []SCIComponent {
 					}
 				}
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 	}
 
@@ -346,7 +346,7 @@ func fetchPage(targetURL string) (string, http.Header, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024)) // Max 5MB
 	return string(bodyBytes), resp.Header, nil

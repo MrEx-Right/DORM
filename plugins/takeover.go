@@ -18,7 +18,7 @@ func (p *TakeoverPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 	resp, err := models.GetClient().Get(getURL(target, "/"))
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		body := string(bodyBytes)
 

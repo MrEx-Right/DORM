@@ -22,7 +22,7 @@ func (p *AdminPanelPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	for _, p := range panels {
 		resp, err := models.GetClient().Get(getURL(target, p))
 		if err == nil {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			if resp.StatusCode == 200 || resp.StatusCode == 401 {
 				return &models.Vulnerability{

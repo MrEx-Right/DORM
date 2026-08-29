@@ -101,7 +101,7 @@ func (p *NextJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	cfgResp, err := client.Get(baseURL + "/next.config.js")
 	if err == nil {
 		cfgBody, _ := io.ReadAll(cfgResp.Body)
-		cfgResp.Body.Close()
+		_ = cfgResp.Body.Close()
 		bodyStr2 := string(cfgBody)
 		if cfgResp.StatusCode == 200 && (strings.Contains(bodyStr2, "module.exports") || strings.Contains(bodyStr2, "env:") || strings.Contains(bodyStr2, "nextConfig")) {
 			findings = append(findings, finding{
@@ -123,7 +123,7 @@ func (p *NextJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		mapResp, err := client.Get(baseURL + mp)
 		if err == nil {
 			mapBody, _ := io.ReadAll(mapResp.Body)
-			mapResp.Body.Close()
+			_ = mapResp.Body.Close()
 			if mapResp.StatusCode == 200 && strings.Contains(string(mapBody), `"sources"`) {
 				findings = append(findings, finding{
 					name:     "Next.js JavaScript Source Map Exposed",
@@ -142,7 +142,7 @@ func (p *NextJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		aResp, err := client.Get(baseURL + ap)
 		if err == nil {
 			aBody, _ := io.ReadAll(aResp.Body)
-			aResp.Body.Close()
+			_ = aResp.Body.Close()
 			bodyStr3 := string(aBody)
 			if aResp.StatusCode == 200 && (strings.Contains(bodyStr3, "secret") || strings.Contains(bodyStr3, "password") || strings.Contains(bodyStr3, "token") || strings.Contains(bodyStr3, "key") || strings.Contains(bodyStr3, "database")) {
 				findings = append(findings, finding{
@@ -160,13 +160,13 @@ func (p *NextJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	bypassReq, _ := client.Get(baseURL + "/admin")
 	if bypassReq != nil {
 		baseStatus := bypassReq.StatusCode
-		bypassReq.Body.Close()
+		_ = bypassReq.Body.Close()
 
 		bypassReq2, _ := newRequestWithHeader("GET", baseURL+"/admin", "x-middleware-subrequest", "middleware:middleware:middleware:middleware:middleware")
 		if bypassReq2 != nil {
 			resp2, err2 := client.Do(bypassReq2)
 			if err2 == nil {
-				resp2.Body.Close()
+				_ = resp2.Body.Close()
 				// If the status changed from a redirect/forbidden to 200, middleware was bypassed
 				if baseStatus != resp2.StatusCode && (resp2.StatusCode == 200 || resp2.StatusCode == 304) {
 					findings = append(findings, finding{

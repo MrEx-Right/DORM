@@ -51,7 +51,7 @@ func openBrowser(url string) {
 // Endpoint sending plugin list to UI
 func handlePluginList(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(plugins.GetPluginInventory())
+	_ = json.NewEncoder(w).Encode(plugins.GetPluginInventory())
 }
 
 // handleDOMEvents streams real-time DOM-Crawler events to the UI via SSE.
@@ -86,10 +86,10 @@ func handleDOMEvents(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			fmt.Fprintf(w, "data: %s\n\n", ev.ToJSON())
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", ev.ToJSON())
 			flusher.Flush()
 		case <-ticker.C:
-			fmt.Fprintf(w, ": heartbeat\n\n")
+			_, _ = fmt.Fprintf(w, ": heartbeat\n\n")
 			flusher.Flush()
 		}
 	}
@@ -103,9 +103,9 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("[!] USER ABORTED THE SCAN!")
 		activeScanCancel() // Hit the brakes!
 		activeScanCancel = nil
-		w.Write([]byte("Scan stopped"))
+		_, _ = w.Write([]byte("Scan stopped"))
 	} else {
-		w.Write([]byte("No active scan"))
+		_, _ = w.Write([]byte("No active scan"))
 	}
 }
 
@@ -120,7 +120,7 @@ func handleCVEDatabase(w http.ResponseWriter, r *http.Request) {
 		ThreatRadar []models.LocalCVE      `json:"threat_radar"`
 	}
 
-	json.NewEncoder(w).Encode(CVEResponse{
+	_ = json.NewEncoder(w).Encode(CVEResponse{
 		Stats:       cve.GetStats(),
 		CVEs:        cve.GetFirst(500),
 		ThreatRadar: cve.GetThreatRadar(),
@@ -134,12 +134,12 @@ func handleCVESearch(w http.ResponseWriter, r *http.Request) {
 
 	query := r.URL.Query().Get("q")
 	if query == "" {
-		json.NewEncoder(w).Encode([]models.LocalCVE{})
+		_ = json.NewEncoder(w).Encode([]models.LocalCVE{})
 		return
 	}
 
 	results := cve.Search(query, "")
-	json.NewEncoder(w).Encode(results)
+	_ = json.NewEncoder(w).Encode(results)
 }
 
 func handleScan(w http.ResponseWriter, r *http.Request) {
@@ -246,7 +246,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	DB.SaveScan(record)
 
 	// Stream the generated ScanID back to the frontend immediately so live updates work!
-	fmt.Fprintf(w, "data: {\"Status\": \"STARTED\", \"ScanID\": \"%s\"}\n\n", record.ID)
+	_, _ = fmt.Fprintf(w, "data: {\"Status\": \"STARTED\", \"ScanID\": \"%s\"}\n\n", record.ID)
 	flusher.Flush()
 
 	var foundVulns []*models.Vulnerability
@@ -368,7 +368,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		for _, port := range commonPorts {
 			select {
 			case <-ctx.Done():
-				fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
+				_, _ = fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
 				flusher.Flush()
 				return
 			default:
@@ -380,7 +380,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 				address := net.JoinHostPort(h, fmt.Sprintf("%d", p))
 				conn, err := net.DialTimeout("tcp", address, 1*time.Second)
 				if err == nil {
-					conn.Close()
+					_ = conn.Close()
 					mu.Lock()
 					activeTargets = append(activeTargets, TargetPort{Host: h, Port: p})
 					mu.Unlock()
@@ -408,12 +408,12 @@ WaitLoop:
 		case <-prescanDone:
 			break WaitLoop
 		case <-ctx.Done():
-			fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
+			_, _ = fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
 			flusher.Flush()
 			return
 		case <-time.After(3 * time.Second):
 			// Keep SSE connection alive while DOM crawler does its heavy lifting
-			fmt.Fprintf(w, "data: {\"Status\": \"CRAWLING_DOM\"}\n\n")
+			_, _ = fmt.Fprintf(w, "data: {\"Status\": \"CRAWLING_DOM\"}\n\n")
 			flusher.Flush()
 		}
 	}
@@ -544,8 +544,8 @@ WaitLoop:
 
 	if len(activeTargets) == 0 {
 		// Send explicit error to frontend so it doesn't just silently stop
-		fmt.Fprintf(w, "data: {\"Status\": \"ERROR\", \"Message\": \"No reachable ports found for the provided target(s). Check your input or network.\"}\n\n")
-		fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
+		_, _ = fmt.Fprintf(w, "data: {\"Status\": \"ERROR\", \"Message\": \"No reachable ports found for the provided target(s). Check your input or network.\"}\n\n")
+		_, _ = fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
 		flusher.Flush()
 		record.Status = "Failed"
 		record.EndTime = time.Now()
@@ -562,7 +562,7 @@ WaitLoop:
 	engine.OnFind = func(v *models.Vulnerability) {
 		// 1. Send to Frontend via SSE
 		data, _ := json.Marshal(v)
-		fmt.Fprintf(w, "data: %s\n\n", data)
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
 		flusher.Flush()
 
 		// 2. Capture for Database Storage
@@ -591,7 +591,7 @@ WaitLoop:
 	DB.UpdateScan(record.ID, record)
 	// --- STORAGE INTEGRATION END ---
 
-	fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
+	_, _ = fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
 	flusher.Flush()
 }
 
@@ -619,7 +619,7 @@ func handleSiteMap(w http.ResponseWriter, r *http.Request) {
 
 	// 1. Try in-memory (running or recently completed scan)
 	if sm := sitemapper.GetSiteMap(host); sm != nil && sm.ScanID == scanID {
-		json.NewEncoder(w).Encode(sm)
+		_ = json.NewEncoder(w).Encode(sm)
 		return
 	}
 
@@ -630,7 +630,7 @@ func handleSiteMap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(sm)
+	_ = json.NewEncoder(w).Encode(sm)
 }
 
 // handleSiteMapList returns the list of hosts that have a stored SiteMap for a specific scanID.
@@ -640,7 +640,7 @@ func handleSiteMapList(w http.ResponseWriter, r *http.Request) {
 
 	scanID := r.URL.Query().Get("scan_id")
 	if scanID == "" {
-		json.NewEncoder(w).Encode([]string{})
+		_ = json.NewEncoder(w).Encode([]string{})
 		return
 	}
 
@@ -653,7 +653,7 @@ func handleSiteMapList(w http.ResponseWriter, r *http.Request) {
 	if hosts == nil {
 		hosts = []string{}
 	}
-	json.NewEncoder(w).Encode(hosts)
+	_ = json.NewEncoder(w).Encode(hosts)
 }
 
 // --- HISTORY API HANDLERS ---
@@ -668,7 +668,7 @@ func handleHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(records)
+	_ = json.NewEncoder(w).Encode(records)
 }
 
 func handleDelete(w http.ResponseWriter, r *http.Request) {
@@ -693,7 +693,7 @@ func handleDelete(w http.ResponseWriter, r *http.Request) {
 	// Also delete any associated sitemaps
 	DB.DeleteSiteMapsByScanID(scanID)
 
-	fmt.Fprintf(w, `{"status":"success"}`)
+	_, _ = fmt.Fprintf(w, `{"status":"success"}`)
 }
 
 func handleDeleteAll(w http.ResponseWriter, r *http.Request) {
@@ -712,7 +712,7 @@ func handleDeleteAll(w http.ResponseWriter, r *http.Request) {
 	// Clear all sitemaps as well
 	DB.DeleteAllSiteMaps()
 
-	fmt.Fprintf(w, `{"status":"success"}`)
+	_, _ = fmt.Fprintf(w, `{"status":"success"}`)
 }
 
 func handleKEV(w http.ResponseWriter, r *http.Request) {
@@ -722,7 +722,7 @@ func handleKEV(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	json.NewEncoder(w).Encode(buckets)
+	_ = json.NewEncoder(w).Encode(buckets)
 }
 
 // handleSCI runs the Supply Chain Interface analysis for a given target URL.
@@ -743,5 +743,5 @@ func handleSCI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := sci.AnalyzeTarget(target)
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result)
 }

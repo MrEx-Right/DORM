@@ -58,7 +58,7 @@ func RunHeaderInjection(client *http.Client, baseURL string, target models.ScanT
 					continue
 				}
 				bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				bodyStr := string(bodyBytes)
 
 				for _, errMsg := range DBErrors {

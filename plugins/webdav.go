@@ -20,7 +20,7 @@ func (p *WebDAVPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	allow := resp.Header.Get("Allow")
 	if strings.Contains(allow, "PROPFIND") || strings.Contains(allow, "PUT") || strings.Contains(allow, "DELETE") {

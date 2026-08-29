@@ -18,7 +18,7 @@ func (p *HTTPHeaderPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	missing := []string{}
 

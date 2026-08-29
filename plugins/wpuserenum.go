@@ -21,7 +21,7 @@ func (p *WPUserEnumPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	for _, ep := range endpoints {
 		resp, err := models.GetClient().Get(getURL(target, ep))
 		if err == nil && resp.StatusCode == 200 {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			body, _ := io.ReadAll(resp.Body)
 
 			if strings.Contains(string(body), "\"slug\":\"") || strings.Contains(string(body), "/author/") {

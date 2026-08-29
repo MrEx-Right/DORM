@@ -20,9 +20,9 @@ func (p *TraversalPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	for _, pay := range payloads {
 		resp, err := models.GetClient().Get(getURL(target, pay))
 		if err == nil {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			buf := make([]byte, 2048)
-			resp.Body.Read(buf)
+			_, _ = resp.Body.Read(buf)
 			content := string(buf)
 			if strings.Contains(content, "root:x:0:0") || strings.Contains(content, "[fonts]") {
 				return &models.Vulnerability{

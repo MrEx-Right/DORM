@@ -16,7 +16,7 @@ func (p *ClickjackingPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.Header.Get("X-Frame-Options") == "" && resp.Header.Get("Content-Security-Policy") == "" {
 		return &models.Vulnerability{
 			Target: target, Name: "Clickjacking Risk", Severity: "INFO", CVSS: 0.0,

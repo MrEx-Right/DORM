@@ -25,7 +25,7 @@ func (p *TLSCheckPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 	conn, err := tls.Dial("tcp", fmt.Sprintf("%s:%d", target.IP, target.Port), conf)
 	if err == nil {
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		state := conn.ConnectionState()
 		ver := ""
 		switch state.Version {
@@ -37,7 +37,7 @@ func (p *TLSCheckPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 		if ver != "" {
 			// Verify connection is truly established by sending an HTTP request and reading application data
-			conn.SetDeadline(time.Now().Add(2 * time.Second))
+			_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
 			req := fmt.Sprintf("GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\nUser-Agent: DORM-Scanner\r\n\r\n", target.IP)
 			_, writeErr := conn.Write([]byte(req))
 			if writeErr == nil {

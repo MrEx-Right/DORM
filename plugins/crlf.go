@@ -80,7 +80,7 @@ func (p *CRLFPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		pathPayload := buildPathPayload(variant.Encoded)
 		resp, err := client.Get(baseURL + pathPayload)
 		if err == nil {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			setCookie := resp.Header.Get("Set-Cookie")
 			if strings.Contains(setCookie, cookieCanary) {
 				return &models.Vulnerability{
@@ -147,7 +147,7 @@ func (p *CRLFPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 			if err != nil {
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			setCookie := resp.Header.Get("Set-Cookie")
 			location := resp.Header.Get("Location")
@@ -208,7 +208,7 @@ func (p *CRLFPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 						if err != nil {
 							continue
 						}
-						resp.Body.Close()
+						_ = resp.Body.Close()
 
 						if strings.Contains(resp.Header.Get("Set-Cookie"), cookieCanary) {
 							return &models.Vulnerability{
@@ -237,7 +237,7 @@ func (p *CRLFPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		if err != nil {
 			continue
 		}
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		if resp.Header.Get(headerCanary) != "" {
 			return &models.Vulnerability{
 				Target:   target,

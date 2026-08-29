@@ -153,7 +153,7 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 			return nil
 		}
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 16384))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		body := string(bodyBytes)
 
 		// Direkt hit
@@ -228,7 +228,7 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 				continue
 			}
 			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
-			resp.Body.Close()
+			_ = resp.Body.Close()
 			body := string(bodyBytes)
 
 			// 200 + non-empty content + not the target site's own content
@@ -268,7 +268,7 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 			if err != nil {
 				continue
 			}
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			// OOB callback check: If request comes to collaborator server,
 			// the external service performing this check writes "collab_hit" to SharedData

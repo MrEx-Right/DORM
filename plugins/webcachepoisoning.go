@@ -59,7 +59,7 @@ func (p *WebCachePoisoningPlugin) Run(target models.ScanTarget) *models.Vulnerab
 
 			bodyBytes1, _ := io.ReadAll(resp1.Body)
 			bodyStr1 := string(bodyBytes1)
-			resp1.Body.Close()
+			_ = resp1.Body.Close()
 
 			if !strings.Contains(bodyStr1, canary) && !strings.Contains(bodyStr1, "dorm-poison-path") {
 				continue
@@ -73,7 +73,7 @@ func (p *WebCachePoisoningPlugin) Run(target models.ScanTarget) *models.Vulnerab
 
 			bodyBytes2, _ := io.ReadAll(resp2.Body)
 			bodyStr2 := string(bodyBytes2)
-			resp2.Body.Close()
+			_ = resp2.Body.Close()
 
 			cacheHeaders := []string{"X-Cache", "CF-Cache-Status", "X-Varnish", "Age"}
 			isCached := false

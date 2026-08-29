@@ -49,7 +49,7 @@ func RunTimeBasedBlind(client *http.Client, baseURL string, target models.ScanTa
 			resp, err := client.Get(targetURL)
 			duration := time.Since(start)
 			if err == nil && resp != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 
 			if duration >= threshold {

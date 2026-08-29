@@ -35,15 +35,15 @@ func (p *RequestSmugglingPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 		if err != nil {
 			return nil
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
-		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		_, err = conn.Write([]byte(payload))
 		if err != nil {
 			return nil
 		}
 
-		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 
 		buf := make([]byte, 4096)
 		n, err := conn.Read(buf)

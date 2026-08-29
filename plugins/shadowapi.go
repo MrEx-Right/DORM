@@ -19,7 +19,7 @@ func (p *ShadowAPIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	for _, prefix := range prefixes {
 		resp, err := models.GetClient().Get(getURL(target, prefix))
 		if err == nil {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			if resp.StatusCode == 200 || resp.StatusCode == 401 {
 				return &models.Vulnerability{
 					Target: target, Name: "Shadow API Endpoint Found", Severity: "INFO", CVSS: 0.0,

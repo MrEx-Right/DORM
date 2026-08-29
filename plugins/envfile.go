@@ -19,7 +19,7 @@ func (p *EnvFilePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode == 200 && (strings.Contains(string(body), "APP_KEY=") || strings.Contains(string(body), "DB_PASSWORD=")) {
 		return &models.Vulnerability{Target: target, Name: "ENV File Read", Severity: "CRITICAL", CVSS: 10.0, Description: "Passwords/Secrets disclosed.", Solution: "Block access.", Reference: ""}
