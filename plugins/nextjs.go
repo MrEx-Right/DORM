@@ -28,7 +28,7 @@ func (p *NextJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		return nil
 	}
 	probeBody, _ := io.ReadAll(probeResp.Body)
-	probeResp.Body.Close()
+	_ = probeResp.Body.Close()
 	bodyStr := string(probeBody)
 
 	xNextPage := probeResp.Header.Get("x-nextjs-page")
@@ -85,7 +85,7 @@ func (p *NextJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	buildResp, err := client.Get(baseURL + "/_next/BUILD_ID")
 	if err == nil {
 		buildBody, _ := io.ReadAll(buildResp.Body)
-		buildResp.Body.Close()
+		_ = buildResp.Body.Close()
 		buildID := strings.TrimSpace(string(buildBody))
 		if buildResp.StatusCode == 200 && len(buildID) > 5 {
 			findings = append(findings, finding{

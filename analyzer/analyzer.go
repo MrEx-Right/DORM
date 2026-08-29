@@ -164,7 +164,7 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Proxy Error: %v", err), http.StatusBadGateway)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// 2. Intercept Response Body (Max 5MB to avoid memory exhaustion)
 	var bodyBytes []byte

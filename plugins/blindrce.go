@@ -267,7 +267,7 @@ func (p *BlindRCEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 					resp2, err2 := client.PostForm(ep.URL, formData)
 					t2 := time.Since(start2)
 					if err2 == nil {
-						resp2.Body.Close()
+						_ = resp2.Body.Close()
 					}
 
 					ratio := float64(t2) / float64(t1)

@@ -104,8 +104,8 @@ func fetchAndBuildKEVBuckets() (*KEVBuckets, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch CISA KEV: %v", err)
 	}
-	defer resp.Body.Close()
-	
+	defer func() { _ = resp.Body.Close() }()
+
 	body, _ := io.ReadAll(resp.Body)
 
 	var catalog CisaKEVCatalog

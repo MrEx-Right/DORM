@@ -21,14 +21,14 @@ func (p *FTPAnonPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	buf := make([]byte, 1024)
-	conn.Read(buf)
+	_, _ = conn.Read(buf)
 
-	conn.Write([]byte("USER anonymous\r\n"))
-	conn.Read(buf)
-	conn.Write([]byte("PASS anonymous@dorm.com\r\n"))
+	_, _ = conn.Write([]byte("USER anonymous\r\n"))
+	_, _ = conn.Read(buf)
+	_, _ = conn.Write([]byte("PASS anonymous@dorm.com\r\n"))
 	n, _ := conn.Read(buf)
 
 	if strings.Contains(string(buf[:n]), "230") {

@@ -23,7 +23,7 @@ func (p *HostHeaderPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 	defer resp.Body.Close()
 	buf := make([]byte, 1024)
-	resp.Body.Read(buf)
+	_, _ = resp.Body.Read(buf)
 	if strings.Contains(string(buf), "evil.com") || resp.Header.Get("Location") == "evil.com" {
 		return &models.Vulnerability{
 			Target: target, Name: "Host Header Injection", Severity: "MEDIUM", CVSS: 5.4,

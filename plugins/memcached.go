@@ -21,8 +21,8 @@ func (p *MemcachedPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	defer conn.Close()
-	conn.Write([]byte("stats\r\n"))
+	defer func() { _ = conn.Close() }()
+	_, _ = conn.Write([]byte("stats\r\n"))
 	buf := make([]byte, 2048)
 	n, _ := conn.Read(buf)
 	if strings.Contains(string(buf[:n]), "STAT pid") {

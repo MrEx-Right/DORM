@@ -24,7 +24,7 @@ func (p *LaravelDebugPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	respIgnition, err := client.Get(ignitionURL)
 
 	if err == nil {
-		defer respIgnition.Body.Close()
+		defer func() { _ = respIgnition.Body.Close() }()
 		bodyBytes, _ := io.ReadAll(respIgnition.Body)
 		bodyString := string(bodyBytes)
 
@@ -53,7 +53,7 @@ func (p *LaravelDebugPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	respError, err := client.Get(errorURL)
 
 	if err == nil {
-		defer respError.Body.Close()
+		defer func() { _ = respError.Body.Close() }()
 		bodyBytes, _ := io.ReadAll(respError.Body)
 		bodyString := string(bodyBytes)
 

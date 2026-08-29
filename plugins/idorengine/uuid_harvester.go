@@ -25,7 +25,7 @@ func RunUUIDHarvester(client *http.Client, baseURL string, target models.ScanTar
 			continue
 		}
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		bodyStr := string(body)
 
 		matches := uuidRegex.FindAllString(bodyStr, -1)

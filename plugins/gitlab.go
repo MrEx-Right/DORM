@@ -18,7 +18,7 @@ func (p *GitLabPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err == nil {
 		defer resp.Body.Close()
 		buf := make([]byte, 1024)
-		resp.Body.Read(buf)
+		_, _ = resp.Body.Read(buf)
 		if strings.Contains(string(buf), "\"username\":") {
 			return &models.Vulnerability{
 				Target: target, Name: "GitLab API Exposed", Severity: "MEDIUM", CVSS: 5.3,

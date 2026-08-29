@@ -234,7 +234,7 @@ func (p *JWTWeaknessPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 	if err != nil {
 		return nil
 	}
-	respCheck.Body.Close()
+	_ = respCheck.Body.Close()
 	if respCheck.StatusCode == 200 {
 		return nil // JWT not enforced
 	}
@@ -246,7 +246,7 @@ func (p *JWTWeaknessPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 		if err != nil {
 			return false
 		}
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 		return r.StatusCode == 200
 	}
 
@@ -277,7 +277,7 @@ func (p *JWTWeaknessPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 	// ══════════════════════════════════════════════════════════════════
 	headerBytes, _ := base64.RawURLEncoding.DecodeString(origHeaderB64)
 	var headerMap map[string]interface{}
-	json.Unmarshal(headerBytes, &headerMap)
+	_ = json.Unmarshal(headerBytes, &headerMap)
 
 	for _, alg := range []string{"none", "None", "NONE", "nOnE", "NoNe"} {
 		headerMap["alg"] = alg
@@ -402,7 +402,7 @@ func (p *JWTWeaknessPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 		r, err := client.Do(req)
 		if err == nil {
 			body, _ := io.ReadAll(io.LimitReader(r.Body, 8192))
-			r.Body.Close()
+			_ = r.Body.Close()
 			// If server tried to fetch our JKU and accepted the token
 			if r.StatusCode == 200 && !bytes.Contains(body, []byte("invalid")) {
 				return &models.Vulnerability{

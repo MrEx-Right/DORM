@@ -42,10 +42,10 @@ func (p *FileUploadPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		if err != nil {
 			continue
 		}
-		io.Copy(part, strings.NewReader(fileContent))
+		_, _ = io.Copy(part, strings.NewReader(fileContent))
 
-		writer.WriteField("submit", "Upload")
-		writer.Close()
+		_ = writer.WriteField("submit", "Upload")
+		_ = writer.Close()
 
 		req, _ := http.NewRequest("POST", targetURL, body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
@@ -65,7 +65,7 @@ func (p *FileUploadPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				checkResp, err := client.Do(checkReq)
 
 				if err == nil {
-					defer checkResp.Body.Close()
+					defer func() { _ = checkResp.Body.Close() }()
 					if checkResp.StatusCode == 200 {
 
 						respBytes, _ := io.ReadAll(io.LimitReader(checkResp.Body, 2048))

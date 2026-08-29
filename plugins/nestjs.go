@@ -32,7 +32,7 @@ func (p *NestJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		return nil
 	}
 	probeBody, _ := io.ReadAll(probeResp.Body)
-	probeResp.Body.Close()
+	_ = probeResp.Body.Close()
 	xPowered := probeResp.Header.Get("X-Powered-By")
 	isExpress := strings.Contains(xPowered, "Express")
 
@@ -41,7 +41,7 @@ func (p *NestJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		apiResp, err := client.Get(baseURL + "/api-json")
 		if err == nil {
 			apiBody, _ := io.ReadAll(apiResp.Body)
-			apiResp.Body.Close()
+			_ = apiResp.Body.Close()
 			bodyStr := string(apiBody)
 			if apiResp.StatusCode == 200 && strings.Contains(bodyStr, `"openapi"`) {
 				isNestJS = true
@@ -51,7 +51,7 @@ func (p *NestJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 			apiResp2, err := client.Get(baseURL + "/api")
 			if err == nil {
 				apiBody2, _ := io.ReadAll(apiResp2.Body)
-				apiResp2.Body.Close()
+				_ = apiResp2.Body.Close()
 				bodyLow := strings.ToLower(string(apiBody2))
 				if apiResp2.StatusCode == 200 && (strings.Contains(bodyLow, "nestjs") || strings.Contains(bodyLow, "swagger") || strings.Contains(bodyLow, `"openapi"`)) {
 					isNestJS = true
@@ -86,7 +86,7 @@ func (p *NestJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		sResp, err := client.Get(baseURL + sp)
 		if err == nil {
 			sBody, _ := io.ReadAll(sResp.Body)
-			sResp.Body.Close()
+			_ = sResp.Body.Close()
 			bodyStr := string(sBody)
 			if sResp.StatusCode == 200 && (strings.Contains(bodyStr, `"openapi"`) || strings.Contains(bodyStr, `"paths"`) || strings.Contains(strings.ToLower(bodyStr), "swagger")) {
 				findings = append(findings, finding{
@@ -129,7 +129,7 @@ func (p *NestJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		hResp, err := client.Get(baseURL + hp)
 		if err == nil {
 			hBody, _ := io.ReadAll(hResp.Body)
-			hResp.Body.Close()
+			_ = hResp.Body.Close()
 			bodyStr := string(hBody)
 			bodyLow := strings.ToLower(bodyStr)
 			if hResp.StatusCode == 200 && (strings.Contains(bodyLow, "database") || strings.Contains(bodyLow, "redis") || strings.Contains(bodyLow, "typeorm") || strings.Contains(bodyLow, "mongoose")) {
@@ -150,7 +150,7 @@ func (p *NestJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		dResp, err := client.Get(baseURL + dp)
 		if err == nil {
 			dBody, _ := io.ReadAll(dResp.Body)
-			dResp.Body.Close()
+			_ = dResp.Body.Close()
 			bodyStr := string(dBody)
 			if dResp.StatusCode == 200 && (strings.Contains(bodyStr, "[LOG]") || strings.Contains(bodyStr, "[DEBUG]") || strings.Contains(bodyStr, "[ERROR]") || strings.Contains(bodyStr, "NestFactory")) {
 				findings = append(findings, finding{
@@ -168,7 +168,7 @@ func (p *NestJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	apiJsonResp, err := client.Get(baseURL + "/api-json")
 	if err == nil {
 		apiJsonBody, _ := io.ReadAll(apiJsonResp.Body)
-		apiJsonResp.Body.Close()
+		_ = apiJsonResp.Body.Close()
 		if apiJsonResp.StatusCode == 200 {
 			var apiSpec map[string]interface{}
 			if json.Unmarshal(apiJsonBody, &apiSpec) == nil {

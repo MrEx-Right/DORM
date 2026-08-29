@@ -134,7 +134,7 @@ func (p *ExpressJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		mapResp, err := client.Get(baseURL + mp)
 		if err == nil {
 			mapBody, _ := io.ReadAll(mapResp.Body)
-			mapResp.Body.Close()
+			_ = mapResp.Body.Close()
 			if mapResp.StatusCode == 200 && strings.Contains(string(mapBody), `"sources"`) {
 				findings = append(findings, finding{
 					name:     "JavaScript Source Map Exposed",
@@ -153,7 +153,7 @@ func (p *ExpressJSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		logResp, err := client.Get(baseURL + lp)
 		if err == nil {
 			logBody, _ := io.ReadAll(logResp.Body)
-			logResp.Body.Close()
+			_ = logResp.Body.Close()
 			bodyStr := string(logBody)
 			if logResp.StatusCode == 200 && (strings.Contains(bodyStr, "[INFO]") || strings.Contains(bodyStr, "[ERROR]") || strings.Contains(bodyStr, "[DEBUG]") || strings.Contains(bodyStr, "winston") || strings.Contains(bodyStr, "morgan")) {
 				findings = append(findings, finding{

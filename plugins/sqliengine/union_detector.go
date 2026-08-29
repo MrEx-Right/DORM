@@ -30,7 +30,7 @@ func RunUnionDetection(client *http.Client, baseURL string, target models.ScanTa
 				continue
 			}
 			baseBody, _ := io.ReadAll(io.LimitReader(baseResp.Body, 65536))
-			baseResp.Body.Close()
+			_ = baseResp.Body.Close()
 
 			// Find number of columns via ORDER BY (1-15)
 			columns := detectColumnCount(client, baseURL, ep, param, baseBody)

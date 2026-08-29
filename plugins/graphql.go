@@ -19,7 +19,7 @@ func (p *GraphQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err == nil && resp.StatusCode == 200 {
 		defer resp.Body.Close()
 		buf := make([]byte, 1024)
-		resp.Body.Read(buf)
+		_, _ = resp.Body.Read(buf)
 		if strings.Contains(string(buf), "__schema") {
 			return &models.Vulnerability{
 				Target: target, Name: "GraphQL Introspection Enabled", Severity: "MEDIUM", CVSS: 5.0,

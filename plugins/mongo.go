@@ -113,7 +113,7 @@ func mongoQuery(addr, collection string, bsonDoc []byte) (string, error) {
 		return "", err
 	}
 	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 
 	msg := buildOPQuery(collection, bsonDoc)
 	if _, err := conn.Write(msg); err != nil {

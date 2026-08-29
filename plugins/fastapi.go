@@ -31,7 +31,7 @@ func (p *FastAPIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		return nil
 	}
 	probeBody, _ := io.ReadAll(probeResp.Body)
-	probeResp.Body.Close()
+	_ = probeResp.Body.Close()
 
 	server := probeResp.Header.Get("Server")
 	bodyLow := strings.ToLower(string(probeBody))
@@ -44,7 +44,7 @@ func (p *FastAPIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		openAPIResp, err := client.Get(baseURL + "/openapi.json")
 		if err == nil {
 			openAPIBody, _ := io.ReadAll(openAPIResp.Body)
-			openAPIResp.Body.Close()
+			_ = openAPIResp.Body.Close()
 			if openAPIResp.StatusCode == 200 && strings.Contains(string(openAPIBody), `"openapi"`) {
 				isFastAPI = true
 			}
@@ -67,7 +67,7 @@ func (p *FastAPIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	docsResp, err := client.Get(baseURL + "/docs")
 	if err == nil {
 		docsBody, _ := io.ReadAll(docsResp.Body)
-		docsResp.Body.Close()
+		_ = docsResp.Body.Close()
 		bodyStr := string(docsBody)
 		if docsResp.StatusCode == 200 && (strings.Contains(bodyStr, "SwaggerUIBundle") || strings.Contains(bodyStr, "swagger-ui") || strings.Contains(strings.ToLower(bodyStr), "fastapi")) {
 			findings = append(findings, finding{
@@ -83,7 +83,7 @@ func (p *FastAPIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	redocResp, err := client.Get(baseURL + "/redoc")
 	if err == nil {
 		redocBody, _ := io.ReadAll(redocResp.Body)
-		redocResp.Body.Close()
+		_ = redocResp.Body.Close()
 		if redocResp.StatusCode == 200 && (strings.Contains(string(redocBody), "ReDoc") || strings.Contains(string(redocBody), "redoc-container")) {
 			findings = append(findings, finding{
 				name:     "FastAPI ReDoc Documentation Exposed",
@@ -98,7 +98,7 @@ func (p *FastAPIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	openAPIResp, err := client.Get(baseURL + "/openapi.json")
 	if err == nil {
 		openAPIBody, _ := io.ReadAll(openAPIResp.Body)
-		openAPIResp.Body.Close()
+		_ = openAPIResp.Body.Close()
 		bodyStr := string(openAPIBody)
 		if openAPIResp.StatusCode == 200 && strings.Contains(bodyStr, `"paths"`) {
 			findings = append(findings, finding{
@@ -163,7 +163,7 @@ func (p *FastAPIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	metricsResp, err := client.Get(baseURL + "/metrics")
 	if err == nil {
 		metricsBody, _ := io.ReadAll(metricsResp.Body)
-		metricsResp.Body.Close()
+		_ = metricsResp.Body.Close()
 		bodyStr := string(metricsBody)
 		if metricsResp.StatusCode == 200 && (strings.Contains(bodyStr, "# HELP") || strings.Contains(bodyStr, "# TYPE")) {
 			findings = append(findings, finding{
@@ -182,7 +182,7 @@ func (p *FastAPIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err == nil {
 		acao := corsResp.Header.Get("Access-Control-Allow-Origin")
 		acac := corsResp.Header.Get("Access-Control-Allow-Credentials")
-		corsResp.Body.Close()
+		_ = corsResp.Body.Close()
 		if acao == "*" && acac == "true" {
 			findings = append(findings, finding{
 				name:     "FastAPI CORS Wildcard + Credentials Misconfiguration",
