@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v1.24.0] - 2026-08-30
+## [v1.24.0-snapshot] - 2026-08-30
 ### 🧬 DORM Vectors — Isolated Scan Containers
 
 This release introduces **DORM Vectors**, a new isolated scan-container system that lets users run multiple independently-scheduled scans side by side without one cancelling another. It ships as a standalone package following the same architectural pattern as `sci/` and `cve/`, and is accompanied by a round of false-positive fixes across the plugin surface that Vectors' always-on CVE Radar exposed for the first time.
