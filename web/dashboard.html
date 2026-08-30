@@ -27,6 +27,11 @@
             --danger: #EF4444;
             --warning: #F59E0B;
             --glass-blur: blur(16px);
+            /* DORM Vectors accent — a rose-red kept deliberately distinct from
+               --danger so it reads as a second, isolated-feature identity
+               rather than an error/destructive state. */
+            --vector-accent: #F43F5E;
+            --vector-accent-glow: rgba(244, 63, 94, 0.35);
         }
 
         * {
@@ -136,6 +141,13 @@
             background: linear-gradient(90deg, var(--accent) 0%, rgba(59, 130, 246, 0.6) 100%);
             color: #fff;
             box-shadow: 0 4px 15px var(--accent-glow);
+        }
+
+        /* DORM Vectors nav item keeps the red accent even when active,
+           instead of the shared blue .nav-item.active gradient above. */
+        #nav-vectors.active {
+            background: linear-gradient(90deg, var(--vector-accent) 0%, rgba(244, 63, 94, 0.6) 100%);
+            box-shadow: 0 4px 15px var(--vector-accent-glow);
         }
 
         .nav-item i {
@@ -1889,6 +1901,9 @@
             <div class="nav-item active" onclick="switchView('scanner')">
                 <i class="fas fa-satellite-dish"></i> New Scan
             </div>
+            <div class="nav-item" onclick="switchView('vectors')" id="nav-vectors">
+                <i class="fas fa-vector-square"></i> Vectors
+            </div>
             <div class="nav-item" onclick="switchView('waf')">
                 <i class="fas fa-shield-virus"></i> Bypass
             </div>
@@ -1917,7 +1932,7 @@
         </div>
 
         <div style="margin-top:auto; font-size:12px; color:rgba(255,255,255,0.3); text-align:center; font-weight: 600;">
-            v1.23.2
+            v1.24.0
         </div>
     </div>
 
@@ -1935,10 +1950,17 @@
                     <div class="input-group">
                         <textarea id="targetInput" rows="3"
                             placeholder="Domain, IP, or CIDR...&#10;e.g. http://site1.com&#10;192.168.1.10"></textarea>
-                        <button onclick="startScan()" id="scanBtn"
-                            style="height: auto; align-self: stretch; min-width: 160px; justify-content: center; font-size: 16px;">
-                            <i class="fas fa-play"></i> START SCAN
-                        </button>
+                        <div style="display:flex; flex-direction:column; gap:10px; align-self:stretch;">
+                            <button onclick="startScan()" id="scanBtn"
+                                style="height: auto; flex:1; min-width: 160px; justify-content: center; font-size: 16px;">
+                                <i class="fas fa-play"></i> START SCAN
+                            </button>
+                            <button onclick="isolateToVector()" id="isolateVectorBtn"
+                                style="height: auto; min-width: 160px; justify-content: center; font-size: 12px; padding: 10px 20px; background: linear-gradient(135deg, var(--vector-accent), #BE123C);"
+                                title="Send the first target to a new isolated DORM Vector">
+                                <i class="fas fa-vector-square"></i> ISOLATE TO VECTOR
+                            </button>
+                        </div>
                     </div>
 
 
@@ -2004,6 +2026,137 @@
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="view-vectors" class="view-section">
+            <div class="container">
+                <div class="control-panel"
+                    style="flex-direction: row; justify-content: space-between; align-items:center; padding: 20px 30px;">
+                    <h2 style="margin:0; color:#fff; font-size: 20px;">
+                        <i class="fas fa-cubes-stacked" style="color: var(--vector-accent); margin-right: 10px;"></i>
+                        DORM Vectors
+                    </h2>
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="loadVectors()"
+                            style="background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color:#fff; box-shadow:none; padding: 10px 18px;">
+                            <i class="fas fa-sync-alt"></i> REFRESH
+                        </button>
+                        <button onclick="openVectorPanel()"
+                            style="background: linear-gradient(135deg, var(--vector-accent), #BE123C); padding: 10px 18px;">
+                            <i class="fas fa-plus"></i> NEW VECTOR
+                        </button>
+                    </div>
+                </div>
+
+                <p style="color: var(--text-dim); font-size: 13px; margin: 12px 4px 0;">
+                    Each Vector is an isolated scan container with its own target, plugins, and optional automatic
+                    schedule — goroutine-driven and independent of the classic New Scan screen and of every other
+                    Vector. Stopping or editing one Vector never affects another.
+                </p>
+
+                <!-- CREATE / EDIT PANEL -->
+                <div id="vector-panel" class="control-panel"
+                    style="display:none; border: 1px solid var(--vector-accent); box-shadow: 0 10px 40px rgba(0,0,0,0.3), inset 0 0 30px rgba(244,63,94,0.05); margin-top: 15px; gap: 26px; padding: 30px 32px;">
+                    <div style="display:flex; justify-content: space-between; align-items:center;">
+                        <h3 id="vector-panel-title" style="margin:0; color:#fff; font-size:16px;">
+                            <i class="fas fa-cube" style="color: var(--vector-accent);"></i> New Vector
+                        </h3>
+                        <button onclick="closeVectorPanel()"
+                            style="background: rgba(255,255,255,0.05); box-shadow:none; padding: 8px 14px;">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+
+                    <input type="hidden" id="vectorId">
+
+                    <div class="input-group" style="flex-direction: column; align-items:stretch; gap: 8px;">
+                        <label style="font-size:12px; color:var(--text-dim); font-weight:600;">NAME</label>
+                        <input type="text" id="vectorName" placeholder="e.g. Nightly Prod Sweep"
+                            style="width:100%; background: rgba(0,0,0,0.2); color:#fff; border:1px solid var(--panel-border); border-radius:8px; padding:12px; outline:none;">
+                    </div>
+
+                    <div class="input-group" style="flex-direction: column; align-items:stretch; gap: 8px;">
+                        <label style="font-size:12px; color:var(--text-dim); font-weight:600;">TARGET</label>
+                        <input type="text" id="vectorTarget" placeholder="Domain, IP, or CIDR... e.g. http://site1.com"
+                            style="width:100%; background: rgba(0,0,0,0.2); color:#fff; border:1px solid var(--panel-border); border-radius:8px; padding:14px 16px; font-family:'Consolas','Courier New',monospace; font-size:14px; outline:none;">
+                    </div>
+
+                    <div style="display:flex; flex-direction: column; gap: 10px;">
+                        <label style="font-size:12px; color:var(--text-dim); font-weight:600;">SCHEDULE</label>
+                        <select id="vectorScheduleMode" onchange="onVectorScheduleModeChange()"
+                            style="background: rgba(0,0,0,0.2); color:#fff; border:1px solid var(--panel-border); border-radius:8px; padding:12px; outline:none;">
+                            <option value="manual">Manual (run on demand)</option>
+                            <option value="continuous">⚡ Continuous — start again the instant the previous run finishes</option>
+                            <option value="interval">Every custom interval</option>
+                        </select>
+                        <div id="vectorIntervalRow" style="display:none; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div style="display:flex; flex-direction: column; gap: 8px;">
+                                <label style="font-size:11px; color:var(--text-dim); font-weight:600;">EVERY</label>
+                                <input type="number" id="vectorIntervalValue" value="1" min="1"
+                                    style="background: rgba(0,0,0,0.2); color:#fff; border:1px solid var(--panel-border); border-radius:8px; padding:12px; outline:none;">
+                            </div>
+                            <div style="display:flex; flex-direction: column; gap: 8px;">
+                                <label style="font-size:11px; color:var(--text-dim); font-weight:600;">UNIT</label>
+                                <select id="vectorIntervalUnit"
+                                    style="background: rgba(0,0,0,0.2); color:#fff; border:1px solid var(--panel-border); border-radius:8px; padding:12px; outline:none;">
+                                    <option value="minutes">Minutes</option>
+                                    <option value="hours">Hours</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div style="display:flex; flex-direction: column; gap: 8px;">
+                            <label style="font-size:12px; color:var(--text-dim); font-weight:600;">WAF DELAY (ms)</label>
+                            <input type="number" id="vectorWafDelay" value="0" min="0"
+                                style="background: rgba(0,0,0,0.2); color:#fff; border:1px solid var(--panel-border); border-radius:8px; padding:10px; outline:none;">
+                        </div>
+                        <div style="display:flex; flex-direction: column; gap: 8px;">
+                            <label style="font-size:12px; color:var(--text-dim); font-weight:600;">WAF JITTER (ms)</label>
+                            <input type="number" id="vectorWafJitter" value="0" min="0"
+                                style="background: rgba(0,0,0,0.2); color:#fff; border:1px solid var(--panel-border); border-radius:8px; padding:10px; outline:none;">
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="plugin-header-tools">
+                            <h3><i class="fas fa-plug" style="color:var(--vector-accent);"></i> Plugins for this Vector</h3>
+                            <div class="plugin-quick-actions">
+                                <button onclick="checkAllVectorPlugins(true)"><i class="fas fa-check-double"></i> Select All</button>
+                                <button onclick="checkAllVectorPlugins(false)"><i class="fas fa-times"></i> Clear All</button>
+                            </div>
+                        </div>
+                        <div class="plugin-grid" id="vectorPluginGrid" style="max-height: 260px; overflow-y:auto;">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap: 12px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 24px;">
+                        <button onclick="closeVectorPanel()"
+                            style="background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color:#fff; box-shadow:none;">
+                            CANCEL
+                        </button>
+                        <button onclick="saveVector()"
+                            style="background: linear-gradient(135deg, var(--vector-accent), #BE123C);">
+                            <i class="fas fa-check"></i> SAVE VECTOR
+                        </button>
+                    </div>
+                </div>
+
+                <table style="margin-top: 20px;">
+                    <thead>
+                        <tr>
+                            <th>NAME</th>
+                            <th width="120">STATUS</th>
+                            <th width="160">SCHEDULE</th>
+                            <th width="180">LAST RUN</th>
+                            <th width="220" style="text-align:right">ACTIONS</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vectorsBody"></tbody>
                 </table>
             </div>
         </div>

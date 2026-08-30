@@ -48,8 +48,17 @@ func (p *PassiveCVEPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 					vulnerable = isVersionVulnerable(tech.Version, cve.Description)
 				}
 			} else {
-				// No version detected — report all found CVEs as potential risks.
-				vulnerable = true
+				// No version detected for this technology (very common — e.g.
+				// a WAF/CDN name, or PHP/Java/ASP.NET inferred only from a
+				// cookie name with no version string attached). We have no
+				// basis to claim a specific CVE applies, so — despite this
+				// plugin's "Precision Mode" branding — skip it rather than
+				// claiming every CVE ever filed against that product name is
+				// "confirmed"/"explicitly vulnerable". This was previously
+				// unnoticed because the classic New Scan screen always sent
+				// cveRadar=false, so this plugin never actually ran in
+				// practice until DORM Vectors started forcing it on.
+				vulnerable = false
 			}
 
 			if !vulnerable {

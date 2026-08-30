@@ -43,14 +43,26 @@ func RunMongoJSONInjection(client *http.Client, baseURL string, target models.Sc
 			attackCode := resp.StatusCode
 			attackLen := len(respBytes)
 
-			if (baseCode != 200 && attackCode == 200) || (attackLen > baseLen+100) {
-				// Check response body for auth success indicators
+			// Require an explicit auth-failure → auth-success status code
+			// transition (401/403 → 200). The previous version also fired on
+			// *any* response merely 100+ bytes longer than the baseline,
+			// or on a baseline that was simply non-200 for unrelated reasons
+			// (a 404, a redirect, a transient 500) — both are extremely
+			// common on ordinary sites for reasons that have nothing to do
+			// with auth, which is why this was flagging a "CRITICAL Auth
+			// Bypass" on sites that don't even have this login endpoint.
+			if (baseCode == 401 || baseCode == 403) && attackCode == 200 {
+				// A real bypass hands back a session artifact. Look for an
+				// actual Set-Cookie or a JSON token *key* rather than bare
+				// words like "success"/"welcome"/"session" anywhere in the
+				// body — those show up in completely unrelated page text
+				// (a welcome banner, a "session" cookie-consent notice...)
+				// constantly.
 				bodyStr := strings.ToLower(string(respBytes))
-				isAuthSuccess := strings.Contains(bodyStr, "token") ||
-					strings.Contains(bodyStr, "session") ||
-					strings.Contains(bodyStr, "success") ||
-					strings.Contains(bodyStr, "welcome") ||
-					attackCode == 200 && baseCode != 200
+				isAuthSuccess := resp.Header.Get("Set-Cookie") != "" ||
+					strings.Contains(bodyStr, "\"token\"") ||
+					strings.Contains(bodyStr, "\"access_token\"") ||
+					strings.Contains(bodyStr, "\"session_id\"")
 
 				severity := "HIGH"
 				cvss := 8.5

@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.24.0] - 2026-08-30
+### 🧬 DORM Vectors — Isolated Scan Containers
+
+This release introduces **DORM Vectors**, a new isolated scan-container system that lets users run multiple independently-scheduled scans side by side without one cancelling another. It ships as a standalone package following the same architectural pattern as `sci/` and `cve/`, and is accompanied by a round of false-positive fixes across the plugin surface that Vectors' always-on CVE Radar exposed for the first time.
+
+---
+
+#### 🆕 DORM Vectors Engine (`vectors/`, new package)
+- **Isolated Scan Containers:** Each Vector is a self-contained scan definition — its own single target, plugin filter, WAF delay/jitter, and schedule — persisted independently in a dedicated `vectors.db` (separate from the classic `dorm_engine.db`), so Vectors and their run history survive restarting DORM.
+- **True Per-Vector Concurrency:** Fixed DORM's long-standing bug where starting any new scan silently cancelled whatever was already running (a single global `activeScanCancel`). Every Vector now gets its own goroutine and its own cancellable `context.Context` — running or stopping one Vector never touches another.
+- **Serialized-Safe Network Phase:** Since ~90 plugins still read process-global state (`models.GetClient()`, `models.SharedData`), a new `scanExecMu` mutex (`scanrunner.go`) serializes only the actual HTTP-issuing engine phase across concurrent runs, while target sanitization, the sitemapper/DOM-crawler pre-scan, and port discovery all run fully in parallel per Vector.
+- **`models.RunScan` Bridge:** Extracted the classic scan engine's body out of `handlers.go` into `scanrunner.go`'s `runScanCore`, and wired it into a new `models.RunScan` function-pointer variable — the same nil-checked callback-bridge pattern already used by `models.GetClient`/`models.DeepScanTarget`, letting the import-restricted `vectors` package trigger real scans without ever importing `package main`.
+- **Continuous & Interval Scheduling:** Each Vector can run manually, on a fixed interval (minutes/hours), or in **Continuous** mode — immediately re-queuing itself the moment its previous run finishes — all driven by independent per-Vector goroutines.
+- **Always-On Passive CVE Radar:** Every Vector-triggered scan runs the Passive CVE Radar plugin unconditionally — no per-scan toggle.
+
+#### 🖥️ UI — Vectors Panel (`web/dashboard.html`, `web/app.js`)
+- **New Sidebar Section:** Added "Vectors" below "New Scan," themed with a dedicated red accent (`--vector-accent`) that complements the existing blue UI without overriding it, and a `fa-vector-square` icon.
+- **Isolate to Vector:** Added a one-click button next to the classic scan button that carries the current New Scan target straight into a new Vector.
+- **Live, In-Place Table Updates:** The Vectors table patches existing rows in place (`patchVectorRow`) rather than rebuilding the DOM on every 4-second poll, so action buttons and expanded detail panels never go stale mid-interaction.
+- **Free-Form Detail Panel Toggling:** The per-Vector result panel can now be expanded or collapsed at any time, including mid-scan — a `vectorDetailUserClosed` flag remembers the user's choice so the polling loop and SSE stream stop forcing it back open every few seconds. A fresh run always resets it back to auto-open.
+- **Full Finding History:** A completed run's individual findings (name, severity, target) now stay visible in the detail panel instead of collapsing into a bare "3/5 (Total: 22)" summary line the moment the scan finishes.
+- **Queued vs. Scanning Visibility:** The backend now emits explicit `QUEUED` / `SCANNING` progress events when a Vector is waiting for the shared engine lock versus actively issuing requests, so a Vector queued behind another Vector's long-running scan no longer looks indistinguishable from a hung "Running" state.
+
+#### 🐛 Bug Fixes
+- **DOM Crawler Connection Starvation:** The `/dom-events` SSE feed used to stay open unconditionally from page load, permanently occupying one of the browser's 6-connections-per-host slots and starving ordinary `fetch()` calls (Scan History, CVE Center appeared stuck on "Loading..." forever). Replaced with a reference-counted `domFeedKeepAlive` (tab-open OR any-scan-running keeps the feed alive), fixing the starvation without losing pre-scan crawl visibility for scans started before the DOM Crawler tab is opened.
+- **Classic Scan Crash on Progress Heartbeats:** The classic New Scan SSE handler had no case for the `CRAWLING_DOM` (and now `QUEUED`/`SCANNING`) progress heartbeats, so they fell through to the finding-rendering path and threw on `data.CVSS.toFixed` (undefined). These are now recognized and ignored as pure progress signals.
+- **Plugin Hang Protection (`engine.go`):** Added a 45-second per-plugin timeout (`runPluginBounded`) around every plugin invocation, preventing a single misbehaving plugin from stalling an entire scan indefinitely.
+
+#### 🎯 False Positive Fixes
+Vectors' always-on CVE Radar exercised code paths the classic scan (which hardcoded `cveRadar=false`) had never actually run in production, surfacing several latent false-positive bugs — all fixed at the root and now benefiting classic scans too, since `cveRadar` defaults to `true` there as well:
+- **Exploit-DB Plugin (`edb.go`):** Stopped searching Exploit-DB on bare, versionless vendor/product names (e.g. "cloudflare" matching an unrelated "Cloudflare WARP" desktop-client exploit) — a genuine product+version match is now required first.
+- **Passive CVE Plugin (`passivecve.go`):** No longer treats "no version detected" as "confirmed vulnerable." A technology fingerprinted without a version (common for WAFs/CDNs and cookie-inferred stacks) is now correctly skipped instead of reporting every CVE ever filed against that product name.
+- **SSTI Plugin (`ssti.go`):** Replaced a weak 2-character canary (`49` from `7*7`, which coincidentally appears in ordinary page content constantly) with the same strong 7-digit `1337*1337=1787569` canary already used safely elsewhere in the file, across all 6 affected probes.
+- **NoSQL Injection Engine (`nosqliengine/`):** Tightened auth-bypass detection in both `mongo_injector.go` and `plugin.go` to require an explicit `401`/`403` → `200` status transition plus a structural success signal (`Set-Cookie`, a quoted JSON token key, or an empty-baseline-to-multi-record response shape) instead of loose response-length deltas and common-English-word body matching (`token`/`session`/`success`/`welcome`).
+
 ## [v1.23.2] - 2026-08-28
 ### 🚀 CVE Engine Overhaul & KEV Fixes
 

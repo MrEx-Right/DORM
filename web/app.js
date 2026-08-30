@@ -147,21 +147,28 @@ window.toggleCategory = function (cb, catClass) {
 
 // --- VIEW SWITCHING ---
 let sitemapPollInterval = null;
+let vectorsPollInterval = null;
 
 function switchView(viewName) {
     if (sitemapPollInterval) {
         clearInterval(sitemapPollInterval);
         sitemapPollInterval = null;
     }
+    if (vectorsPollInterval) {
+        clearInterval(vectorsPollInterval);
+        vectorsPollInterval = null;
+    }
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     event.currentTarget.classList.add('active');
     document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
     document.getElementById('view-' + viewName).classList.add('active');
     document.querySelector('.main-content').scrollTop = 0; // Reset scroll position
+    domFeedSetViewOpen(viewName === 'dom');
     if (viewName === 'history') loadHistory();
     if (viewName === 'cvecenter') loadCVECenter();
     if (viewName === 'sitemap') initSitemapView();
     if (viewName === 'sci') initSCIView();
+    if (viewName === 'vectors') { loadVectors(); vectorsPollInterval = setInterval(loadVectors, 4000); }
 }
 
 // ============================================================
@@ -202,6 +209,55 @@ function initDOMCrawlerFeed() {
     domEventSource.onerror = () => {
         setDOMStatus('IDLE', '#94A3B8', 'rgba(148,163,184,0.1)', 'rgba(148,163,184,0.2)');
     };
+}
+
+// Browsers cap concurrent connections to one host at 6 (plain HTTP/1.1, no
+// multiplexing). This feed used to open unconditionally on page load and
+// stay open forever, permanently occupying one of those 6 slots — combine
+// that with a running scan's own SSE stream and a couple of open DORM
+// Vectors live feeds and ordinary fetch() calls (history, CVE center, the
+// plugin list, …) start silently queuing behind them, which looks exactly
+// like "the whole server died" even though the Go backend is fine.
+//
+// But connecting ONLY while the DOM Crawler tab itself is open broke the
+// normal workflow of "start a scan from New Scan, then go check DOM Crawler
+// a bit later" — the crawl happens early in the pre-scan phase, so by the
+// time you switched tabs there was nothing left to see. domFeedKeepAlive is
+// a simple two-reason reference count: the tab being open is one reason,
+// each currently-running scan (classic or Vector) is another. The
+// connection stays up as long as at least one reason is still true, so a
+// scan started from any screen is still captured live even if you're not
+// looking at the DOM Crawler tab at that exact moment.
+const domFeedKeepAlive = { viewOpen: false, activeScans: 0 };
+
+function domFeedSync() {
+    if (domFeedKeepAlive.viewOpen || domFeedKeepAlive.activeScans > 0) {
+        initDOMCrawlerFeed();
+    } else {
+        disconnectDOMCrawlerFeed();
+    }
+}
+
+function domFeedSetViewOpen(open) {
+    domFeedKeepAlive.viewOpen = open;
+    domFeedSync();
+}
+
+function domFeedScanStarted() {
+    domFeedKeepAlive.activeScans++;
+    domFeedSync();
+}
+
+function domFeedScanEnded() {
+    domFeedKeepAlive.activeScans = Math.max(0, domFeedKeepAlive.activeScans - 1);
+    domFeedSync();
+}
+
+function disconnectDOMCrawlerFeed() {
+    if (domEventSource) {
+        domEventSource.close();
+        domEventSource = null;
+    }
 }
 
 function setDOMStatus(text, color, bg, border) {
@@ -307,9 +363,9 @@ function clearDOMFeed() {
 }
 
 // Auto-start SSE connection when page loads (stays connected in background)
-window.addEventListener('load', () => {
-    initDOMCrawlerFeed();
-});
+// Connection is opened lazily from switchView()/switchViewByName() when the
+// DOM Crawler tab is actually visited, not unconditionally here — see
+// disconnectDOMCrawlerFeed() for why.
 
 
 // --- HELPER FUNCTIONS ---
@@ -496,6 +552,588 @@ function viewScan(id) {
     }
 }
 
+// ============================================================
+// DORM VECTORS — isolated, schedulable scan containers
+// ============================================================
+window.allVectors = [];
+let editingVectorId = null;
+let vectorPluginGridLoaded = false;
+const vectorEventSources = {};   // vectorId -> EventSource, kept while its live feed is open
+const vectorLiveFindings = {};   // vectorId -> findings streamed so far during the CURRENT run
+const vectorPrevStatus = {};     // vectorId -> last status seen, to detect Running -> not-Running
+const vectorStatusLabel = {};    // vectorId -> latest SSE sub-label (Queued/Crawling/Scanning/"N found")
+                                  // while Running — the 4s poll only knows the coarse DB status
+                                  // ("Running"), so patchVectorRow must consult this instead of
+                                  // blindly re-rendering a bare "Running" over whatever the SSE
+                                  // stream just reported (that used to silently erase the "Queued"
+                                  // label within 4 seconds of it appearing, every time).
+const vectorDetailUserClosed = {}; // vectorId -> true once the user manually collapses the detail
+                                  // panel during a run. Every poll tick and SSE event used to call
+                                  // ensureVectorDetailOpen() unconditionally while Running, which
+                                  // forced the panel back open within 4s of closing it — this flag
+                                  // lets ensureVectorDetailOpen() respect that choice until the
+                                  // user reopens it or a fresh run starts (STARTED resets it).
+
+// loadVectors is called both for the initial render AND every 4s while the
+// Vectors tab is open (see the setInterval in switchView/switchViewByName).
+// It patches existing rows in place rather than rebuilding the table, so
+// polling never invalidates a button the user is about to click (a full
+// tbody.innerHTML rebuild on a timer made every action button go stale
+// mid-click) — it only rebuilds a row from scratch the first time a Vector
+// appears, or removes it if it's gone.
+async function loadVectors() {
+    const tbody = document.getElementById('vectorsBody');
+    if (!tbody) return;
+    let vectors;
+    try {
+        const resp = await fetch('/api/vectors');
+        vectors = await resp.json();
+    } catch (e) {
+        tbody.innerHTML = `<tr class="vectors-placeholder"><td colspan="5" style="color:red">Error loading vectors: ${e}</td></tr>`;
+        return;
+    }
+    window.allVectors = vectors || [];
+
+    if (!vectors || vectors.length === 0) {
+        tbody.innerHTML = '<tr class="vectors-placeholder"><td colspan="5" style="text-align:center; padding:20px; color:#8b949e;">No Vectors yet. Create one to automate or isolate a scan.</td></tr>';
+        return;
+    }
+    // Clear the "loading"/empty placeholder row once real data arrives. Must
+    // be scoped to .vectors-placeholder specifically — every detail-row also
+    // has a colspan cell, so a bare "td[colspan]" selector here used to match
+    // those too and wipe the whole table (with all its live findings/history)
+    // on every single 4s poll tick.
+    if (tbody.querySelector('tr.vectors-placeholder')) {
+        tbody.innerHTML = '';
+    }
+
+    const seenIds = new Set();
+    vectors.forEach(v => {
+        seenIds.add(v.id);
+        if (document.getElementById('vector-row-' + v.id)) {
+            patchVectorRow(v);
+        } else {
+            renderVectorRow(v);
+        }
+
+        const wasRunning = vectorPrevStatus[v.id] === 'Running';
+        if (v.status === 'Running') {
+            subscribeVectorEvents(v.id);
+        } else if (wasRunning) {
+            // Just finished, caught by this poll even if SSE missed the DONE
+            // event — replace the in-progress live view with the true,
+            // authoritative result from vectors.db.
+            refreshVectorHistory(v.id, true);
+        }
+        vectorPrevStatus[v.id] = v.status;
+    });
+
+    // A Vector deleted from elsewhere (another tab, etc.) drops out of the poll.
+    tbody.querySelectorAll('tr[id^="vector-row-"]').forEach(row => {
+        const id = row.id.replace('vector-row-', '');
+        if (!seenIds.has(id)) {
+            const detail = document.getElementById('vector-detail-' + id);
+            row.remove();
+            if (detail) detail.remove();
+        }
+    });
+}
+
+function vectorScheduleLabel(v) {
+    if (v.continuous) return 'Continuous';
+    if (!v.schedule_minutes) return 'Manual';
+    if (v.schedule_minutes % 1440 === 0) return `Every ${v.schedule_minutes / 1440}d`;
+    if (v.schedule_minutes % 60 === 0) return `Every ${v.schedule_minutes / 60}h`;
+    return `Every ${v.schedule_minutes}m`;
+}
+
+// Single source of truth for the status pill markup — used both for the
+// static per-row render and for live SSE updates, so the two never drift
+// into visually different shapes (the icon+text used to wrap onto separate
+// lines because it wasn't a proper inline-flex row).
+function vectorStatusBadge(status, extraLabel) {
+    const palette = {
+        Running: ['var(--vector-accent)', 'rgba(244,63,94,0.15)', 'rgba(244,63,94,0.35)', true],
+        Scheduled: ['#38BDF8', 'rgba(56,189,248,0.15)', 'rgba(56,189,248,0.3)', false],
+        Idle: ['#94A3B8', 'rgba(148,163,184,0.1)', 'rgba(148,163,184,0.2)', false],
+    };
+    const [color, bg, border, spin] = palette[status] || palette.Idle;
+    const label = extraLabel || status;
+    const icon = spin ? '<i class="fas fa-circle-notch fa-spin" style="flex-shrink:0;"></i>' : '';
+    return `<span style="display:inline-flex; align-items:center; gap:6px; white-space:nowrap; color:${color}; background:${bg}; border:1px solid ${border}; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:700; line-height:1.4;">${icon}${escapeHtml(label)}</span>`;
+}
+
+function vectorActionButtonsHTML(v) {
+    const running = v.status === 'Running';
+    return `
+        ${running
+            ? `<button onclick="stopVector('${v.id}')" class="btn-danger btn-icon" title="Stop"><i class="fas fa-stop"></i></button>`
+            : `<button onclick="runVector('${v.id}')" class="btn-icon" style="background: rgba(244,63,94,0.2); color: var(--vector-accent); border: 1px solid rgba(244,63,94,0.3);" title="Run Now"><i class="fas fa-play"></i></button>`
+        }
+        <button onclick="editVector('${v.id}')" class="btn-icon" style="background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color:#fff;" title="Edit"><i class="fas fa-pen"></i></button>
+        <button onclick="deleteVector('${v.id}')" class="btn-danger btn-icon" title="Delete"><i class="fas fa-trash"></i></button>`;
+}
+
+function renderVectorRow(v) {
+    const tbody = document.getElementById('vectorsBody');
+    const rowId = 'vector-row-' + v.id;
+    const detailId = 'vector-detail-' + v.id;
+    const lastRun = v.last_run_at ? new Date(v.last_run_at).toLocaleString() : 'Never';
+    const running = v.status === 'Running';
+
+    const html = `
+        <tr id="${rowId}" class="vuln-row" data-running="${running ? '1' : '0'}" onclick="toggleVectorHistory('${v.id}')">
+            <td style="color:#fff; font-weight:bold;">
+                <i class="fas fa-cube" style="color:var(--vector-accent); margin-right:8px;"></i>${escapeHtml(v.name)}
+                <div style="color:var(--text-dim); font-size:11px; font-weight:400; margin-top:2px;">${escapeHtml(v.target || '')}</div>
+            </td>
+            <td id="status-${v.id}">${vectorStatusBadge(v.status)}</td>
+            <td id="schedule-${v.id}" style="color:var(--text-dim); font-size:0.9em;"><i class="fas fa-clock"></i> ${vectorScheduleLabel(v)}</td>
+            <td id="lastrun-${v.id}" style="color:var(--text-dim); font-size:0.9em;">${lastRun}</td>
+            <td>
+                <div id="actions-${v.id}" style="display:flex; justify-content:flex-end; gap:8px;" onclick="event.stopPropagation()">${vectorActionButtonsHTML(v)}</div>
+            </td>
+        </tr>
+        <tr class="detail-row" id="${detailId}">
+            <td colspan="5" style="padding:0; border:none;">
+                <div class="detail-content" id="history-${v.id}">
+                    <span style="color:var(--text-dim);">Click to load run history…</span>
+                </div>
+            </td>
+        </tr>`;
+    tbody.insertAdjacentHTML('beforeend', html);
+
+    // A Vector that's currently running gets its result panel auto-opened
+    // and live-populated immediately — no click needed to see it working.
+    if (running) {
+        ensureVectorDetailOpen(v.id);
+        renderVectorLiveFindings(v.id);
+    }
+}
+
+// Updates an already-rendered row in place (called by the 4s poll) instead
+// of replacing its HTML, so a button the user is hovering/about to click
+// never gets yanked out from under them mid-interaction. The action buttons
+// are only regenerated when Running/not-Running actually flips.
+function patchVectorRow(v) {
+    const row = document.getElementById('vector-row-' + v.id);
+    if (!row) return;
+    const running = v.status === 'Running';
+
+    const statusCell = document.getElementById('status-' + v.id);
+    if (statusCell) {
+        const label = running ? vectorStatusLabel[v.id] : undefined;
+        statusCell.innerHTML = vectorStatusBadge(v.status, label);
+    }
+
+    const scheduleCell = document.getElementById('schedule-' + v.id);
+    if (scheduleCell) scheduleCell.innerHTML = `<i class="fas fa-clock"></i> ${vectorScheduleLabel(v)}`;
+
+    const lastRunCell = document.getElementById('lastrun-' + v.id);
+    if (lastRunCell) lastRunCell.textContent = v.last_run_at ? new Date(v.last_run_at).toLocaleString() : 'Never';
+
+    if (row.dataset.running !== (running ? '1' : '0')) {
+        row.dataset.running = running ? '1' : '0';
+        const actionsDiv = document.getElementById('actions-' + v.id);
+        if (actionsDiv) actionsDiv.innerHTML = vectorActionButtonsHTML(v);
+    }
+
+    if (running) {
+        ensureVectorDetailOpen(v.id);
+        renderVectorLiveFindings(v.id);
+    }
+}
+
+function ensureVectorDetailOpen(id) {
+    if (vectorDetailUserClosed[id]) return; // user explicitly collapsed this — don't fight them
+    const detailRow = document.getElementById('vector-detail-' + id);
+    const parentRow = document.getElementById('vector-row-' + id);
+    if (detailRow && parentRow && detailRow.style.display !== 'table-row') {
+        detailRow.style.display = 'table-row';
+        parentRow.classList.add('open');
+    }
+}
+
+// Renders whatever has streamed in so far for the run in progress. Cleared
+// and replaced with the authoritative saved record once the run finishes
+// (see refreshVectorHistory), since the live SSE feed can miss events.
+function renderVectorLiveFindings(id) {
+    const container = document.getElementById('history-' + id);
+    if (!container) return;
+    container.dataset.loaded = ''; // still live — always re-fetch fresh history once this ends
+    const findings = vectorLiveFindings[id] || [];
+    if (findings.length === 0) {
+        container.innerHTML = '<span style="color:var(--vector-accent);"><i class="fas fa-circle-notch fa-spin"></i> Scanning — results will appear here as they are found…</span>';
+        return;
+    }
+    container.innerHTML = findings.map(f => {
+        const sev = (f.Severity || 'INFO').toUpperCase();
+        const target = f.Target ? `${f.Target.IP}:${f.Target.Port}` : '';
+        return `<div style="display:flex; align-items:center; gap:12px; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+            <span class="badge sev-${escapeHtml(sev)}">${escapeHtml(sev)}</span>
+            <span style="color:#fff; flex:1;">${escapeHtml(f.Name || '')}</span>
+            <span style="color:var(--text-dim); font-size:12px;">${escapeHtml(target)}</span>
+        </div>`;
+    }).join('');
+}
+
+// Renders a Vector's past runs. The most recent run's individual findings are
+// shown in full (not just severity counts) — this is what used to go missing
+// the moment a scan finished: refreshVectorHistory() replaces the live,
+// per-finding view with this function's output, but it only ever rendered a
+// one-line summary (status/date/crit-high counts), so the detailed list the
+// user was just watching populate live would vanish and get replaced by
+// "Completed  3/5 (Total: 23)" with no way to see what those 23 actually were.
+function renderVectorHistoryRecords(container, records) {
+    if (!records || records.length === 0) {
+        container.innerHTML = '<span style="color:var(--text-dim);">No runs yet.</span>';
+        return;
+    }
+    container.innerHTML = records.map((r, idx) => {
+        const date = new Date(r.start_time).toLocaleString();
+        const crit = (r.severity_stats && r.severity_stats['CRITICAL']) || 0;
+        const high = (r.severity_stats && r.severity_stats['HIGH']) || 0;
+        const summary = `<div style="display:flex; justify-content:space-between; gap:12px; padding:8px 0;">
+            <span style="color:#fff; min-width:90px;">${escapeHtml(r.status)}</span>
+            <span style="color:var(--text-dim); font-size:12px;">${date}</span>
+            <span style="font-size:12px;"><span style="color:#ff7b72;">${crit}</span>/<span style="color:#ff9b5e;">${high}</span> (Total: ${r.total_vulns})</span>
+        </div>`;
+
+        if (idx !== 0) {
+            // Older runs: summary only, to keep the panel from growing unbounded.
+            return `<div style="border-top:1px solid rgba(255,255,255,0.05);">${summary}</div>`;
+        }
+
+        const vulns = r.vulnerabilities || [];
+        const findingsHtml = vulns.length
+            ? vulns.map(f => {
+                const sev = (f.Severity || 'INFO').toUpperCase();
+                const target = f.Target ? `${f.Target.IP}:${f.Target.Port}` : '';
+                return `<div style="display:flex; align-items:center; gap:12px; padding:6px 0 6px 12px; border-bottom:1px solid rgba(255,255,255,0.04);">
+                    <span class="badge sev-${escapeHtml(sev)}">${escapeHtml(sev)}</span>
+                    <span style="color:#fff; flex:1;">${escapeHtml(f.Name || '')}</span>
+                    <span style="color:var(--text-dim); font-size:12px;">${escapeHtml(target)}</span>
+                </div>`;
+            }).join('')
+            : '<div style="padding:6px 0 6px 12px; color:var(--text-dim); font-size:12px;">No findings.</div>';
+
+        return `<div>${summary}${findingsHtml}</div>`;
+    }).join('');
+}
+
+// Fetches the authoritative run history for a Vector from vectors.db and
+// paints it into its detail panel. Called both on manual expand
+// (toggleVectorHistory) and automatically the moment a run is detected as
+// finished, so the final result is never stuck behind a stale live view.
+async function refreshVectorHistory(id, forceOpen) {
+    const container = document.getElementById('history-' + id);
+    if (!container) return;
+    container.dataset.loaded = '1';
+    try {
+        const resp = await fetch('/api/vectors/history?id=' + encodeURIComponent(id));
+        const records = await resp.json();
+        renderVectorHistoryRecords(container, records);
+    } catch (e) {
+        container.innerHTML = `<span style="color:red;">Error loading history: ${e}</span>`;
+    }
+    if (forceOpen) ensureVectorDetailOpen(id);
+}
+
+async function toggleVectorHistory(id) {
+    const detailRow = document.getElementById('vector-detail-' + id);
+    const wasOpen = detailRow && detailRow.style.display === 'table-row';
+    toggleDetail('vector-detail-' + id, 'vector-row-' + id);
+    // Remember the user's explicit choice so a live-running Vector's poll/SSE
+    // updates don't force the panel back open the moment they close it.
+    vectorDetailUserClosed[id] = wasOpen;
+    if (wasOpen) return;
+    const container = document.getElementById('history-' + id);
+    if (!container || container.dataset.loaded) return;
+    await refreshVectorHistory(id, false);
+}
+
+// Reflects the SCHEDULE mode select onto the interval row's visibility.
+function onVectorScheduleModeChange() {
+    const mode = document.getElementById('vectorScheduleMode').value;
+    document.getElementById('vectorIntervalRow').style.display = mode === 'interval' ? 'grid' : 'none';
+}
+
+function openVectorPanel(prefillTarget) {
+    editingVectorId = null;
+    document.getElementById('vectorId').value = '';
+    document.getElementById('vector-panel-title').innerHTML = '<i class="fas fa-cube" style="color: var(--vector-accent);"></i> New Vector';
+    document.getElementById('vectorName').value = '';
+    document.getElementById('vectorTarget').value = prefillTarget || '';
+    document.getElementById('vectorScheduleMode').value = 'manual';
+    document.getElementById('vectorIntervalValue').value = '1';
+    document.getElementById('vectorIntervalUnit').value = 'minutes';
+    document.getElementById('vectorWafDelay').value = '0';
+    document.getElementById('vectorWafJitter').value = '0';
+    onVectorScheduleModeChange();
+
+    ensureVectorPluginGrid().then(() => checkAllVectorPlugins(true));
+
+    const panel = document.getElementById('vector-panel');
+    panel.style.display = 'block';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeVectorPanel() {
+    document.getElementById('vector-panel').style.display = 'none';
+    editingVectorId = null;
+}
+
+function editVector(id) {
+    const v = window.allVectors.find(x => x.id === id);
+    if (!v) return;
+    editingVectorId = id;
+    document.getElementById('vectorId').value = v.id;
+    document.getElementById('vector-panel-title').innerHTML = '<i class="fas fa-cube" style="color: var(--vector-accent);"></i> Edit Vector';
+    document.getElementById('vectorName').value = v.name;
+    document.getElementById('vectorTarget').value = v.target || '';
+
+    if (v.continuous) {
+        document.getElementById('vectorScheduleMode').value = 'continuous';
+        document.getElementById('vectorIntervalValue').value = '1';
+        document.getElementById('vectorIntervalUnit').value = 'minutes';
+    } else if (v.schedule_minutes) {
+        document.getElementById('vectorScheduleMode').value = 'interval';
+        if (v.schedule_minutes % 60 === 0) {
+            document.getElementById('vectorIntervalValue').value = String(v.schedule_minutes / 60);
+            document.getElementById('vectorIntervalUnit').value = 'hours';
+        } else {
+            document.getElementById('vectorIntervalValue').value = String(v.schedule_minutes);
+            document.getElementById('vectorIntervalUnit').value = 'minutes';
+        }
+    } else {
+        document.getElementById('vectorScheduleMode').value = 'manual';
+        document.getElementById('vectorIntervalValue').value = '1';
+        document.getElementById('vectorIntervalUnit').value = 'minutes';
+    }
+    onVectorScheduleModeChange();
+
+    document.getElementById('vectorWafDelay').value = v.waf_delay_ms || 0;
+    document.getElementById('vectorWafJitter').value = v.waf_jitter_ms || 0;
+
+    const selectedNames = (v.plugin_filter || '').split(',').map(s => s.trim()).filter(Boolean);
+    ensureVectorPluginGrid().then(() => {
+        if (selectedNames.length === 0) {
+            checkAllVectorPlugins(true); // empty filter == every plugin runs (server-side "ALL")
+        } else {
+            document.querySelectorAll('#vectorPluginGrid .plugin-check').forEach(cb => {
+                cb.checked = selectedNames.includes(cb.value);
+                cb.closest('.plugin-item').classList.toggle('active-plugin', cb.checked);
+            });
+        }
+    });
+
+    const panel = document.getElementById('vector-panel');
+    panel.style.display = 'block';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function ensureVectorPluginGrid() {
+    if (vectorPluginGridLoaded) return;
+    const resp = await fetch('/plugins');
+    const groupedPlugins = await resp.json();
+    const grid = document.getElementById('vectorPluginGrid');
+    grid.innerHTML = '';
+    for (const [category, plugins] of Object.entries(groupedPlugins)) {
+        grid.innerHTML += `
+            <div style="grid-column: 1 / -1; margin-top: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px; margin-bottom: 5px;">
+                <h4 style="margin:0; color: var(--vector-accent); font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">${escapeHtml(category)}</h4>
+            </div>`;
+        plugins.forEach(p => {
+            const escaped = escapeHtml(p);
+            grid.innerHTML += `
+                <label class="plugin-item active-plugin">
+                    <div class="plugin-checkbox-wrapper">
+                        <input type="checkbox" class="plugin-check custom-checkbox" onchange="this.closest('.plugin-item').classList.toggle('active-plugin', this.checked)" value="${escaped}" checked>
+                        <span>${escaped}</span>
+                    </div>
+                </label>`;
+        });
+    }
+    vectorPluginGridLoaded = true;
+}
+
+function checkAllVectorPlugins(state) {
+    document.querySelectorAll('#vectorPluginGrid .plugin-check').forEach(cb => {
+        cb.checked = state;
+        cb.closest('.plugin-item').classList.toggle('active-plugin', state);
+    });
+}
+
+async function saveVector() {
+    const target = document.getElementById('vectorTarget').value.trim();
+    if (!target) return alert('Please enter a target!');
+
+    const allChecks = document.querySelectorAll('#vectorPluginGrid .plugin-check');
+    const checkedChecks = document.querySelectorAll('#vectorPluginGrid .plugin-check:checked');
+    // Every plugin selected == no filter at all (server treats "" the same as "ALL")
+    const selected = checkedChecks.length === allChecks.length
+        ? []
+        : Array.from(checkedChecks).map(c => c.value);
+
+    const scheduleMode = document.getElementById('vectorScheduleMode').value;
+    let scheduleMinutes = 0;
+    let continuous = false;
+    if (scheduleMode === 'continuous') {
+        continuous = true;
+    } else if (scheduleMode === 'interval') {
+        const rawValue = Math.max(1, parseInt(document.getElementById('vectorIntervalValue').value, 10) || 1);
+        const unit = document.getElementById('vectorIntervalUnit').value;
+        scheduleMinutes = unit === 'hours' ? rawValue * 60 : rawValue;
+    }
+
+    const body = {
+        id: editingVectorId || '',
+        name: document.getElementById('vectorName').value.trim(),
+        target: target,
+        plugin_filter: selected.join(','),
+        schedule_minutes: scheduleMinutes,
+        continuous: continuous,
+        waf_delay_ms: parseInt(document.getElementById('vectorWafDelay').value, 10) || 0,
+        waf_jitter_ms: parseInt(document.getElementById('vectorWafJitter').value, 10) || 0,
+    };
+
+    try {
+        const resp = await fetch(editingVectorId ? '/api/vectors/update' : '/api/vectors/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            alert('Failed to save Vector: ' + (err.error || resp.statusText));
+            return;
+        }
+        closeVectorPanel();
+        loadVectors();
+    } catch (e) {
+        alert('Error saving Vector: ' + e);
+    }
+}
+
+async function runVector(id) {
+    try {
+        const resp = await fetch('/api/vectors/run?id=' + encodeURIComponent(id), { method: 'POST' });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            alert('Failed to start Vector: ' + (err.error || resp.statusText));
+            return;
+        }
+        vectorLiveFindings[id] = [];
+        subscribeVectorEvents(id);
+        loadVectors();
+    } catch (e) {
+        alert('Error running Vector: ' + e);
+    }
+}
+
+async function stopVector(id) {
+    try {
+        await fetch('/api/vectors/stop?id=' + encodeURIComponent(id), { method: 'POST' });
+    } finally {
+        loadVectors();
+    }
+}
+
+async function deleteVector(id) {
+    if (!confirm('Delete this Vector and all of its scan history? This cannot be undone.')) return;
+    if (vectorEventSources[id]) { vectorEventSources[id].close(); delete vectorEventSources[id]; }
+    await fetch('/api/vectors/delete?id=' + encodeURIComponent(id), { method: 'POST' });
+    loadVectors();
+}
+
+// subscribeVectorEvents watches ONE Vector's own SSE feed — independent of
+// every other Vector's feed and of the classic ad-hoc /scan EventSource.
+// This is the "nice to have, live" path; it is NOT the only thing keeping
+// the UI correct — the 4s poll in loadVectors() is the real safety net if a
+// browser-level reconnect ever causes this stream to miss an event.
+function subscribeVectorEvents(id) {
+    if (vectorEventSources[id]) return; // already watching
+    domFeedScanStarted(); // keeps DOM Crawler capturing this run's pre-scan crawl even if that tab isn't open
+    const es = new EventSource('/api/vectors/events?id=' + encodeURIComponent(id));
+    vectorEventSources[id] = es;
+
+    es.onmessage = (e) => {
+        const badge = document.getElementById('status-' + id);
+        let data;
+        try { data = JSON.parse(e.data); } catch (_) { return; }
+
+        if (data.Status === 'STARTED') {
+            vectorLiveFindings[id] = [];
+            delete vectorStatusLabel[id];
+            delete vectorDetailUserClosed[id]; // fresh run — auto-open again by default
+            ensureVectorDetailOpen(id);
+            renderVectorLiveFindings(id);
+            return;
+        }
+        if (data.Status === 'CRAWLING_DOM') {
+            vectorStatusLabel[id] = 'Crawling...';
+            if (badge) badge.innerHTML = vectorStatusBadge('Running', vectorStatusLabel[id]);
+            return;
+        }
+        if (data.Status === 'QUEUED') {
+            // Only one scan's engine phase can issue HTTP requests at a time
+            // (scanExecMu, scanrunner.go) — this Vector is fully started and
+            // pre-scanned, just waiting for another run to free up the engine.
+            vectorStatusLabel[id] = 'Queued (engine busy)...';
+            if (badge) badge.innerHTML = vectorStatusBadge('Running', vectorStatusLabel[id]);
+            return;
+        }
+        if (data.Status === 'SCANNING') {
+            vectorStatusLabel[id] = 'Scanning...';
+            if (badge) badge.innerHTML = vectorStatusBadge('Running', vectorStatusLabel[id]);
+            return;
+        }
+        if (data.Status === 'ERROR' || data.Status === 'DONE') {
+            es.close();
+            delete vectorEventSources[id];
+            delete vectorStatusLabel[id];
+            domFeedScanEnded();
+            refreshVectorHistory(id, true);
+            loadVectors();
+            return;
+        }
+        // Anything else is a streamed vulnerability finding.
+        if (!vectorLiveFindings[id]) vectorLiveFindings[id] = [];
+        vectorLiveFindings[id].push(data);
+        renderVectorLiveFindings(id);
+        vectorStatusLabel[id] = vectorLiveFindings[id].length + ' found';
+        if (badge) badge.innerHTML = vectorStatusBadge('Running', vectorStatusLabel[id]);
+    };
+
+    es.onerror = () => { /* EventSource auto-reconnects on transient drops; the
+        4s poll in loadVectors() is what actually guarantees the badge can't
+        get stuck if a reconnect ever misses the DONE event. */ };
+}
+
+function isolateToVector() {
+    const raw = document.getElementById('targetInput').value;
+    const firstTarget = raw.split('\n').map(t => t.trim()).filter(Boolean)[0] || '';
+    switchViewByName('vectors');
+    openVectorPanel(firstTarget);
+}
+
+// switchView() reads the global `event` object (set by the inline onclick
+// that invoked it) to know which nav-item to activate — unavailable when
+// switching views programmatically. This activates the Vectors nav +
+// view directly instead.
+function switchViewByName(viewName) {
+    if (sitemapPollInterval) { clearInterval(sitemapPollInterval); sitemapPollInterval = null; }
+    if (vectorsPollInterval) { clearInterval(vectorsPollInterval); vectorsPollInterval = null; }
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    const nav = document.getElementById('nav-' + viewName);
+    if (nav) nav.classList.add('active');
+    document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+    document.getElementById('view-' + viewName).classList.add('active');
+    document.querySelector('.main-content').scrollTop = 0;
+    domFeedSetViewOpen(viewName === 'dom');
+    if (viewName === 'vectors') { loadVectors(); vectorsPollInterval = setInterval(loadVectors, 4000); }
+}
+
 // --- SCANNER LOGIC ---
 function startScan() {
     // 1. Get raw input from textarea
@@ -557,9 +1195,16 @@ function startScan() {
     const proxyEnabled = document.getElementById('proxyToggle').checked;
     const proxyUrl = document.getElementById('proxyUrlInput').value || "http://127.0.0.1:8081";
 
-    const cveRadar = false; // Toggle was removed from UI
+    // Always on, matching DORM Vectors — the toggle was removed from both UIs.
+    // Previously this was hardcoded false here while Vectors hardcoded it
+    // true, which is why the exact same target could return a different
+    // finding set (Passive CVE Radar findings only) depending on which screen
+    // triggered the scan. Now that the plugin's false-positive bugs are fixed,
+    // there's no reason for the two paths to disagree.
+    const cveRadar = true;
 
     // Assign to global variable (Notice: query param is now "targets")
+    domFeedScanStarted(); // keeps DOM Crawler capturing this scan's pre-scan crawl even if that tab isn't open
     scanEventSource = new EventSource(`/scan?targets=${encodeURIComponent(targetString)}&plugins=${encodeURIComponent(selected.join(","))}&auth=${encodeURIComponent(authHeader)}&proxyEnabled=${proxyEnabled}&proxyUrl=${encodeURIComponent(proxyUrl)}&wafDelay=${wafDelay}&wafJitter=${wafJitter}&wafNullByte=${wafNullByte}&wafUEP=${wafUEP}&wafTLS=${wafTLS}`);
 
     scanEventSource.onmessage = (e) => {
@@ -593,6 +1238,13 @@ function startScan() {
                 clearInterval(sitemapPollInterval);
                 sitemapPollInterval = null;
             }
+            return;
+        }
+
+        // Progress heartbeats, not findings — must be caught here or they fall
+        // through to the finding-rendering code below and crash on
+        // data.CVSS.toFixed (undefined) since they carry no CVSS field.
+        if (data.Status === "CRAWLING_DOM" || data.Status === "QUEUED" || data.Status === "SCANNING") {
             return;
         }
 
@@ -662,6 +1314,7 @@ function finishScanUI() {
     if (scanEventSource) {
         scanEventSource.close();
         scanEventSource = null;
+        domFeedScanEnded();
     }
 
     // Ensure DOM crawler pulse is turned off

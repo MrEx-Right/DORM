@@ -63,7 +63,14 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 			lenAttack := len(bodyAttack)
 			codeAttack := respAttack.StatusCode
 
-			if codeBase != 200 && codeAttack == 200 {
+			// Require an explicit auth-failure code (401/403), not just
+			// "anything other than 200" — a baseline 404/301/500 flipping to
+			// 200 on the attack request is extremely common for reasons
+			// that have nothing to do with auth (routing quirks, redirects,
+			// an endpoint that doesn't even exist), and across 8 endpoints
+			// x 10 params that combination is close to guaranteed on any
+			// real site, which is why this used to fire constantly.
+			if (codeBase == 401 || codeBase == 403) && codeAttack == 200 {
 				return &models.Vulnerability{
 					Target:   target,
 					Name:     "NoSQL Injection (Operator: $ne — Auth Bypass)",
@@ -78,14 +85,20 @@ func (p *NoSQLPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				}
 			}
 
-			if lenAttack > (lenBase + 200) {
+			// A bare byte-count increase is not evidence of a data leak on
+			// its own — dynamic pages vary in size constantly for unrelated
+			// reasons (ads, CSRF tokens, timestamps...). Only flag this when
+			// the baseline looked like an empty/no-results response AND the
+			// attack response is substantially larger AND actually looks
+			// like it contains multiple returned JSON records.
+			if lenBase < 50 && lenAttack > lenBase+500 && strings.Count(string(bodyAttack), "{") >= 3 {
 				return &models.Vulnerability{
 					Target:   target,
 					Name:     "NoSQL Injection ($ne Data Leak)",
 					Severity: "HIGH",
 					CVSS:     7.5,
 					Description: fmt.Sprintf(
-						"Response size increased significantly with '$ne' operator — data leak detected.\nParam: %s\nBaseline: %d bytes → Attack: %d bytes",
+						"An empty/no-results baseline turned into a much larger, multi-record-shaped response with the '$ne' operator — likely a data dump.\nParam: %s\nBaseline: %d bytes → Attack: %d bytes",
 						param, lenBase, lenAttack,
 					),
 					Solution:  "Implement input type validation. Filter operator injections.",

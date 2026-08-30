@@ -45,22 +45,31 @@ func (p *SSTIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		{"{{7*'7'}}", "7777777", "Jinja2 (string-repeat fingerprint)", false},
 
 		// ── Twig-spesifik ────────────────────────────────────────────────
-		{"{{7*7}}", "49", "Twig/Jinja2 (generic)", false},
-		{"{7*7}", "49", "Smarty (curly-only)", false},
+		// NOTE: these all used to canary on "49" (from 7*7) — a bare
+		// two-character number that shows up by sheer coincidence in normal
+		// page content (a copyright year, a price, a CSS value, a phone
+		// number...) constantly, which is exactly why SSTI kept firing as a
+		// false CRITICAL on completely ordinary sites. Switched to the same
+		// 1337*1337=1787569 canary already used above — long and specific
+		// enough that an accidental match in real page content is
+		// effectively impossible, while still proving the expression was
+		// actually evaluated (not just reflected) for each engine's syntax.
+		{"{{1337*1337}}", "1787569", "Twig/Jinja2 (generic)", false},
+		{"{1337*1337}", "1787569", "Smarty (curly-only)", false},
 
 		// ── Smarty-spesifik ──────────────────────────────────────────────
 		{"{$smarty.version}", "Smarty", "Smarty (version disclosure)", false},
-		{"{math equation=\"x*y\" x=7 y=7}", "49", "Smarty (math function)", false},
+		{"{math equation=\"x*y\" x=1337 y=1337}", "1787569", "Smarty (math function)", false},
 
 		// ── Freemarker-spesifik ──────────────────────────────────────────
 		{"${\"freemarker\".toUpperCase()}", "FREEMARKER", "Freemarker (string method)", false},
-		{"[#assign x=7*7]${x}", "49", "Freemarker (assign directive)", false},
+		{"[#assign x=1337*1337]${x}", "1787569", "Freemarker (assign directive)", false},
 
 		// ── Mako (Python) ────────────────────────────────────────────────
-		{"${7*7}", "49", "Mako/Python (dollar-brace)", false},
+		{"${1337*1337}", "1787569", "Mako/Python (dollar-brace)", false},
 
 		// ── Universal polyglot ───────────────────────────────────────────
-		{"{{7*7}}${7*7}#{7*7}<%= 7*7 %>${{7*7}}", "49", "Polyglot (universal)", false},
+		{"{{1337*1337}}${1337*1337}#{1337*1337}<%= 1337*1337 %>${{1337*1337}}", "1787569", "Polyglot (universal)", false},
 
 		// ── Jinja2 RCE Escalation ────────────────────────────────────────
 		{

@@ -4,6 +4,7 @@ import (
 	"DORM/models"
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -51,6 +52,43 @@ func (e *Engine) SetFilter(pluginNames string) {
 	}
 }
 
+// pluginTimeout bounds how long a single plugin's Run() call is allowed to
+// occupy a worker slot. Plugins take no context and cannot be interrupted
+// mid-flight — a stuck or pathologically slow one (e.g. a large-wordlist
+// brute-forcer against an unresponsive host) would otherwise hang an entire
+// scan indefinitely, with Stop() unable to do anything about it since
+// cancellation is only ever checked between jobs, never inside one.
+const pluginTimeout = 45 * time.Second
+
+// runPluginBounded runs a plugin in its own goroutine and returns as soon as
+// it finishes, ctx is cancelled, or pluginTimeout elapses — whichever comes
+// first. A plugin that times out keeps running in the background (Go has no
+// way to force-kill a goroutine) but the worker moves on immediately instead
+// of waiting on it forever; its eventual result, if any, is discarded into
+// the buffered channel and the goroutine exits cleanly.
+func runPluginBounded(ctx context.Context, p models.ScannerPlugin, target models.ScanTarget, timeout time.Duration) *models.Vulnerability {
+	resultCh := make(chan *models.Vulnerability, 1)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				fmt.Printf("[Engine] Plugin %s panicked for %s:%d — %v\n", p.Name(), target.IP, target.Port, r)
+				resultCh <- nil
+			}
+		}()
+		resultCh <- p.Run(target)
+	}()
+
+	select {
+	case v := <-resultCh:
+		return v
+	case <-ctx.Done():
+		return nil
+	case <-time.After(timeout):
+		fmt.Printf("[Engine] Plugin %s timed out after %s for %s:%d — skipping\n", p.Name(), timeout, target.IP, target.Port)
+		return nil
+	}
+}
+
 func (e *Engine) Start() {
 	var wg sync.WaitGroup
 	type Job struct {
@@ -86,7 +124,7 @@ func (e *Engine) Start() {
 
 					time.Sleep(300 * time.Millisecond)
 
-					vuln := job.Plugin.Run(job.Target)
+					vuln := runPluginBounded(e.Ctx, job.Plugin, job.Target, pluginTimeout)
 					if vuln != nil {
 						e.mu.Lock()
 						e.Results = append(e.Results, *vuln)

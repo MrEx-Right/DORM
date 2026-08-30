@@ -5,7 +5,9 @@ import (
 	"DORM/cve"
 	"DORM/models"
 	"DORM/sitemapper"
+	"DORM/vectors"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 )
@@ -18,8 +20,16 @@ func main() {
 	}
 	models.GetCVEByID = cve.GetCVEByID
 	models.SearchExploitDB = SearchExploitDB
+	models.RunScan = runScanCore
 	// 1. Initialize the Database
 	InitDB("dorm_engine.db")
+
+	// 1b. Initialize the DORM Vectors database — a separate SQLite file so
+	// Vector configs and their scan history survive independently of the
+	// classic scan history and can be restored on the next launch.
+	if err := vectors.Init("vectors.db"); err != nil {
+		log.Fatalf("[!] Failed to initialize vectors.db: %v", err)
+	}
 
 	// Wire sitemapper DB callback (avoids circular import)
 	sitemapper.OnSiteMapReady = func(host, scanID string, sm *sitemapper.SiteMap) {
@@ -62,6 +72,16 @@ func main() {
 	http.HandleFunc("/api/sitemap", handleSiteMap)
 	http.HandleFunc("/api/sitemap/list", handleSiteMapList)
 
+	// DORM Vectors API Routes — isolated, schedulable scan containers
+	http.HandleFunc("/api/vectors", handleVectorsList)
+	http.HandleFunc("/api/vectors/create", handleVectorCreate)
+	http.HandleFunc("/api/vectors/update", handleVectorUpdate)
+	http.HandleFunc("/api/vectors/delete", handleVectorDelete)
+	http.HandleFunc("/api/vectors/run", handleVectorRun)
+	http.HandleFunc("/api/vectors/stop", handleVectorStop)
+	http.HandleFunc("/api/vectors/history", handleVectorHistory)
+	http.HandleFunc("/api/vectors/events", handleVectorEvents)
+
 	// DOM-Crawler real-time event stream (SSE)
 	http.HandleFunc("/dom-events", handleDOMEvents)
 
@@ -74,7 +94,7 @@ func main() {
 ██║  ██║██║   ██║██████╔╝██╔████╔██║
 ██║  ██║██║   ██║██╔══██╗██║╚██╔╝██║
 ██████╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
-╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.23.2
+╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.24.0
 
        [ Security Engine • Active ]
 `
