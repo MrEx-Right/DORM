@@ -65,7 +65,9 @@ func (p *DangerousMethodsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 			if strings.Contains(uploadedContent, testContent) {
 
 				reqDel, _ := http.NewRequest("DELETE", getURL(target, testFileName), nil)
-				_, _ = models.GetClient().Do(reqDel)
+				if respDel, errDel := models.GetClient().Do(reqDel); errDel == nil {
+					_ = respDel.Body.Close()
+				}
 
 				return &models.Vulnerability{
 					Target:      target,

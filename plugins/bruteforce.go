@@ -204,6 +204,8 @@ func bruteSSH(target models.ScanTarget) *models.Vulnerability {
 		cred string
 	}
 	found := make(chan result, 1)
+	stop := make(chan struct{})
+	var stopOnce sync.Once
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 5) // max 5 concurrent
 
@@ -214,10 +216,12 @@ func bruteSSH(target models.ScanTarget) *models.Vulnerability {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			// Stop sinyali
+			// Stop sinyali — a dedicated, closable channel that can be peeked
+			// by every worker without ever consuming/erasing a value (unlike
+			// peeking `found` directly, which could pull out and overwrite a
+			// credential another worker just pushed).
 			select {
-			case <-found:
-				found <- result{}
+			case <-stop:
 				return
 			default:
 			}
@@ -233,6 +237,7 @@ func bruteSSH(target models.ScanTarget) *models.Vulnerability {
 				_ = client.Close()
 				select {
 				case found <- result{fmt.Sprintf("User: '%s'  Pass: '%s'", user, pass)}:
+					stopOnce.Do(func() { close(stop) })
 				default:
 				}
 			}

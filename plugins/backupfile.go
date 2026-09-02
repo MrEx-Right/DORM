@@ -54,15 +54,15 @@ func (p *BackupFilePlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		resp, err := client.Get(fullURL)
 
 		if err == nil {
-			defer func() { _ = resp.Body.Close() }()
-
 			if resp.StatusCode != 200 {
+				_ = resp.Body.Close()
 				continue
 			}
 
 			header := make([]byte, 512)
 			n, _ := resp.Body.Read(header)
 			content := string(header[:n])
+			_ = resp.Body.Close()
 
 			isVerified := false
 			fileType := "Unknown"

@@ -18,17 +18,22 @@ func (p *ConfigJsonPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	files := []string{"/config.json", "/app_config.json", "/settings.js"}
 	for _, f := range files {
 		resp, err := models.GetClient().Get(getURL(target, f))
-		if err == nil && resp.StatusCode == 200 {
-			defer func() { _ = resp.Body.Close() }()
-			buf := make([]byte, 500)
-			_, _ = resp.Body.Read(buf)
-			if strings.Contains(string(buf), "api_key") || strings.Contains(string(buf), "secret") || strings.Contains(string(buf), "db_host") {
-				return &models.Vulnerability{
-					Target: target, Name: "Config File Disclosure", Severity: "HIGH", CVSS: 7.5,
-					Description: "Configuration file contains sensitive data.",
-					Solution:    "Block access.",
-					Reference:   "",
-				}
+		if err != nil {
+			continue
+		}
+		if resp.StatusCode != 200 {
+			_ = resp.Body.Close()
+			continue
+		}
+		buf := make([]byte, 500)
+		_, _ = resp.Body.Read(buf)
+		_ = resp.Body.Close()
+		if strings.Contains(string(buf), "api_key") || strings.Contains(string(buf), "secret") || strings.Contains(string(buf), "db_host") {
+			return &models.Vulnerability{
+				Target: target, Name: "Config File Disclosure", Severity: "HIGH", CVSS: 7.5,
+				Description: "Configuration file contains sensitive data.",
+				Solution:    "Block access.",
+				Reference:   "",
 			}
 		}
 	}

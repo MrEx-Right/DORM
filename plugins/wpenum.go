@@ -62,6 +62,9 @@ func (p *WPEnumPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	req1, _ := http.NewRequest("GET", baseURL+"/readme.html", nil)
 	resp1, err1 := client.Do(req1)
 
+	if err1 == nil && resp1.StatusCode != 200 {
+		_ = resp1.Body.Close()
+	}
 	if err1 == nil && resp1.StatusCode == 200 {
 
 		bodyBytes, _ := io.ReadAll(io.LimitReader(resp1.Body, 2048))
@@ -110,6 +113,9 @@ func (p *WPEnumPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		reqP, _ := http.NewRequest("GET", pluginURL, nil)
 		respP, errP := client.Do(reqP)
 
+		if errP == nil && respP.StatusCode != 200 {
+			_ = respP.Body.Close()
+		}
 		if errP == nil && respP.StatusCode == 200 {
 			bodyBytes, _ := io.ReadAll(io.LimitReader(respP.Body, 2048))
 			_ = respP.Body.Close()

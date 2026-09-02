@@ -2,6 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.23.3] - 2026-09-02
+### 🩺 Concurrency, Reliability & False-Positive Hardening Pass
+
+A full-codebase reliability and accuracy audit driven by automated testing against local, controlled targets. Every fix below was independently verified with a passing/failing test before and after the change — no fix was applied on inspection alone.
+
+---
+
+#### 🔒 Concurrency & Race Fixes (`engine.go`, `handlers.go`)
+- **`activeScanCancel` data race:** the package-level scan-cancellation handle was read/written from `handleScan` and `handleStop` with no synchronization — confirmed as a real data race under `go test -race`. Now guarded by a dedicated `activeScanMu` mutex.
+- **Plugin timeout restored:** `Engine.Start()`'s worker loop had no per-plugin timeout at all — a slow or hung `plugin.Run()` blocked its worker (and the `Stop` button) indefinitely. Each plugin call is now bounded by a 45s `pluginTimeout`, with the goroutine abandoned (not killed) on timeout.
+- **Unbounded port-discovery fan-out:** `handleScan`'s port sweep launched one goroutine per host×port with no cap. Bounded to 100 concurrent probes via a semaphore.
+
+#### 🐛 Brute-Force Logic Fix (`plugins/bruteforce.go`)
+- **SSH brute-force false negative:** `bruteSSH`'s "stop signal" peek reused the same buffered `found` channel as both a semaphore and the result carrier — a worker peeking the channel right after another worker found a valid credential would pull it out and silently overwrite it with an empty result. Replaced with a dedicated `stop` channel that is only ever closed, never drained of data.
+
+#### 🕳️ Plugin Coverage Gaps (`plugins/helpers.go`, `models/models.go`, `handlers.go`)
+- **`isWebPort()` port whitelist gap:** missing `8000, 8001, 8081, 8888, 9000` — targets on these ports were silently skipped by every port-gated plugin, despite DORM's own port discovery and `UnnecessaryPortsPlugin` recognizing them. Fixed in both copies of the check (`plugins/helpers.go` and the duplicate `models.IsWebPort`, which gates the `wafengine`/`xssengine`/`sqliengine`/`nosqliengine`/`idorengine` sub-packages).
+- **Three plugins never registered:** `PortCheckPlugin`, `UnnecessaryPortsPlugin`, and `DOMScannerPlugin` existed and worked but were never wired into `engine.AddPlugin(...)` in `handlers.go` (dropped as incidental fallout of two earlier unrelated refactors) — they never ran on any scan. Re-registered.
+
+#### 💥 Panic Safety (`engine.go`, `models/models.go`)
+- **No panic recovery around plugin execution:** an unrecovered panic in any single plugin (nil map write, index out of range, etc.) crashed the entire DORM process — every concurrent scan and the HTTP server with it. `Engine.Start()`'s plugin-execution goroutine now recovers, logs, and treats the panic as "no result" for that plugin/target instead.
+- **Unsafe function-pointer bridges:** `models.GetClient`, `models.DeepScanTarget`, `models.SearchLocalCVEs`, `models.GetCVEByID`, and `models.SearchExploitDB` are wired in `main()` but had no nil-safe default — calling any of them before that wiring (a future test, subcommand, or refactor) panics. All five now have a safe no-op default at declaration time, matching the pattern already used correctly by `sitemapper.OnSiteMapReady`.
+
+#### ⚡ DORM-BUSTER Performance & Accuracy (`plugins/dirbuster.go`)
+- **Unbounded wordlist scan:** every `.txt` file under `wordlists/` was unioned unconditionally (~390,000+ lines across the bundled lists) and probed one request at a time — the scan never completed within any realistic timeout budget and produced zero results. Capped to 20,000 words (curated list always included first) and switched to 20-way concurrent probing.
+- **No false-positive calibration:** matches were reported on bare HTTP status code alone (`200` or `403`), so any target with a catch-all/SPA router or "soft 404" (200 for every path) could report thousands of bogus "critical file found" hits. Added a calibration probe against a guaranteed-nonexistent path first; if the target answers that the same way, real hits must now have a body length that differs from the calibration response.
+
+#### 🎯 Fingerprint Plugin Fix (`plugins/fingerprint.go`)
+- **Socket closed before use:** `FingerprintPlugin` called `conn.Close()` immediately after dialing, before sending the `HEAD` request or reading the banner — the plugin could never detect anything, on any target, ever. Changed to `defer conn.Close()`.
+
+#### 🧹 Resource-Leak & False-Positive Sweep (25 plugin files)
+Triggered by a false-positive report on `AdminPanelPlugin` ("Admin Panel Detection" firing on a plain SPA that returns `200` for every path). A full sweep of every plugin found the same two bug shapes repeated across the codebase:
+
+- **`defer` inside a loop:** `defer resp.Body.Close()` placed inside a `for` loop only runs when the *whole function* returns, not per iteration — response bodies pile up open across every iteration until then. Worst case: `plugins/lfi.go`, a triple-nested loop (9 endpoints × 9 params × ~935 payloads) capable of up to **~75,700** simultaneously open response bodies. Fixed in `plugins/lfi.go`, `plugins/backupfile.go`, `plugins/crlf.go`, `plugins/adminpanel.go`, `plugins/fileupload.go`.
+- **Response body never closed on the non-matching branch:** a response is fetched, and every branch that isn't the "match" branch (wrong status code, no match found) exits without ever calling `Close()`. Fixed in `plugins/configjson.go`, `plugins/terraform.go`, `plugins/wpuserenum.go`, `plugins/wpenum.go` (two call sites), `plugins/securitytxt.go`, `plugins/dsstore.go`, `plugins/prometheus.go`, `plugins/pythonserver.go`, `plugins/graphql.go`, `plugins/phpinfo.go`, `plugins/dangerousmethods.go`.
+- **Detection decided on HTTP status code alone, no body content check:** any SPA catch-all router or soft-404 page returning `200`/`401`/`403` for a candidate path was enough to report a finding, with nothing about the response body ever inspected. Fixed by adding content-signature checks:
+  - `plugins/adminpanel.go` — requires a login/panel keyword (`login`, `password`, `dashboard`, etc.) in the body for a `200`; a `401` alone is still accepted as sufficient signal.
+  - `plugins/shadowapi.go` — requires the response to actually look like JSON (`Content-Type` or body shape) for a `200`.
+  - `plugins/tracemethod.go` — requires the response to actually echo an injected canary header, confirming the request was reflected (the real XST mechanism), not just answered.
+  - `plugins/swagger.go` — requires a `swagger`/`openapi`/`"paths"` signature in the body.
+  - `plugins/sensitiveconfig.go` — requires a per-file signature (`[core]` for `.git/config`, `"host"` for the SFTP config, `<project` for the IDE workspace file).
+  - `plugins/securitytxt.go` — requires an RFC 9116 `Contact:` field in the body.
+  - `plugins/dsstore.go` — requires the real `.DS_Store` magic-byte signature (`Bud1`) instead of just a non-empty `Content-Length`.
+
+All 27 modified files pass `go build`, `go build -race`, `go vet`, `golangci-lint`, and `staticcheck` with zero findings. Reviewed but deliberately **not** changed: `plugins/edb.go` (loose exploit-DB text matching is a recall/precision design tradeoff, not a bug), `plugins/websocket.go` and `plugins/jwtweakness.go` (status-only checks, but on a signal specific/gated enough that the false-positive risk is low), and `plugins/adminbypass.go`, `plugins/bypass403.go`, `plugins/nextjs.go`, `plugins/nosqliengine/plugin.go`, `plugins/nosqliengine/mongo_injector.go` (status-based, but differential baseline-vs-attack checks, which are inherently resistant to the SPA-catch-all false-positive class).
+
 ## [v1.23.2] - 2026-08-28
 ### 🚀 CVE Engine Overhaul & KEV Fixes
 

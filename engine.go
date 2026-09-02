@@ -4,6 +4,7 @@ import (
 	"DORM/models"
 	"context"
 	"crypto/tls"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -11,7 +12,10 @@ import (
 	"time"
 )
 
-var activeScanCancel context.CancelFunc
+var (
+	activeScanMu     sync.Mutex
+	activeScanCancel context.CancelFunc
+)
 
 type Engine struct {
 	Targets        []models.ScanTarget
@@ -51,6 +55,11 @@ func (e *Engine) SetFilter(pluginNames string) {
 	}
 }
 
+// pluginTimeout bounds how long a worker waits on a single plugin.Run call
+// before moving on. ScannerPlugin.Run takes no context, so a timed-out call
+// cannot be killed — its goroutine is left to finish/return on its own.
+const pluginTimeout = 45 * time.Second
+
 func (e *Engine) Start() {
 	var wg sync.WaitGroup
 	type Job struct {
@@ -86,14 +95,39 @@ func (e *Engine) Start() {
 
 					time.Sleep(300 * time.Millisecond)
 
-					vuln := job.Plugin.Run(job.Target)
-					if vuln != nil {
-						e.mu.Lock()
-						e.Results = append(e.Results, *vuln)
-						e.mu.Unlock()
-						if e.OnFind != nil {
-							e.OnFind(vuln)
+					// Run the plugin on its own goroutine so a hung/slow plugin.Run
+					// (ScannerPlugin has no context parameter, so it cannot be
+					// interrupted directly) can't block this worker — or Stop —
+					// past pluginTimeout. If it times out, the goroutine is
+					// abandoned to finish or exit on its own; its result is dropped.
+					//
+					// recover() here is load-bearing: an unrecovered panic in any
+					// goroutine crashes the entire process (all concurrent scans,
+					// the whole HTTP server), not just this one plugin/target.
+					resultCh := make(chan *models.Vulnerability, 1)
+					go func(p models.ScannerPlugin, t models.ScanTarget) {
+						defer func() {
+							if r := recover(); r != nil {
+								log.Printf("[!] plugin %q panicked on %s:%d — recovered: %v", p.Name(), t.IP, t.Port, r)
+								resultCh <- nil
+							}
+						}()
+						resultCh <- p.Run(t)
+					}(job.Plugin, job.Target)
+
+					select {
+					case vuln := <-resultCh:
+						if vuln != nil {
+							e.mu.Lock()
+							e.Results = append(e.Results, *vuln)
+							e.mu.Unlock()
+							if e.OnFind != nil {
+								e.OnFind(vuln)
+							}
 						}
+					case <-time.After(pluginTimeout):
+					case <-e.Ctx.Done():
+						return
 					}
 				}
 			}

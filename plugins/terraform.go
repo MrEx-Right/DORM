@@ -18,15 +18,16 @@ func (p *TerraformPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	paths := []string{"/.terraform/terraform.tfstate", "/terraform.tfstate", "/.terraform.lock.hcl"}
 	for _, path := range paths {
 		resp, err := models.GetClient().Get(getURL(target, path))
-		if err == nil {
-			defer func() { _ = resp.Body.Close() }()
-			body, _ := io.ReadAll(resp.Body)
-			if resp.StatusCode == 200 && (strings.Contains(string(body), "\"version\":") && strings.Contains(string(body), "\"resources\":")) {
-				return &models.Vulnerability{
-					Target: target, Name: "Terraform State Leaked", Severity: "HIGH", CVSS: 7.5,
-					Description: "Terraform state file exposed, revealing infrastructure secrets.",
-					Solution:    "Block access to .tfstate files.", Reference: "IaC Security",
-				}
+		if err != nil {
+			continue
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
+		_ = resp.Body.Close()
+		if resp.StatusCode == 200 && (strings.Contains(string(body), "\"version\":") && strings.Contains(string(body), "\"resources\":")) {
+			return &models.Vulnerability{
+				Target: target, Name: "Terraform State Leaked", Severity: "HIGH", CVSS: 7.5,
+				Description: "Terraform state file exposed, revealing infrastructure secrets.",
+				Solution:    "Block access to .tfstate files.", Reference: "IaC Security",
 			}
 		}
 	}

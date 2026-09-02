@@ -20,16 +20,21 @@ func (p *WPUserEnumPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 	for _, ep := range endpoints {
 		resp, err := models.GetClient().Get(getURL(target, ep))
-		if err == nil && resp.StatusCode == 200 {
-			defer func() { _ = resp.Body.Close() }()
-			body, _ := io.ReadAll(resp.Body)
+		if err != nil {
+			continue
+		}
+		if resp.StatusCode != 200 {
+			_ = resp.Body.Close()
+			continue
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
+		_ = resp.Body.Close()
 
-			if strings.Contains(string(body), "\"slug\":\"") || strings.Contains(string(body), "/author/") {
-				return &models.Vulnerability{
-					Target: target, Name: "WordPress Username Disclosure", Severity: "MEDIUM", CVSS: 5.0,
-					Description: "Usernames can be extracted via WP-JSON or Author archives. Risk of Brute-force!",
-					Solution:    "Restrict REST API access and disable author archives.",
-				}
+		if strings.Contains(string(body), "\"slug\":\"") || strings.Contains(string(body), "/author/") {
+			return &models.Vulnerability{
+				Target: target, Name: "WordPress Username Disclosure", Severity: "MEDIUM", CVSS: 5.0,
+				Description: "Usernames can be extracted via WP-JSON or Author archives. Risk of Brute-force!",
+				Solution:    "Restrict REST API access and disable author archives.",
 			}
 		}
 	}

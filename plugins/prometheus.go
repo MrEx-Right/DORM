@@ -15,17 +15,22 @@ func (p *PrometheusPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		return nil
 	}
 	resp, err := models.GetClient().Get(getURL(target, "/metrics"))
-	if err == nil && resp.StatusCode == 200 {
-		defer func() { _ = resp.Body.Close() }()
-		buf := make([]byte, 500)
-		_, _ = resp.Body.Read(buf)
-		if strings.Contains(string(buf), "go_goroutines") || strings.Contains(string(buf), "process_cpu_seconds") {
-			return &models.Vulnerability{
-				Target: target, Name: "System Metrics Exposure", Severity: "MEDIUM", CVSS: 5.0,
-				Description: "/metrics endpoint is open.",
-				Solution:    "Restrict access.",
-				Reference:   "",
-			}
+	if err != nil {
+		return nil
+	}
+	if resp.StatusCode != 200 {
+		_ = resp.Body.Close()
+		return nil
+	}
+	defer func() { _ = resp.Body.Close() }()
+	buf := make([]byte, 500)
+	_, _ = resp.Body.Read(buf)
+	if strings.Contains(string(buf), "go_goroutines") || strings.Contains(string(buf), "process_cpu_seconds") {
+		return &models.Vulnerability{
+			Target: target, Name: "System Metrics Exposure", Severity: "MEDIUM", CVSS: 5.0,
+			Description: "/metrics endpoint is open.",
+			Solution:    "Restrict access.",
+			Reference:   "",
 		}
 	}
 	return nil

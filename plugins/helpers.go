@@ -21,7 +21,8 @@ type Any = interface{}
 // HELPER FUNCTIONS
 // ==========================================
 func isWebPort(port int) bool {
-	return port == 80 || port == 443 || port == 8080 || port == 8443 || port == 3000 || port == 5000 || port == 9090
+	return port == 80 || port == 443 || port == 8080 || port == 8443 || port == 3000 || port == 5000 || port == 9090 ||
+		port == 8000 || port == 8001 || port == 8081 || port == 8888 || port == 9000
 }
 
 func getURL(target models.ScanTarget, path string) string {

@@ -15,17 +15,22 @@ func (p *PythonServerPlugin) Run(target models.ScanTarget) *models.Vulnerability
 		return nil
 	}
 	resp, err := models.GetClient().Get(getURL(target, "/"))
-	if err == nil && resp.StatusCode == 200 {
-		defer func() { _ = resp.Body.Close() }()
-		buf := make([]byte, 1024)
-		_, _ = resp.Body.Read(buf)
-		if strings.Contains(string(buf), "Directory listing for") {
-			return &models.Vulnerability{
-				Target: target, Name: "Directory Listing Enabled", Severity: "MEDIUM", CVSS: 5.0,
-				Description: "Folder contents are visible to everyone.",
-				Solution:    "Disable indexing.",
-				Reference:   "",
-			}
+	if err != nil {
+		return nil
+	}
+	if resp.StatusCode != 200 {
+		_ = resp.Body.Close()
+		return nil
+	}
+	defer func() { _ = resp.Body.Close() }()
+	buf := make([]byte, 1024)
+	_, _ = resp.Body.Read(buf)
+	if strings.Contains(string(buf), "Directory listing for") {
+		return &models.Vulnerability{
+			Target: target, Name: "Directory Listing Enabled", Severity: "MEDIUM", CVSS: 5.0,
+			Description: "Folder contents are visible to everyone.",
+			Solution:    "Disable indexing.",
+			Reference:   "",
 		}
 	}
 	return nil

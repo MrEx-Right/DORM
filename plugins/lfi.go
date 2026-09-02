@@ -58,11 +58,10 @@ func (p *LFIPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 				resp, err := client.Get(targetURL)
 				if err == nil {
-					defer func() { _ = resp.Body.Close() }()
-
 					buf := make([]byte, 5120)
 					n, _ := resp.Body.Read(buf)
 					content := string(buf[:n])
+					_ = resp.Body.Close()
 
 					if strings.Contains(content, "root:x:0:0") ||
 						strings.Contains(content, "[fonts]") ||

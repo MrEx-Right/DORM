@@ -99,10 +99,14 @@ func handleDOMEvents(w http.ResponseWriter, r *http.Request) {
 func handleStop(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	if activeScanCancel != nil {
+	activeScanMu.Lock()
+	cancel := activeScanCancel
+	activeScanCancel = nil
+	activeScanMu.Unlock()
+
+	if cancel != nil {
 		fmt.Println("[!] USER ABORTED THE SCAN!")
-		activeScanCancel() // Hit the brakes!
-		activeScanCancel = nil
+		cancel() // Hit the brakes!
 		_, _ = w.Write([]byte("Scan stopped"))
 	} else {
 		_, _ = w.Write([]byte("No active scan"))
@@ -149,11 +153,13 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	// --- CONTEXT SETUP (FOR CANCELLATION) ---
+	activeScanMu.Lock()
 	if activeScanCancel != nil {
 		activeScanCancel()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	activeScanCancel = cancel
+	activeScanMu.Unlock()
 	// ----------------------------------------
 
 	// 🛠️ CRITICAL FIX 1: Keep SSE alive instantly!
@@ -363,6 +369,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	var activeTargets []TargetPort
 	var mu sync.Mutex
 	var portWg sync.WaitGroup
+	portSem := make(chan struct{}, 100) // cap concurrent port-probe goroutines
 
 	for _, host := range sanitizedTargets {
 		for _, port := range commonPorts {
@@ -377,6 +384,8 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 			portWg.Add(1)
 			go func(h string, p int) {
 				defer portWg.Done()
+				portSem <- struct{}{}
+				defer func() { <-portSem }()
 				address := net.JoinHostPort(h, fmt.Sprintf("%d", p))
 				conn, err := net.DialTimeout("tcp", address, 1*time.Second)
 				if err == nil {
@@ -437,7 +446,10 @@ WaitLoop:
 	engine.AddPlugin(&plugins.BruteForcePlugin{})  //Brute Force
 	engine.AddPlugin(&SpiderPlugin{})              //Spider
 	engine.AddPlugin(&plugins.EDBPlugin{})         //Exploit DB
-	
+	engine.AddPlugin(&plugins.PortCheckPlugin{})        // Open Port Detection
+	engine.AddPlugin(&plugins.UnnecessaryPortsPlugin{}) // Unnecessary/Dev Port Exposure
+	engine.AddPlugin(&plugins.DOMScannerPlugin{})       // DOM XSS & SPA Scanner (Chrome)
+
 	// Passive CVE Check
 	if cveRadarEnabled {
 		engine.AddPlugin(&plugins.PassiveCVEPlugin{}) // Passive CVE (Only if selected)

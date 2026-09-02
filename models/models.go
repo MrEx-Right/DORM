@@ -47,8 +47,12 @@ type ScannerPlugin interface {
 	Run(target ScanTarget) *Vulnerability
 }
 
-// Function pointer to avoid circular dependencies when plugins need the HTTP client
-var GetClient func() *http.Client
+// Function pointer to avoid circular dependencies when plugins need the HTTP client.
+// Initialized with a safe fallback (matching client.go's own getClient()
+// fallback) so a plugin invoked before main() rewires this — a future test,
+// tool subcommand, or refactor that changes init order — degrades to a
+// default client instead of nil-panicking and crashing the whole process.
+var GetClient func() *http.Client = func() *http.Client { return &http.Client{} }
 
 
 type TechNode struct {
@@ -72,10 +76,13 @@ type LocalCVE struct {
     Severity      string  `json:"severity"`
 }
 
-var DeepScanTarget func(targetURL string) *TechProfile
-var SearchLocalCVEs func(product, version string) []LocalCVE
-var GetCVEByID func(id string) *LocalCVE
-var SearchExploitDB func(query string) []string
+// The four function pointers below carry the same nil-panic risk as
+// GetClient above if ever called before main() wires them — each is given a
+// safe no-result default for the same reason.
+var DeepScanTarget func(targetURL string) *TechProfile = func(string) *TechProfile { return &TechProfile{} }
+var SearchLocalCVEs func(product, version string) []LocalCVE = func(string, string) []LocalCVE { return nil }
+var GetCVEByID func(id string) *LocalCVE = func(string) *LocalCVE { return nil }
+var SearchExploitDB func(query string) []string = func(string) []string { return nil }
 
 // ==========================================
 // SHARED HELPERS FOR ENGINE SUB-PACKAGES
@@ -83,7 +90,8 @@ var SearchExploitDB func(query string) []string
 
 // IsWebPort returns true if the port is a common web port.
 func IsWebPort(port int) bool {
-	return port == 80 || port == 443 || port == 8080 || port == 8443 || port == 3000 || port == 5000 || port == 9090
+	return port == 80 || port == 443 || port == 8080 || port == 8443 || port == 3000 || port == 5000 || port == 9090 ||
+		port == 8000 || port == 8001 || port == 8081 || port == 8888 || port == 9000
 }
 
 // GetURL constructs a full URL from a ScanTarget and optional path.

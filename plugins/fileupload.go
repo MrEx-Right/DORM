@@ -65,10 +65,12 @@ func (p *FileUploadPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 				checkResp, err := client.Do(checkReq)
 
 				if err == nil {
-					defer func() { _ = checkResp.Body.Close() }()
-					if checkResp.StatusCode == 200 {
+					if checkResp.StatusCode != 200 {
+						_ = checkResp.Body.Close()
+					} else {
 
 						respBytes, _ := io.ReadAll(io.LimitReader(checkResp.Body, 2048))
+						_ = checkResp.Body.Close()
 						respStr := string(respBytes)
 
 						if strings.Contains(respStr, signature) && !strings.Contains(respStr, "<?php") {

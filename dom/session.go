@@ -46,12 +46,19 @@ func NewSession(ctx context.Context, cfg DOMConfig) (*Session, error) {
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
 
 	// Verify the browser can start with a tiny smoke-test context.
+	//
+	// NOTE: smokeCancel() (like any chromedp.NewContext cancel func) can
+	// block for a long time waiting for the OS process to report as exited
+	// on some Chrome builds, even though the CDP session itself already
+	// closed cleanly. Never await that synchronously here — it would stall
+	// NewSession's return (and therefore the whole crawl) for no benefit.
 	smokeCtx, smokeCancel := chromedp.NewContext(allocCtx)
-	defer smokeCancel()
 	if err := chromedp.Run(smokeCtx); err != nil {
+		go smokeCancel()
 		allocCancel()
 		return nil, fmt.Errorf("dom.NewSession: Chrome failed to start: %w", err)
 	}
+	go smokeCancel()
 
 	return &Session{
 		allocCtx:    allocCtx,
@@ -67,14 +74,20 @@ func NewSession(ctx context.Context, cfg DOMConfig) (*Session, error) {
 // The returned CancelFunc MUST be called to close the tab when done.
 func (s *Session) NewTab(pageCtx context.Context) (context.Context, context.CancelFunc) {
 	tabCtx, cancel := chromedp.NewContext(pageCtx)
-	return tabCtx, cancel
+	// See the NOTE in NewSession: wrap the chromedp cancel so a slow/hung
+	// OS-level process-exit wait on the caller's side never blocks the BFS
+	// loop from moving on to the next page (or returning from Crawl at all).
+	nonBlockingCancel := func() { go cancel() }
+	return tabCtx, nonBlockingCancel
 }
 
 // Close shuts down the underlying Chrome browser process.
 // Must be called exactly once when the crawl session is done.
 func (s *Session) Close() {
 	if s.allocCancel != nil {
-		s.allocCancel()
+		// Same rationale as NewTab's cancel wrapper: don't let a slow
+		// process-exit wait on this Chrome build block whoever called Close().
+		go s.allocCancel()
 	}
 }
 

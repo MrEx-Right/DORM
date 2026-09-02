@@ -24,7 +24,7 @@ func (p *FingerprintPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 	if err != nil {
 		return nil
 	}
-	_ = conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	if target.Port == 80 || target.Port == 443 || target.Port == 8080 {
 		_, _ = fmt.Fprintf(conn, "HEAD / HTTP/1.0\r\n\r\n")
