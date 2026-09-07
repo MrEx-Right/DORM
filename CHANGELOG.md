@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.24.0] - 2026-09-06
+### ⚙️ Plugin Enhancement Pack 2.2
+
+Continues the PEP 2.1 architecture: the next 5 heaviest monolithic plugins are refactored into dedicated multi-file Engine packages, plus a scoped hardening pass on HTTP Request Smuggling detection.
+
+---
+
+#### 🏗️ Architectural Overhaul (`plugins/`)
+- **5 More Monoliths Retired:** Deleted `bfla_bola.go`, `ssti.go`, `ssrfmetadata.go`, `blindrce.go`, and `jwtweakness.go`.
+- **Engine Sub-Packages:** Migrated functionality into 5 new dedicated packages (`bflaengine`, `sstiengine`, `ssrfengine`, `blindrceengine`, `jwtengine`), each split into focused, maintainable files (payloads, detection/fuzzing phases, and a thin `plugin.go` orchestrator), mirroring the PEP 2.1 skeleton.
+- **JWT Helpers Promoted:** `signHS256`, `parseAndValidateJWT`, and `findJWT` moved from `plugins/helpers.go` (private) to `models.go` as `SignHS256`, `ParseAndValidateJWT`, `FindJWT`, so `jwtengine` can reach them without a circular import — matching how `IsWebPort`/`GetURL`/`ReadBody` were promoted for PEP 2.1.
+- **idorengine Cleanup:** Removed idorengine's unimplemented "HTTP Method Tampering" stub phase, which always returned `nil` and duplicated a claim now genuinely implemented by `bflaengine`. idorengine's batch/bulk-endpoint IDOR phase is untouched.
+
+#### 🧩 Engine Deep Dives
+- **BFLA/BOLA Engine:** Function-level (OWASP API5) and object-level (OWASP API1) authorization testing — admin-endpoint discovery, role-escalation via a low-privilege token, HTTP method tampering (GET→PUT/DELETE/PATCH), and cross-tenant destructive-method access. Shares its dual-user tokens (`user1_token`/`user2_token`) with the IDOR engine instead of a separate, previously-dead key pair.
+- **SSTI Engine "Template Terminator":** 19-payload corpus spanning math canaries, Jinja2/Twig/Smarty/Freemarker/Mako fingerprints, and Jinja2/Freemarker RCE-escalation payloads, across static and spider-discovered GET/POST fuzzing phases.
+- **SSRF Engine "Cloud Phantom":** Cloud metadata (AWS/GCP/Azure/Alibaba/DigitalOcean/Oracle), localhost/AWS-IP encoding bypasses, DNS rebinding, `file://` LFI, internal service probing, and gopher/dict protocol smuggling — across 7 payload groups plus OOB-collaborator and spider integration.
+- **Blind RCE Engine "Phantom Strike":** Obfuscated time-delay command injection (17 payload variants) with adaptive dual-timing confirmation. The sleep-2 → sleep-7 ratio-check logic — previously copy-pasted across 3 fuzzing phases — is now a single shared `ConfirmTiming` helper.
+- **JWT Engine "Key Breaker":** All 6 attacks (weak-secret brute force, `alg:none` bypass, RS256→HS256 algorithm confusion, KID header injection, JWK self-embed, JKU injection/SSRF) now share one `TestToken` acceptance check, closing a gap where Attack 6 alone used a separate, inconsistent check. Also fixes a latent false-negative: Attack 2's `alg:none` loop used to mutate the same header map Attack 3 read afterward, so Attack 3's asymmetric-algorithm check could never see the token's real original algorithm and would never fire — each attack now decodes its own independent copy of the header.
+
+#### 🕳️ HTTP Request Smuggling Hardening (`plugins/requestsmuggling.go`)
+- **Real Desync Confirmation:** Detection no longer relies on sniffing the first response to a single combined payload. Each attack now writes the smuggled payload, then sends a second, distinct probe request on the *same* connection and inspects *its* response — the industry-standard confirmation technique. A probe that never responds before timeout is now also reported as a lower-confidence `HIGH` (vs `CRITICAL`) blind/timing signal.
+- **New Desync Variants:** Added CL.CL (conflicting duplicate `Content-Length` headers), CL.0 (body ignored on certain routes), and 5 TE.TE obfuscation variants (space-before-colon, tab, duplicate header, `chunked, identity` parameter, obs-fold) alongside the existing CL.TE/TE.CL checks.
+- **Randomized Signatures:** The smuggled request's path and marker are now a random per-scan value instead of the static `/dorm-404`, avoiding a fingerprintable, repeatable signature.
+- **TE.CL Chunk-Size Fix:** The chunk-size line was previously hardcoded to `1c` regardless of the actual smuggled-request length (a real mismatch bug); it's now computed from the real byte length every time.
+- HTTP/2 downgrade smuggling (H2.TE/H2.CL) is intentionally deferred — same-connection HTTP/1.1 desync testing was the scoped goal for this pass.
+
+All new/changed packages pass `go build`, `go vet`, and `golangci-lint` (v2.13.2, default rules) with zero findings.
+
 ## [v1.23.3] - 2026-09-02
 ### 🩺 Concurrency, Reliability & False-Positive Hardening Pass
 

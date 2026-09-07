@@ -80,17 +80,7 @@ func (p *IDORPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 
 	// ══════════════════════════════════════════════════════════════════════
-	// PHASE 5 — HTTP Method Tampering IDOR
-	// ══════════════════════════════════════════════════════════════════════
-	if hasAuth {
-		methodResult := runMethodTampering(client, baseURL, target, user1)
-		if methodResult != nil {
-			return methodResult
-		}
-	}
-
-	// ══════════════════════════════════════════════════════════════════════
-	// PHASE 6 — Batch/Bulk Endpoint IDOR
+	// PHASE 5 — Batch/Bulk Endpoint IDOR
 	// ══════════════════════════════════════════════════════════════════════
 	batchResult := runBatchIDOR(client, baseURL, target, user1)
 	if batchResult != nil {
@@ -129,12 +119,6 @@ func runUnauthenticatedBOLA(client *http.Client, baseURL string, target models.S
 			}
 		}
 	}
-	return nil
-}
-
-// runMethodTampering tests if changing the HTTP method bypasses authorization.
-func runMethodTampering(client *http.Client, baseURL string, target models.ScanTarget, token string) *models.Vulnerability {
-	// Implementation placeholder
 	return nil
 }
 

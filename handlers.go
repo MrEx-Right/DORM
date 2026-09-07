@@ -7,9 +7,14 @@ import (
 	"DORM/dom"
 	"DORM/models"
 	"DORM/plugins"
+	"DORM/plugins/bflaengine"
+	"DORM/plugins/blindrceengine"
 	"DORM/plugins/idorengine"
+	"DORM/plugins/jwtengine"
 	"DORM/plugins/nosqliengine"
 	"DORM/plugins/sqliengine"
+	"DORM/plugins/ssrfengine"
+	"DORM/plugins/sstiengine"
 	"DORM/plugins/wafengine"
 	"DORM/plugins/xssengine"
 	"DORM/sci"
@@ -489,13 +494,13 @@ WaitLoop:
 	engine.AddPlugin(&plugins.SwaggerPlugin{})
 	engine.AddPlugin(&plugins.HostHeaderPlugin{})
 	engine.AddPlugin(&plugins.PrometheusPlugin{})
-	engine.AddPlugin(&plugins.SSTIPlugin{})
+	engine.AddPlugin(&sstiengine.SSTIPlugin{})
 	engine.AddPlugin(&plugins.HSTSPlugin{})
 	engine.AddPlugin(&plugins.TomcatManagerPlugin{})
 	engine.AddPlugin(&plugins.SensitiveConfigPlugin{})
 	engine.AddPlugin(&plugins.PythonServerPlugin{})
 
-	engine.AddPlugin(&plugins.BlindRCEPlugin{})
+	engine.AddPlugin(&blindrceengine.BlindRCEPlugin{})
 	engine.AddPlugin(&plugins.XXEPlugin{})
 	engine.AddPlugin(&plugins.AdminBypassPlugin{})
 	engine.AddPlugin(&plugins.CRLFPlugin{})
@@ -523,8 +528,8 @@ WaitLoop:
 	engine.AddPlugin(&plugins.GitLabPlugin{})
 	engine.AddPlugin(&plugins.NginxTraversalPlugin{})
 
-	engine.AddPlugin(&plugins.SSRFMetadataPlugin{})
-	engine.AddPlugin(&plugins.JWTWeaknessPlugin{})
+	engine.AddPlugin(&ssrfengine.SSRFMetadataPlugin{})
+	engine.AddPlugin(&jwtengine.JWTWeaknessPlugin{})
 	engine.AddPlugin(&plugins.StrutsPlugin{})
 	engine.AddPlugin(&plugins.TerraformPlugin{})
 	engine.AddPlugin(&plugins.WebSocketPlugin{})
@@ -536,7 +541,7 @@ WaitLoop:
 	engine.AddPlugin(&plugins.FileUploadPlugin{})
 	engine.AddPlugin(&plugins.WPEnumPlugin{})
 	engine.AddPlugin(&plugins.Bypass403Plugin{})
-	engine.AddPlugin(&plugins.BFLABOLAPlugin{}) // BFLA/BOLA — HTTP Method Tampering + Role Escalation
+	engine.AddPlugin(&bflaengine.BFLABOLAPlugin{}) // BFLA/BOLA — HTTP Method Tampering + Role Escalation
 	engine.AddPlugin(&plugins.IPSpoofPlugin{})  // IP Spoof — Rate-Limit & WAF Bypass
 	engine.AddPlugin(&plugins.PromptInjectionPlugin{})
 

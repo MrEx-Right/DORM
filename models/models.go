@@ -1,9 +1,13 @@
 package models
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 )
@@ -127,4 +131,67 @@ func GetSharedString(key string) string {
 		return ""
 	}
 	return s
+}
+
+// SignHS256 manually computes an HMAC-SHA256-signed JWT (header.payload.sig),
+// avoiding an external dependency like jwt-go for plugins that need to forge
+// tokens.
+func SignHS256(header, payload string, secret []byte) string {
+	unsignedToken := header + "." + payload
+	h := hmac.New(sha256.New, secret)
+	_, _ = h.Write([]byte(unsignedToken))
+	signature := base64.RawURLEncoding.EncodeToString(h.Sum(nil))
+	return unsignedToken + "." + signature
+}
+
+// ParseAndValidateJWT splits a raw JWT into its three base64url segments and
+// sanity-checks that the header segment decodes and looks like a JWT header.
+func ParseAndValidateJWT(raw string) (header string, payload string, signature string, valid bool) {
+	parts := strings.Split(raw, ".")
+	if len(parts) != 3 {
+		return "", "", "", false
+	}
+
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		headerBytes, err = base64.StdEncoding.DecodeString(parts[0])
+		if err != nil {
+			return "", "", "", false
+		}
+	}
+
+	if !strings.Contains(string(headerBytes), `"alg"`) {
+		return "", "", "", false
+	}
+
+	return parts[0], parts[1], parts[2], true
+}
+
+// FindJWT searches an Authorization header, Set-Cookie header, and response
+// body for the first syntactically valid JWT.
+func FindJWT(content string, headers http.Header) string {
+	re := regexp.MustCompile(`ey[A-Za-z0-9-_]+\.ey[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*`)
+
+	candidates := []string{}
+
+	auth := headers.Get("Authorization")
+	if len(auth) > 7 && strings.HasPrefix(strings.ToLower(auth), "bearer ") {
+		candidates = append(candidates, strings.TrimSpace(auth[7:]))
+	}
+
+	cookieHeader := headers.Get("Set-Cookie")
+	matches := re.FindAllString(cookieHeader, -1)
+	candidates = append(candidates, matches...)
+
+	bodyMatches := re.FindAllString(content, -1)
+	candidates = append(candidates, bodyMatches...)
+
+	for _, c := range candidates {
+		_, _, _, valid := ParseAndValidateJWT(c)
+		if valid {
+			return c
+		}
+	}
+
+	return ""
 }

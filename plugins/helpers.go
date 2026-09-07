@@ -3,9 +3,6 @@ package plugins
 import (
 	"DORM/models"
 	"bufio"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -128,72 +125,6 @@ func isVersionLessThan(v1, v2 string) bool {
 	return false
 }
 
-// ---------------------------------------------------------
-// HELPER: HMAC-SHA256 SIGNER
-// We implement this manually to avoid external dependencies like jwt-go
-// ---------------------------------------------------------
-func signHS256(header, payload string, secret []byte) string {
-	unsignedToken := header + "." + payload
-	h := hmac.New(sha256.New, secret)
-	_, _ = h.Write([]byte(unsignedToken))
-	signature := base64.RawURLEncoding.EncodeToString(h.Sum(nil))
-	return unsignedToken + "." + signature
-}
-
-// ---------------------------------------------------------
-// HELPER: JWT VALIDATOR & PARSER
-// ---------------------------------------------------------
-func parseAndValidateJWT(raw string) (header string, payload string, signature string, valid bool) {
-	parts := strings.Split(raw, ".")
-	if len(parts) != 3 {
-		return "", "", "", false
-	}
-
-	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
-	if err != nil {
-
-		headerBytes, err = base64.StdEncoding.DecodeString(parts[0])
-		if err != nil {
-			return "", "", "", false
-		}
-	}
-
-	if !strings.Contains(string(headerBytes), `"alg"`) {
-		return "", "", "", false
-	}
-
-	return parts[0], parts[1], parts[2], true
-}
-
-func findJWT(content string, headers http.Header) string {
-
-	re := regexp.MustCompile(`ey[A-Za-z0-9-_]+\.ey[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*`)
-
-	candidates := []string{}
-
-	auth := headers.Get("Authorization")
-	if len(auth) > 7 && strings.HasPrefix(strings.ToLower(auth), "bearer ") {
-		candidates = append(candidates, strings.TrimSpace(auth[7:]))
-	}
-
-	cookieHeader := headers.Get("Set-Cookie")
-	matches := re.FindAllString(cookieHeader, -1)
-	candidates = append(candidates, matches...)
-
-	bodyMatches := re.FindAllString(content, -1)
-	candidates = append(candidates, bodyMatches...)
-
-	for _, c := range candidates {
-		_, _, _, valid := parseAndValidateJWT(c)
-		if valid {
-			return c
-		}
-	}
-
-	return ""
-}
-
-
 // ==========================================
 // INVENTORY LIST FOR UI
 // ==========================================
@@ -246,19 +177,6 @@ func readBody(resp *http.Response, maxBytes int64) string {
 	defer func() { _ = resp.Body.Close() }()
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, maxBytes))
 	return string(b)
-}
-
-// getSharedString reads a string value from models.SharedData
-func getSharedString(key string) string {
-	v, ok := models.SharedData.Load(key)
-	if !ok {
-		return ""
-	}
-	s, ok := v.(string)
-	if !ok {
-		return ""
-	}
-	return s
 }
 
 func IsWebPort(port int) bool                             { return isWebPort(port) }
