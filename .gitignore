@@ -2,4 +2,5 @@ dorm_engine.db
 update.txt
 DORM.exe
 cve/cve_full.json
+plugins/promptinjectionengine/synced_payloads.json
 .claude

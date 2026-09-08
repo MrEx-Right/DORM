@@ -4,6 +4,7 @@ import (
 	"DORM/analyzer"
 	"DORM/cve"
 	"DORM/models"
+	"DORM/plugins/promptinjectionengine"
 	"DORM/sitemapper"
 	"fmt"
 	"net/http"
@@ -74,7 +75,7 @@ func main() {
 ██║  ██║██║   ██║██████╔╝██╔████╔██║
 ██║  ██║██║   ██║██╔══██╗██║╚██╔╝██║
 ██████╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
-╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.24.0
+╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.25.0
 
        [ Security Engine • Active ]
 `
@@ -94,6 +95,12 @@ func main() {
 		if err := analyzer.StartAnalyzer("8081"); err != nil {
 			fmt.Println("Analyzer Error:", err)
 		}
+	}()
+
+	// 4. Sync the AI/LLM prompt-injection payload corpus in background —
+	// fire-and-forget, never blocks server startup or a scan on GitHub.
+	go func() {
+		promptinjectionengine.StartBackgroundSync()
 	}()
 
 	if err := http.ListenAndServe(port, nil); err != nil {

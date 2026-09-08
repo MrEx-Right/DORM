@@ -12,6 +12,7 @@ import (
 	"DORM/plugins/idorengine"
 	"DORM/plugins/jwtengine"
 	"DORM/plugins/nosqliengine"
+	"DORM/plugins/promptinjectionengine"
 	"DORM/plugins/sqliengine"
 	"DORM/plugins/ssrfengine"
 	"DORM/plugins/sstiengine"
@@ -543,7 +544,7 @@ WaitLoop:
 	engine.AddPlugin(&plugins.Bypass403Plugin{})
 	engine.AddPlugin(&bflaengine.BFLABOLAPlugin{}) // BFLA/BOLA — HTTP Method Tampering + Role Escalation
 	engine.AddPlugin(&plugins.IPSpoofPlugin{})  // IP Spoof — Rate-Limit & WAF Bypass
-	engine.AddPlugin(&plugins.PromptInjectionPlugin{})
+	engine.AddPlugin(&promptinjectionengine.PromptInjectionPlugin{})
 
 	// ── Framework-Specific Security Misconfiguration Plugins ──
 	engine.AddPlugin(&plugins.DjangoPlugin{})

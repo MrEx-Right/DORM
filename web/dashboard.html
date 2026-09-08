@@ -185,29 +185,142 @@
             align-items: flex-start;
         }
 
-        /* MULTI-TARGET TEXTAREA */
-        #targetInput {
+        /* MULTI-TARGET EDITOR — terminal/code-editor styled wrapper around #targetInput */
+        .target-editor {
             flex-grow: 1;
+            display: flex;
+            flex-direction: column;
             background-color: rgba(0, 0, 0, 0.2);
-            color: #fff;
             border: 1px solid var(--panel-border);
             border-radius: 8px;
-            padding: 16px;
-            font-family: 'Consolas', 'Courier New', monospace;
-            font-size: 14px;
-            resize: vertical;
-            outline: none;
-            line-height: 1.6;
+            overflow: hidden;
+            transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
         }
 
-        #targetInput:focus {
+        .target-editor:focus-within {
             border-color: var(--accent);
             box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
             background-color: rgba(0, 0, 0, 0.3);
         }
 
+        .target-editor-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 7px 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid var(--panel-border);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+
+        .target-editor-dots {
+            display: flex;
+            gap: 5px;
+        }
+
+        .target-editor-dots i {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #334155;
+            display: inline-block;
+        }
+
+        .target-editor-title {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: #94a3b8;
+        }
+
+        .target-editor-body {
+            display: flex;
+            align-items: stretch;
+        }
+
+        .target-line-numbers {
+            flex-shrink: 0;
+            padding: 16px 10px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #475569;
+            text-align: right;
+            user-select: none;
+            background: rgba(0, 0, 0, 0.15);
+            border-right: 1px solid var(--panel-border);
+            white-space: pre;
+            overflow: hidden;
+        }
+
+        #targetInput {
+            flex-grow: 1;
+            width: 100%;
+            background-color: transparent;
+            color: #fff;
+            border: none;
+            padding: 16px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 14px;
+            resize: none;
+            outline: none;
+            line-height: 1.6;
+        }
+
         #targetInput::placeholder {
             color: #475569;
+        }
+
+        /* TARGET TABS — group/filter results by host when a scan covers multiple targets */
+        .target-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 4px 0 18px;
+        }
+
+        .target-tab {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--panel-border);
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-dim);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+
+        .target-tab:hover {
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .target-tab.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .target-tab .target-tab-count {
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 10px;
+            padding: 1px 7px;
+            font-size: 11px;
+        }
+
+        .target-tab.active .target-tab-count {
+            background: rgba(0, 0, 0, 0.2);
         }
 
         #timerDisplay {
@@ -1917,7 +2030,7 @@
         </div>
 
         <div style="margin-top:auto; font-size:12px; color:rgba(255,255,255,0.3); text-align:center; font-weight: 600;">
-            v1.24.0
+            v1.25.0
         </div>
     </div>
 
@@ -1933,8 +2046,17 @@
                     </div>
 
                     <div class="input-group">
-                        <textarea id="targetInput" rows="3"
-                            placeholder="Domain, IP, or CIDR...&#10;e.g. http://site1.com&#10;192.168.1.10"></textarea>
+                        <div class="target-editor">
+                            <div class="target-editor-header">
+                                <span class="target-editor-dots"><i></i><i></i><i></i></span>
+                                <span class="target-editor-title"><i class="fas fa-crosshairs"></i> targets</span>
+                            </div>
+                            <div class="target-editor-body">
+                                <div id="targetLineNumbers" class="target-line-numbers">1</div>
+                                <textarea id="targetInput" rows="3" spellcheck="false"
+                                    placeholder="Domain, IP, or CIDR...&#10;e.g. http://site1.com&#10;192.168.1.10"></textarea>
+                            </div>
+                        </div>
                         <button onclick="startScan()" id="scanBtn"
                             style="height: auto; align-self: stretch; min-width: 160px; justify-content: center; font-size: 16px;">
                             <i class="fas fa-play"></i> START SCAN
@@ -1991,6 +2113,8 @@
                 </div>
 
                 <div class="chart-container"><canvas id="vulnChart"></canvas></div>
+
+                <div id="targetTabs" class="target-tabs" style="display:none;"></div>
 
                 <table id="resultsTable">
                     <thead>
@@ -2189,6 +2313,8 @@
                 </div>
 
                 <div class="chart-container"><canvas id="detailVulnChart"></canvas></div>
+
+                <div id="detailTargetTabs" class="target-tabs" style="display:none;"></div>
 
                 <table style="margin-top: 25px;">
                     <thead>

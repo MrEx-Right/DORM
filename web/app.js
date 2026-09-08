@@ -4,6 +4,14 @@ let scanEventSource = null; // <--- MADE GLOBAL (To enable stopping)
 window.allScanRecords = []; // Store history records for viewing
 let detailResults = []; // Store results for the detail view
 
+// --- TARGET FILTER STATE ---
+// When a scan (live or historical) covers multiple hosts, results are
+// grouped by host so they don't all render as one mixed flat list.
+let liveTargetFilter = 'ALL';
+let liveTargetCounts = {}; // host -> finding count, in first-seen order
+let detailTargetFilter = 'ALL';
+let detailTargetCounts = {};
+
 const ctx = document.getElementById('vulnChart').getContext('2d');
 const detailCtx = document.getElementById('detailVulnChart').getContext('2d');
 
@@ -21,23 +29,12 @@ let vulnChart = new Chart(ctx, {
                 onClick: function (e, legendItem, legend) {
                     const index = legendItem.index;
                     const chart = legend.chart;
-                    
+
                     // Manually toggle data visibility in Chart.js 4+
                     chart.toggleDataVisibility(index);
                     chart.update();
 
-                    const isHidden = !chart.getDataVisibility(index);
-                    const severity = chart.data.labels[index];
-
-                    const rows = document.querySelectorAll('.vuln-row[data-severity="' + severity + '"]');
-                    const detailRows = document.querySelectorAll('.detail-row[data-severity="' + severity + '"]');
-
-                    rows.forEach(r => { r.style.display = isHidden ? 'none' : 'table-row'; });
-                    // Close details if hidden
-                    detailRows.forEach(r => { r.style.display = 'none'; });
-                    if (isHidden) {
-                        rows.forEach(r => r.classList.remove('open'));
-                    }
+                    applyResultFilters('#tableBody', chart, liveTargetFilter);
                 }
             }
         }
@@ -57,21 +54,11 @@ let detailVulnChart = new Chart(detailCtx, {
                 onClick: function (e, legendItem, legend) {
                     const index = legendItem.index;
                     const chart = legend.chart;
-                    
+
                     chart.toggleDataVisibility(index);
                     chart.update();
 
-                    const isHidden = !chart.getDataVisibility(index); 
-                    const severity = chart.data.labels[index];
-
-                    const rows = document.querySelectorAll('#detailTableBody .vuln-row[data-severity="' + severity + '"]');
-                    const detailRows = document.querySelectorAll('#detailTableBody .detail-row[data-severity="' + severity + '"]');
-
-                    rows.forEach(r => { r.style.display = isHidden ? 'none' : 'table-row'; });
-                    detailRows.forEach(r => { r.style.display = 'none'; });
-                    if (isHidden) {
-                        rows.forEach(r => r.classList.remove('open'));
-                    }
+                    applyResultFilters('#detailTableBody', chart, detailTargetFilter);
                 }
             }
         }
@@ -309,8 +296,104 @@ function clearDOMFeed() {
 // Auto-start SSE connection when page loads (stays connected in background)
 window.addEventListener('load', () => {
     initDOMCrawlerFeed();
+    initTargetLineNumbers();
 });
 
+// --- TARGET EDITOR LINE NUMBERS ---
+// Keeps the #targetLineNumbers gutter in sync with #targetInput's line count
+// and scroll position, so the multi-target textarea reads like a code/terminal
+// list rather than a plain prose text box.
+function syncTargetLineNumbers() {
+    const ta = document.getElementById('targetInput');
+    const gutter = document.getElementById('targetLineNumbers');
+    if (!ta || !gutter) return;
+    const lineCount = ta.value.split('\n').length;
+    let numbers = '';
+    for (let i = 1; i <= lineCount; i++) numbers += i + '\n';
+    gutter.textContent = numbers;
+    gutter.scrollTop = ta.scrollTop;
+}
+
+function initTargetLineNumbers() {
+    const ta = document.getElementById('targetInput');
+    if (!ta) return;
+    ta.addEventListener('input', syncTargetLineNumbers);
+    ta.addEventListener('scroll', syncTargetLineNumbers);
+    syncTargetLineNumbers();
+}
+
+
+// --- TARGET GROUPING / FILTERING ---
+// Renders the "ALL / host (count)" tab bar for a results table, and wires
+// each tab to filter that table's rows by host. `counts` is a plain object
+// of host -> count (insertion order preserved by V8/modern engines).
+function renderTargetTabs(containerId, counts, activeFilter, onSelect) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const hosts = Object.keys(counts);
+    if (hosts.length < 2) {
+        // Nothing to disambiguate with a single target — stay out of the way.
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+
+    container.style.display = 'flex';
+    const total = hosts.reduce((sum, h) => sum + counts[h], 0);
+
+    let html = `<span class="target-tab${activeFilter === 'ALL' ? ' active' : ''}" data-target-tab="ALL">
+        <i class="fas fa-layer-group"></i> All <span class="target-tab-count">${total}</span>
+    </span>`;
+    hosts.forEach(host => {
+        html += `<span class="target-tab${activeFilter === host ? ' active' : ''}" data-target-tab="${escapeHtml(host)}">
+            ${escapeHtml(host)} <span class="target-tab-count">${counts[host]}</span>
+        </span>`;
+    });
+    container.innerHTML = html;
+
+    container.querySelectorAll('.target-tab').forEach(tab => {
+        tab.onclick = () => onSelect(tab.dataset.targetTab);
+    });
+}
+
+function selectLiveTarget(host) {
+    liveTargetFilter = host;
+    renderTargetTabs('targetTabs', liveTargetCounts, liveTargetFilter, selectLiveTarget);
+    applyResultFilters('#tableBody', vulnChart, liveTargetFilter);
+}
+
+function selectDetailTarget(host) {
+    detailTargetFilter = host;
+    renderTargetTabs('detailTargetTabs', detailTargetCounts, detailTargetFilter, selectDetailTarget);
+    applyResultFilters('#detailTableBody', detailVulnChart, detailTargetFilter);
+}
+
+// Whether a single row should be visible under the current Chart.js
+// severity-legend state plus the selected target-tab host.
+function isRowVisible(row, chart, targetFilter) {
+    const idx = chart.data.labels.indexOf(row.dataset.severity);
+    const severityVisible = idx === -1 ? true : chart.getDataVisibility(idx);
+    return severityVisible && (targetFilter === 'ALL' || row.dataset.target === targetFilter);
+}
+
+// Recomputes row visibility for EVERY row in one results table — used when
+// a filter control itself changes (severity legend click, target tab
+// click). Also collapses any open detail rows, matching the existing
+// severity-toggle behavior of always closing details on a filter change.
+// Do NOT call this per-incoming-result during a live scan — it would
+// collapse a detail panel the user has open while new findings stream in;
+// use isRowVisible() on just the new row for that instead.
+function applyResultFilters(tableBodySelector, chart, targetFilter) {
+    document.querySelectorAll(tableBodySelector + ' .vuln-row').forEach(row => {
+        const visible = isRowVisible(row, chart, targetFilter);
+        row.style.display = visible ? 'table-row' : 'none';
+        if (!visible) row.classList.remove('open');
+    });
+    document.querySelectorAll(tableBodySelector + ' .detail-row').forEach(row => {
+        row.style.display = 'none';
+    });
+}
 
 // --- HELPER FUNCTIONS ---
 function escapeHtml(text) {
@@ -445,21 +528,24 @@ function viewScan(id) {
     document.getElementById('detailDate').innerText = new Date(rec.start_time).toLocaleString();
     document.getElementById('detailTableBody').innerHTML = '';
     
-    let detailVulnCount = 0; 
+    let detailVulnCount = 0;
     detailResults = [];
     detailVulnChart.data.datasets[0].data = [0, 0, 0, 0, 0];
-    
+    detailTargetFilter = 'ALL';
+    detailTargetCounts = {};
+
     if (rec.vulnerabilities && rec.vulnerabilities.length > 0) {
         rec.vulnerabilities.forEach(data => {
             detailVulnCount++;
             detailResults.push(data);
             const badgeClass = "sev-" + escapeHtml(data.Severity.toUpperCase());
+            const host = data.Target.IP;
             let engineLabel = 'Plugin';
             if (data.Name.includes("Exploit")) engineLabel = 'EDB';
             else if (data.Name.includes("Spider")) engineLabel = 'Spider';
-            
+
             const html = `
-                <tr class="vuln-row" data-severity="${escapeHtml(data.Severity.toUpperCase())}" id="detail-row-${detailVulnCount}" onclick="toggleDetail('detail-detail-${detailVulnCount}', 'detail-row-${detailVulnCount}')">
+                <tr class="vuln-row" data-severity="${escapeHtml(data.Severity.toUpperCase())}" data-target="${escapeHtml(host)}" id="detail-row-${detailVulnCount}" onclick="toggleDetail('detail-detail-${detailVulnCount}', 'detail-row-${detailVulnCount}')">
                     <td><span class="badge ${badgeClass}">${escapeHtml(data.Severity)}</span></td>
                     <td style="font-weight:bold; color:#fff;">${data.CVSS.toFixed(1)}</td>
                     <td style="color:#fff;">${escapeHtml(data.Name)}</td>
@@ -467,7 +553,7 @@ function viewScan(id) {
                     <td>${escapeHtml(data.Target.IP)}:${data.Target.Port}</td>
                     <td class="arrow"><i class="fas fa-chevron-down"></i></td>
                 </tr>
-                <tr class="detail-row" data-severity="${escapeHtml(data.Severity.toUpperCase())}" id="detail-detail-${detailVulnCount}">
+                <tr class="detail-row" data-severity="${escapeHtml(data.Severity.toUpperCase())}" data-target="${escapeHtml(host)}" id="detail-detail-${detailVulnCount}">
                     <td colspan="6" style="padding:0; border:none;">
                         <div class="detail-content">
                             <strong style="color:var(--accent)">ANALYSIS:</strong><br>${escapeHtml(data.Description).replace(/\n/g, '<br>')}<br><br>
@@ -477,13 +563,15 @@ function viewScan(id) {
                     </td>
                 </tr>`;
             document.getElementById('detailTableBody').insertAdjacentHTML('beforeend', html);
-            
+            detailTargetCounts[host] = (detailTargetCounts[host] || 0) + 1;
+
             const idx = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'].indexOf(data.Severity.toUpperCase());
             if (idx !== -1) { detailVulnChart.data.datasets[0].data[idx]++; }
         });
     }
-    
+
     detailVulnChart.update();
+    renderTargetTabs('detailTargetTabs', detailTargetCounts, detailTargetFilter, selectDetailTarget);
     
     // Set timer display based on duration
     if (rec.start_time && rec.end_time) {
@@ -531,6 +619,9 @@ function startScan() {
     vulnCount = 0; scanResults = [];
     vulnChart.data.datasets[0].data = [0, 0, 0, 0, 0];
     vulnChart.update();
+    liveTargetFilter = 'ALL';
+    liveTargetCounts = {};
+    renderTargetTabs('targetTabs', liveTargetCounts, liveTargetFilter, selectLiveTarget);
 
     // Reset DOM Crawler feed on new scan
     if (typeof clearDOMFeed === 'function') {
@@ -598,16 +689,15 @@ function startScan() {
 
         vulnCount++; scanResults.push(data);
 
-
-
         const badgeClass = "sev-" + escapeHtml(data.Severity.toUpperCase());
+        const host = data.Target.IP;
 
         let engineLabel = 'Plugin';
         if (data.Name.includes("Exploit")) engineLabel = 'EDB';
         else if (data.Name.includes("Spider")) engineLabel = 'Spider';
 
         const html = `
-            <tr class="vuln-row" data-severity="${escapeHtml(data.Severity.toUpperCase())}" id="row-${vulnCount}" onclick="toggleDetail(${vulnCount})">
+            <tr class="vuln-row" data-severity="${escapeHtml(data.Severity.toUpperCase())}" data-target="${escapeHtml(host)}" id="row-${vulnCount}" onclick="toggleDetail(${vulnCount})">
                 <td><span class="badge ${badgeClass}">${escapeHtml(data.Severity)}</span></td>
                 <td style="font-weight:bold; color:#fff;">${data.CVSS.toFixed(1)}</td>
                 <td style="color:#fff;">${escapeHtml(data.Name)}</td>
@@ -615,7 +705,7 @@ function startScan() {
                 <td>${escapeHtml(data.Target.IP)}:${data.Target.Port}</td>
                 <td class="arrow"><i class="fas fa-chevron-down"></i></td>
             </tr>
-            <tr class="detail-row" data-severity="${escapeHtml(data.Severity.toUpperCase())}" id="detail-${vulnCount}">
+            <tr class="detail-row" data-severity="${escapeHtml(data.Severity.toUpperCase())}" data-target="${escapeHtml(host)}" id="detail-${vulnCount}">
                 <td colspan="6" style="padding:0; border:none;">
                     <div class="detail-content">
                         <strong style="color:var(--accent)">ANALYSIS:</strong><br>${escapeHtml(data.Description).replace(/\n/g, '<br>')}<br><br>
@@ -626,6 +716,16 @@ function startScan() {
             </tr>`;
 
         document.getElementById('tableBody').insertAdjacentHTML('beforeend', html);
+
+        liveTargetCounts[host] = (liveTargetCounts[host] || 0) + 1;
+        renderTargetTabs('targetTabs', liveTargetCounts, liveTargetFilter, selectLiveTarget);
+        // Only fold the freshly-inserted row into the current filter — a
+        // full applyResultFilters() pass would collapse any detail panel
+        // the user already has open while the scan is still streaming.
+        const newRow = document.getElementById('row-' + vulnCount);
+        if (newRow && !isRowVisible(newRow, vulnChart, liveTargetFilter)) {
+            newRow.style.display = 'none';
+        }
 
         const idx = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'].indexOf(data.Severity.toUpperCase());
         if (idx !== -1) { vulnChart.data.datasets[0].data[idx]++; vulnChart.update(); }

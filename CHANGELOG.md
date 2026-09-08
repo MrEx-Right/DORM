@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.25.0] - 2026-09-08
+### 🤖 Plugin Enhancement Pack 2.3 & Multi-Target Scanner UX
+
+Continues the PEP architecture with an AI/LLM-focused engine that keeps its own payload corpus fresh, plus a scanner UI pass fixing how multi-target scans read on screen.
+
+---
+
+#### 🧩 Plugin Enhancement Pack 2.3 (`plugins/promptinjectionengine/`)
+- **Monolith Retired:** Deleted `prompt_injection.go`; migrated into a dedicated `promptinjectionengine` package (`plugin.go`, `payloads.go`, `direct_injection.go`, `sync.go`), matching the PEP 2.1/2.2 Engine skeleton — only imports `DORM/models`, never `DORM/plugins`.
+- **Independent GitHub Payload Sync:** New self-contained sync in `sync.go` — deliberately sharing no code or data with `cve/sync.go`/`cve/kev.go` — pulls fresh prompt-injection payloads from `swisskyrepo/PayloadsAllTheThings` (MIT licensed) as a fire-and-forget background goroutine started from `main.go`. Gated by a 24h local-file-mtime staleness check, so it never blocks scans or server startup and never re-fetches more than once a day.
+- **Canary-Trailer Detection Safety:** Payloads scraped from an external source carry no DORM-specific marker, so each synced payload gets a `DORM_SYNCED_PWNED` canary-instruction trailer appended before caching — keeping high-confidence canary-substring matching the primary detection signal instead of leaning on weaker generic phrase-matching (the false-positive class the v1.23.3 hardening pass specifically targeted).
+- **Markdown Extraction Heuristic:** `ExtractPayloads` pulls candidates from fenced code blocks, inline code spans, and table cells, filtering out JSON/code noise via length bounds, code-syntax markers, and a minimum alphabetic-character ratio.
+- **Graceful Degradation:** A network failure, non-200 response, zero extracted payloads, or a disk-write failure all fall back to the last-known-good cache or the 30 bundled curated payloads — sync never panics and never blocks a scan.
+
+#### 🖥️ Scanner UI — Multi-Target Clarity (`web/dashboard.html`, `web/app.js`)
+- **Multi-Target Editor Redesign:** The scan target box is now styled as a terminal/code-editor block — a small tab header, a line-number gutter kept in sync via `syncTargetLineNumbers()`, and no resize handle — replacing the plain multi-line textbox. The existing `\n`-separated multi-target parsing in `startScan()` is untouched.
+- **Per-Target Result Grouping:** Both the live scan view and the Scan History detail view previously interleaved every finding from every scanned host into one flat, hard-to-read list. A new target-tabs bar (`renderTargetTabs`) groups findings by host with live counts; selecting a host filters the results table to it, composing correctly (AND) with the existing severity-legend filter (`applyResultFilters` / `isRowVisible`). The tab bar stays hidden entirely for single-target scans, so nothing changes for the common case.
+- **Streaming-Safe Filtering:** Live-scan filtering now only evaluates the newly-inserted row per incoming SSE event instead of re-scanning and re-collapsing the whole table on every result, so an already-open finding detail panel no longer snaps shut each time a new vulnerability streams in mid-scan.
+
 ## [v1.24.0] - 2026-09-06
 ### ⚙️ Plugin Enhancement Pack 2.2
 
