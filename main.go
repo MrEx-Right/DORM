@@ -37,10 +37,10 @@ func main() {
 		http.ServeFile(w, r, "web/dashboard.html")
 	})
 
-	http.HandleFunc("/app.js", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-		http.ServeFile(w, r, "web/app.js")
-	})
+	// Serves every split JS file under web/js/ (core.js, helpers.js, ... init.js)
+	// at /js/<name>.js. Piece-by-piece splits that add new files to web/js/ later
+	// need no main.go change — this route picks them up automatically.
+	http.Handle("/js/", noCacheHeaders(http.StripPrefix("/js/", http.FileServer(http.Dir("web/js")))))
 
 	http.HandleFunc("/scan", handleScan)
 	http.HandleFunc("/stop", handleStop)
@@ -75,7 +75,7 @@ func main() {
 ██║  ██║██║   ██║██████╔╝██╔████╔██║
 ██║  ██║██║   ██║██╔══██╗██║╚██╔╝██║
 ██████╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
-╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.25.0
+╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.26.0
 
        [ Security Engine • Active ]
 `
@@ -106,4 +106,14 @@ func main() {
 	if err := http.ListenAndServe(port, nil); err != nil {
 		fmt.Println("ERROR:", err)
 	}
+}
+
+// noCacheHeaders wraps a handler so every response carries the same
+// Cache-Control policy the routes above set explicitly — http.FileServer
+// does not set cache headers on its own.
+func noCacheHeaders(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		h.ServeHTTP(w, r)
+	})
 }

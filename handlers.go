@@ -204,6 +204,10 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	}
 	// ----------------------------------------------------
 
+	// Opt-in: allow CloudStoragePlugin's anonymous PUT/write test. Off by
+	// default — the scan operator must explicitly request it.
+	plugins.AggressiveCloudWrite = r.URL.Query().Get("aggressiveCloudWrite") == "true"
+
 	if targetsParam == "" {
 		return
 	}
@@ -366,6 +370,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		3306, 5432, 1433, 1434, 1521, 27017, 6379, 9200,
 		2375, 2376, 6443, 11211, 5672, 15672, 8500,
 		25, 465, 587, 110, 995, 143, 993, 389, 636, 53, 161, 445,
+		6333, 19530, 9091, 11434, // Qdrant, Milvus (gRPC + metrics), Ollama
 	}
 
 	type TargetPort struct {
@@ -489,6 +494,8 @@ WaitLoop:
 	engine.AddPlugin(&plugins.WebDAVPlugin{})
 	engine.AddPlugin(&plugins.EmailExtractPlugin{})
 	engine.AddPlugin(&plugins.S3BucketPlugin{})
+	engine.AddPlugin(&plugins.CloudStoragePlugin{})  // Multi-Cloud Storage Deep Probe (GCS/Azure/DO/R2)
+	engine.AddPlugin(&plugins.AIVectorDBPlugin{})    // ChromaDB/Qdrant/Milvus/Ollama unauthorized access
 
 	engine.AddPlugin(&plugins.ClickjackingPlugin{})
 	engine.AddPlugin(&plugins.GraphQLPlugin{})
@@ -522,6 +529,7 @@ WaitLoop:
 	engine.AddPlugin(&plugins.FTPAnonPlugin{})
 	engine.AddPlugin(&plugins.SMTPRelayPlugin{})
 	engine.AddPlugin(&plugins.APIKeyPlugin{})
+	engine.AddPlugin(&plugins.SecretHarvesterPlugin{}) // Webpack source-map + JS bundle secret harvester
 	engine.AddPlugin(&plugins.TakeoverPlugin{})
 	engine.AddPlugin(&plugins.ViewStatePlugin{})
 	engine.AddPlugin(&plugins.LaravelEnvPlugin{})
@@ -539,6 +547,7 @@ WaitLoop:
 	engine.AddPlugin(&plugins.RequestSmugglingPlugin{})
 	engine.AddPlugin(&plugins.RaceConditionPlugin{})
 	engine.AddPlugin(&plugins.WebCachePoisoningPlugin{})
+	engine.AddPlugin(&plugins.WCDPlugin{}) // Web Cache Deception (path/extension confusion, distinct from Web Cache Poisoning)
 	engine.AddPlugin(&plugins.FileUploadPlugin{})
 	engine.AddPlugin(&plugins.WPEnumPlugin{})
 	engine.AddPlugin(&plugins.Bypass403Plugin{})

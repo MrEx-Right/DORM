@@ -149,9 +149,13 @@ func GetPluginInventory() map[string][]string {
 			"Nginx Alias Traversal", "Terraform State Exposure",
 		},
 		"Cloud & Infrastructure": {
-			"S3 Bucket Detection", "Kubernetes Kubelet API", "Docker Registry Exposure", "Redis Unauthorized Access",
+			"S3 Bucket Detection", "Multi-Cloud Storage Exposure (Bucket/Blob Takeover)", "Kubernetes Kubelet API",
+			"Docker Registry Exposure", "Redis Unauthorized Access",
 			"MongoDB Unauthorized Access", "Elasticsearch Disclosure", "Memcached Stats", "Anonymous FTP", "SMTP Open Relay",
 			"SSRF Cloud Metadata",
+		},
+		"AI & LLM Infrastructure": {
+			"AI/Vector Database Unauthorized Access", "AI/LLM Prompt Injection Scanner",
 		},
 		"Authentication & Sessions": {
 			"WordPress User Disclosure", "Open Redirect", "Cookie Security", "Tomcat Manager Panel", "Admin Panel Bypass (IP Spoof)",
@@ -161,10 +165,11 @@ func GetPluginInventory() map[string][]string {
 		},
 		"Advanced Logic": {
 			"SSTI Test", "Dangerous HTTP Methods", "HTTP Request Smuggling", "Race Condition Tester", "Web Cache Poisoning",
-			"Arbitrary File Upload (RCE)", "AI/LLM Prompt Injection Scanner", "IP Spoof — Rate-Limit & WAF Bypass",
+			"Web Cache Deception", "Arbitrary File Upload (RCE)", "IP Spoof — Rate-Limit & WAF Bypass",
 		},
 		"Vulnerability Checks": {
-			"API Key in JS Files", "Weak TLS Cipher Suites Scanner", "WordPress Enumeration & CVE Scanner",
+			"API Key in JS Files", "Webpack Source Map & Secret Harvester", "Weak TLS Cipher Suites Scanner",
+			"WordPress Enumeration & CVE Scanner",
 		},
 	}
 }

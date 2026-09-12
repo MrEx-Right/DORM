@@ -12,33 +12,48 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
 
     <style>
-        /* LUXURY DARK THEME VARIABLES */
+        /* DORM — ENTERPRISE DARK THEME */
         :root {
-            --bg-base: #0B0F19;
-            /* Deep cool dark */
-            --panel-bg: rgba(22, 27, 34, 0.65);
-            --panel-border: rgba(255, 255, 255, 0.08);
-            --text-main: #E2E8F0;
-            --text-dim: #94A3B8;
+            --bg-base: #0A0C10;
+            --bg-sidebar: #0D0F14;
+            --panel-bg: #12141B;
+            --panel-border: rgba(255, 255, 255, 0.07);
+            --border-default: rgba(255, 255, 255, 0.12);
+            --surface-2: #171A22;
+            --text-main: #E5E7EB;
+            --text-dim: #8B93A1;
+            --text-tertiary: #5B6270;
             --accent: #3B82F6;
-            /* Vibrant Blue */
-            --accent-glow: rgba(59, 130, 246, 0.4);
+            --accent-hover: #2563EB;
+            --accent-subtle-bg: rgba(59, 130, 246, 0.10);
+            --accent-border: rgba(59, 130, 246, 0.35);
+            --accent-glow: rgba(59, 130, 246, 0.18);
             --success: #10B981;
+            --success-subtle-bg: rgba(16, 185, 129, 0.10);
             --danger: #EF4444;
+            --danger-subtle-bg: rgba(239, 68, 68, 0.10);
             --warning: #F59E0B;
-            --glass-blur: blur(16px);
+            --warning-subtle-bg: rgba(245, 158, 11, 0.10);
+            --sev-critical: #EF4444;
+            --sev-high: #F97316;
+            --sev-medium: #F59E0B;
+            --sev-low: #3B82F6;
+            --sev-info: #64748B;
+            --radius-sm: 4px;
+            --radius-md: 6px;
+            --radius-lg: 8px;
+            --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.24);
+            --shadow-sm: 0 2px 10px rgba(0, 0, 0, 0.28);
+            --glass-blur: none;
         }
 
         * {
             box-sizing: border-box;
-            transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
         }
 
         body {
             background-color: var(--bg-base);
-            background-image:
-                radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08), transparent 25%),
-                radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.05), transparent 25%);
             color: var(--text-main);
             font-family: 'Inter', sans-serif;
             margin: 0;
@@ -48,23 +63,21 @@
             overflow: hidden;
         }
 
-        /* PREMIUM SIDEBAR */
+        /* SIDEBAR */
         .sidebar {
             width: 260px;
-            background: rgba(11, 15, 25, 0.8);
-            backdrop-filter: var(--glass-blur);
+            background: var(--bg-sidebar);
             border-right: 1px solid var(--panel-border);
             display: flex;
             flex-direction: column;
-            padding: 25px 20px;
+            padding: 24px 16px;
             flex-shrink: 0;
             z-index: 10;
-            box-shadow: 5px 0 30px rgba(0, 0, 0, 0.2);
         }
 
         .main-content {
             flex-grow: 1;
-            padding: 35px 40px;
+            padding: 32px 40px;
             overflow-y: auto;
             position: relative;
             z-index: 1;
@@ -75,9 +88,9 @@
             margin: 0 auto;
         }
 
-        /* LOGO & BRANDING */
+        /* BRANDING */
         .brand {
-            margin-bottom: 45px;
+            margin-bottom: 32px;
             text-align: center;
             position: relative;
         }
@@ -88,60 +101,61 @@
         }
 
         .brand h1 {
-            color: #fff;
-            letter-spacing: 3px;
-            font-weight: 800;
+            color: var(--text-main);
+            letter-spacing: 1.5px;
+            font-weight: 700;
             margin: 0;
-            font-size: 26px;
+            font-size: 19px;
             text-transform: uppercase;
-            background: linear-gradient(90deg, #fff, #94A3B8);
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
         }
 
         .brand span {
-            font-size: 11px;
-            color: var(--accent);
-            letter-spacing: 2px;
+            font-size: 10px;
+            color: var(--text-tertiary);
+            letter-spacing: 1.5px;
             display: block;
             margin-top: 6px;
             font-weight: 600;
             text-transform: uppercase;
         }
 
-        /* MODERN NAVIGATION */
+        /* NAVIGATION */
         .nav-item {
-            padding: 14px 18px;
-            margin-bottom: 10px;
-            border-radius: 10px;
+            padding: 11px 16px;
+            margin-bottom: 2px;
+            border-radius: var(--radius-md);
             cursor: pointer;
             color: var(--text-dim);
             display: flex;
             align-items: center;
             gap: 12px;
-            font-weight: 600;
-            font-size: 14px;
+            font-weight: 500;
+            font-size: 13.5px;
             position: relative;
-            overflow: hidden;
         }
 
         .nav-item:hover {
-            color: #fff;
-            background: rgba(255, 255, 255, 0.03);
-            transform: translateX(4px);
+            color: var(--text-main);
+            background: var(--surface-2);
         }
 
         .nav-item.active {
-            background: linear-gradient(90deg, var(--accent) 0%, rgba(59, 130, 246, 0.6) 100%);
-            color: #fff;
-            box-shadow: 0 4px 15px var(--accent-glow);
+            background: var(--accent-subtle-bg);
+            color: var(--text-main);
+            font-weight: 600;
+            box-shadow: inset 3px 0 0 0 var(--accent);
         }
 
         .nav-item i {
-            width: 20px;
+            width: 18px;
             text-align: center;
-            font-size: 16px;
+            font-size: 14px;
+            color: var(--text-tertiary);
+        }
+
+        .nav-item.active i,
+        .nav-item:hover i {
+            color: var(--accent);
         }
 
         /* VIEW & CONTROLS */
@@ -166,14 +180,13 @@
             }
         }
 
-        /* GLASS CONTROL PANEL */
+        /* CONTROL PANEL */
         .control-panel {
             background: var(--panel-bg);
-            backdrop-filter: var(--glass-blur);
-            padding: 25px 30px;
+            padding: 24px 28px;
             border: 1px solid var(--panel-border);
-            border-radius: 16px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-xs);
             display: flex;
             flex-direction: column;
             gap: 20px;
@@ -199,7 +212,7 @@
 
         .target-editor:focus-within {
             border-color: var(--accent);
-            box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15);
+            box-shadow: 0 0 0 3px var(--accent-glow);
             background-color: rgba(0, 0, 0, 0.3);
         }
 
@@ -276,6 +289,31 @@
             color: #475569;
         }
 
+        /* FORM CONTROLS */
+        select,
+        input[type="text"],
+        input[type="number"] {
+            background: var(--surface-2);
+            color: var(--text-main);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-md);
+            padding: 8px 12px;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            outline: none;
+        }
+
+        select {
+            cursor: pointer;
+        }
+
+        select:focus,
+        input[type="text"]:focus,
+        input[type="number"]:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
         /* TARGET TABS — group/filter results by host when a scan covers multiple targets */
         .target-tabs {
             display: flex;
@@ -331,7 +369,6 @@
             width: 80px;
             text-align: center;
             margin-top: 10px;
-            text-shadow: 0 0 15px var(--accent-glow);
         }
 
         .settings-row {
@@ -398,71 +435,73 @@
             background: rgba(0, 0, 0, 0.2);
             border: 1px solid var(--panel-border);
             padding: 14px;
-            color: #4ADE80;
+            color: var(--text-main);
             font-family: 'Consolas', monospace;
-            border-radius: 8px;
+            border-radius: var(--radius-md);
             outline: none;
             font-size: 13px;
         }
 
         .auth-content input:focus {
-            border-color: #4ADE80;
-            box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.1);
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-glow);
         }
 
-        /* MODERN BUTTONS */
+        /* BUTTONS */
         button {
-            padding: 12px 24px;
+            padding: 11px 20px;
             color: white;
-            border: none;
+            background: var(--surface-2);
+            border: 1px solid var(--border-default);
             cursor: pointer;
-            border-radius: 8px;
-            font-weight: 800;
+            border-radius: var(--radius-md);
+            font-weight: 600;
             font-family: 'Inter', sans-serif;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 9px;
             font-size: 13px;
-            letter-spacing: 0.5px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            letter-spacing: 0.2px;
         }
 
         button i {
-            font-size: 14px;
+            font-size: 13px;
         }
 
         button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-            filter: brightness(1.15);
+            background: var(--surface-2);
+            border-color: var(--border-default);
+            filter: brightness(1.12);
         }
 
         button:active {
-            transform: translateY(1px);
+            filter: brightness(0.95);
         }
 
         button:disabled {
             background: var(--panel-border);
             cursor: not-allowed;
             opacity: 0.5;
-            transform: none !important;
             box-shadow: none !important;
         }
 
         #scanBtn {
-            background: linear-gradient(135deg, var(--success), #059669);
-            font-size: 14px;
-            padding: 14px 28px;
+            background: #059669;
+            border-color: #059669;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 0 22px;
         }
 
         .btn-group {
             display: flex;
-            gap: 12px;
+            gap: 10px;
             flex-wrap: wrap;
         }
 
         .btn-danger {
-            background: linear-gradient(135deg, var(--danger), #B91C1C) !important;
+            background: var(--danger) !important;
+            border-color: var(--danger) !important;
         }
 
         .btn-icon {
@@ -471,14 +510,13 @@
             justify-content: center;
         }
 
-        /* --- OVERHAULED PLUGIN AREA --- */
+        /* PLUGIN AREA */
         #plugin-section {
             display: none;
-            background: rgba(15, 23, 42, 0.7);
-            border: 1px solid var(--accent);
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3), inset 0 0 30px rgba(59, 130, 246, 0.05);
-            padding: 25px;
-            border-radius: 12px;
+            background: var(--surface-2);
+            border: 1px solid var(--panel-border);
+            padding: 24px;
+            border-radius: var(--radius-lg);
             margin-top: 15px;
             position: relative;
             animation: fadeUp 0.3s ease;
@@ -533,19 +571,18 @@
             align-items: center;
             justify-content: space-between;
             padding: 10px 14px;
-            background: rgba(30, 41, 59, 0.8);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            border-radius: 8px;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: var(--radius-md);
             cursor: pointer;
             font-size: 13px;
             font-weight: 500;
-            transition: all 0.2s;
+            transition: all 0.15s;
         }
 
         .plugin-item:hover {
-            border-color: rgba(255, 255, 255, 0.2);
-            background: rgba(51, 65, 85, 0.8);
-            transform: translateY(-2px);
+            border-color: var(--border-default);
+            background: var(--surface-2);
         }
 
         .plugin-checkbox-wrapper {
@@ -556,9 +593,8 @@
         }
 
         .plugin-item.active-plugin {
-            border-color: var(--accent);
-            background: rgba(59, 130, 246, 0.1);
-            box-shadow: inset 0 0 0 1px var(--accent);
+            border-color: var(--accent-border);
+            background: var(--accent-subtle-bg);
         }
 
         /* CUSTOM CHECKBOXES FOR PLUGINS */
@@ -567,7 +603,7 @@
             -webkit-appearance: none;
             width: 18px;
             height: 18px;
-            border: 2px solid #475569;
+            border: 2px solid var(--border-default);
             border-radius: 4px;
             background: transparent;
             cursor: pointer;
@@ -590,114 +626,112 @@
         /* CHART & DATA DISPLAY */
         .chart-container {
             background: var(--panel-bg);
-            backdrop-filter: var(--glass-blur);
             padding: 20px;
             border: 1px solid var(--panel-border);
-            border-radius: 16px;
+            border-radius: var(--radius-lg);
             margin-top: 25px;
             height: 250px;
             display: flex;
             justify-content: center;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
         }
 
         table {
             width: 100%;
             margin-top: 25px;
-            border-collapse: separate;
-            border-spacing: 0 8px;
+            border-collapse: collapse;
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
         }
 
         th {
             text-align: left;
-            padding: 15px 20px;
+            padding: 12px 20px;
             color: var(--text-dim);
             text-transform: uppercase;
+            background: var(--surface-2);
+            border-bottom: 1px solid var(--panel-border);
             font-size: 11px;
-            font-weight: 800;
-            letter-spacing: 1.5px;
+            font-weight: 600;
+            letter-spacing: 0.6px;
         }
 
         .vuln-row {
-            background: rgba(30, 41, 59, 0.5);
-            backdrop-filter: blur(8px);
             cursor: pointer;
-            border: 1px solid transparent;
-            border-radius: 8px;
         }
 
         .vuln-row:hover {
-            background: rgba(51, 65, 85, 0.6);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+            background: var(--surface-2);
         }
 
         td {
-            padding: 16px 20px;
+            padding: 13px 20px;
             font-size: 13.5px;
         }
 
         /* Apply border rendering for rows */
         .vuln-row td {
-            border-top: 1px solid var(--panel-border);
             border-bottom: 1px solid var(--panel-border);
         }
 
-        .vuln-row td:first-child {
-            border-left: 1px solid var(--panel-border);
-            border-radius: 10px 0 0 10px;
-        }
-
-        .vuln-row td:last-child {
-            border-right: 1px solid var(--panel-border);
-            border-radius: 0 10px 10px 0;
+        .vuln-row:last-child td {
+            border-bottom: none;
         }
 
         /* BADGES */
         .badge {
-            padding: 6px 14px;
-            border-radius: 20px;
+            padding: 4px 10px;
+            border-radius: var(--radius-sm);
             font-size: 11px;
-            font-weight: 800;
-            color: #000;
+            font-weight: 700;
             text-transform: uppercase;
             display: inline-block;
-            min-width: 80px;
+            min-width: 76px;
             text-align: center;
-            letter-spacing: 0.5px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            letter-spacing: 0.3px;
+            border: 1px solid transparent;
         }
 
         .sev-CRITICAL {
-            background: #F87171;
-            box-shadow: 0 0 12px rgba(248, 113, 113, 0.5);
+            background: rgba(239, 68, 68, 0.12);
+            color: var(--sev-critical);
+            border-color: rgba(239, 68, 68, 0.3);
         }
 
         .sev-HIGH {
-            background: #FB923C;
+            background: rgba(249, 115, 22, 0.12);
+            color: var(--sev-high);
+            border-color: rgba(249, 115, 22, 0.3);
         }
 
         .sev-MEDIUM {
-            background: #FBBF24;
+            background: rgba(245, 158, 11, 0.12);
+            color: var(--sev-medium);
+            border-color: rgba(245, 158, 11, 0.3);
         }
 
         .sev-LOW {
-            background: #FCD34D;
+            background: rgba(59, 130, 246, 0.12);
+            color: var(--sev-low);
+            border-color: rgba(59, 130, 246, 0.3);
         }
 
         .sev-INFO {
-            background: #60A5FA;
+            background: rgba(100, 116, 139, 0.15);
+            color: var(--sev-info);
+            border-color: rgba(100, 116, 139, 0.3);
         }
 
         .status-running {
             color: var(--accent);
-            font-weight: 800;
+            font-weight: 700;
             animation: pulse 1.5s infinite;
         }
 
         .status-completed {
             color: var(--success);
-            font-weight: 800;
+            font-weight: 700;
         }
 
         @keyframes pulse {
@@ -720,16 +754,12 @@
         }
 
         .detail-content {
-            background: rgba(15, 23, 42, 0.8);
-            padding: 25px;
-            border: 1px solid var(--panel-border);
-            border-top: none;
-            color: #CBD5E1;
-            margin: -4px 10px 15px 10px;
-            border-radius: 0 0 10px 10px;
+            background: var(--surface-2);
+            padding: 22px;
+            border-top: 1px solid var(--panel-border);
+            color: var(--text-dim);
             font-size: 14px;
             line-height: 1.7;
-            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.2);
         }
 
         .arrow {
@@ -742,7 +772,7 @@
             transform: rotate(180deg);
         }
 
-        /* NICE SCROLLBARS */
+        /* SCROLLBARS */
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
@@ -753,30 +783,27 @@
         }
 
         ::-webkit-scrollbar-thumb {
-            background: rgba(148, 163, 184, 0.3);
+            background: rgba(148, 163, 184, 0.25);
             border-radius: 4px;
         }
 
         ::-webkit-scrollbar-thumb:hover {
-            background: rgba(148, 163, 184, 0.5);
+            background: rgba(148, 163, 184, 0.4);
         }
 
-        /* ADVANCED LOADING SCREEN */
+        /* LOADING SCREEN */
         #dorm-loader {
             position: fixed;
             top: 0;
             left: 0;
             width: 100vw;
             height: 100vh;
-            background: #05080f;
-            background-image:
-                radial-gradient(circle at 50% 50%, rgba(59, 130, 246, 0.1), transparent 50%),
-                linear-gradient(0deg, #020408 0%, rgba(5, 8, 15, 0.95) 100%);
+            background: var(--bg-base);
             z-index: 9999;
             display: flex;
             justify-content: center;
             align-items: center;
-            transition: opacity 1s ease-in-out, visibility 1s, transform 1s ease-in-out;
+            transition: opacity 0.4s ease, visibility 0.4s;
         }
 
         .loader-content {
@@ -784,158 +811,50 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 40px;
+            gap: 26px;
             position: relative;
         }
 
-        /* CYBER RINGS */
-        .cyber-rings {
-            position: relative;
-            width: 140px;
-            height: 140px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .ring {
-            position: absolute;
+        .loader-spinner {
+            width: 34px;
+            height: 34px;
+            border: 3px solid var(--panel-border);
+            border-top-color: var(--accent);
             border-radius: 50%;
-            border: 2px solid transparent;
+            animation: spin 0.8s linear infinite;
         }
 
-        .ring-1 {
-            width: 140px;
-            height: 140px;
-            border-top: 2px solid rgba(59, 130, 246, 0.8);
-            border-right: 2px solid rgba(59, 130, 246, 0.8);
-            animation: spin1 2s linear infinite;
-            box-shadow: 0 0 20px rgba(59, 130, 246, 0.2);
-        }
-
-        .ring-2 {
-            width: 110px;
-            height: 110px;
-            border-bottom: 2px solid #10B981;
-            /* Success green */
-            border-left: 2px solid #10B981;
-            animation: spin2 1.5s linear infinite;
-        }
-
-        .ring-3 {
-            width: 80px;
-            height: 80px;
-            border: 2px dashed rgba(255, 255, 255, 0.5);
-            animation: spin1 4s linear infinite reverse;
-        }
-
-        .core {
-            width: 40px;
-            height: 40px;
-            background: var(--accent);
-            border-radius: 50%;
-            box-shadow: 0 0 30px var(--accent-glow), 0 0 60px var(--accent-glow);
-            animation: pulseCore 1.5s ease-in-out infinite alternate;
-        }
-
-        @keyframes spin1 {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
+        @keyframes spin {
+            to {
                 transform: rotate(360deg);
             }
         }
 
-        @keyframes spin2 {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
-                transform: rotate(-360deg);
-            }
-        }
-
-        @keyframes pulseCore {
-            0% {
-                transform: scale(0.8);
-                opacity: 0.8;
-            }
-
-            100% {
-                transform: scale(1.1);
-                opacity: 1;
-                box-shadow: 0 0 40px var(--accent), 0 0 80px rgba(59, 130, 246, 0.6);
-            }
-        }
-
         .loader-brand {
-            color: #fff;
-            letter-spacing: 8px;
-            font-weight: 800;
+            color: var(--text-main);
+            letter-spacing: 3px;
+            font-weight: 700;
             margin: 0;
-            font-size: 36px;
+            font-size: 22px;
             text-transform: uppercase;
-            background: linear-gradient(90deg, #ffffff, #94A3B8, #3B82F6);
-            background-size: 200% auto;
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: shineText 3s linear infinite;
-        }
-
-        @keyframes shineText {
-            to {
-                background-position: 200% center;
-            }
         }
 
         .loader-brand span {
-            font-size: 15px;
-            color: #94A3B8;
-            letter-spacing: 6px;
+            font-size: 11px;
+            color: var(--text-tertiary);
+            letter-spacing: 2px;
             display: block;
-            margin-top: 12px;
+            margin-top: 10px;
             font-weight: 600;
-            -webkit-text-fill-color: #94A3B8;
         }
 
         .loader-text {
-            color: var(--accent);
-            font-size: 14px;
-            letter-spacing: 4px;
+            color: var(--text-dim);
+            font-size: 12px;
+            letter-spacing: 1.5px;
             font-weight: 600;
             margin: 0;
             font-family: 'Consolas', monospace;
-            position: relative;
-            overflow: hidden;
-            white-space: nowrap;
-            border-right: 2px solid var(--accent);
-            animation: typing 2s steps(40, end), blink-caret .75s step-end infinite;
-        }
-
-        @keyframes typing {
-            from {
-                width: 0
-            }
-
-            to {
-                width: 100%
-            }
-        }
-
-        @keyframes blink-caret {
-
-            from,
-            to {
-                border-color: transparent
-            }
-
-            50% {
-                border-color: var(--accent);
-            }
         }
 
         /* =========================================
@@ -951,25 +870,20 @@
         .sm-stat-card {
             background: var(--panel-bg);
             border: 1px solid var(--panel-border);
-            border-radius: 12px;
+            border-radius: var(--radius-lg);
             padding: 20px;
             text-align: center;
-            backdrop-filter: var(--glass-blur);
-            transition: border-color 0.3s, box-shadow 0.3s;
+            transition: border-color 0.2s;
         }
 
         .sm-stat-card:hover {
-            border-color: rgba(59, 130, 246, 0.4);
-            box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
+            border-color: var(--border-default);
         }
 
         .sm-stat-card .sm-stat-num {
-            font-size: 32px;
-            font-weight: 800;
-            background: linear-gradient(135deg, var(--accent), #38BDF8);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            font-size: 30px;
+            font-weight: 700;
+            color: var(--text-main);
         }
 
         .sm-stat-card .sm-stat-label {
@@ -997,11 +911,11 @@
         }
 
         .sm-tech-tag {
-            background: rgba(59, 130, 246, 0.15);
-            border: 1px solid rgba(59, 130, 246, 0.3);
+            background: var(--accent-subtle-bg);
+            border: 1px solid var(--accent-border);
             color: #93C5FD;
             padding: 4px 12px;
-            border-radius: 20px;
+            border-radius: var(--radius-sm);
             font-size: 12px;
             font-weight: 600;
         }
@@ -1016,9 +930,8 @@
         .sm-panel {
             background: var(--panel-bg);
             border: 1px solid var(--panel-border);
-            border-radius: 12px;
+            border-radius: var(--radius-lg);
             overflow: hidden;
-            backdrop-filter: var(--glass-blur);
         }
 
         .sm-panel-header {
@@ -1151,9 +1064,9 @@
         }
 
         .sm-disallow-panel {
-            background: rgba(239, 68, 68, 0.06);
+            background: var(--danger-subtle-bg);
             border: 1px solid rgba(239, 68, 68, 0.2);
-            border-radius: 12px;
+            border-radius: var(--radius-lg);
             padding: 16px 20px;
             margin-bottom: 16px;
         }
@@ -1183,9 +1096,8 @@
         .sm-js-accordion {
             background: var(--panel-bg);
             border: 1px solid var(--panel-border);
-            border-radius: 12px;
+            border-radius: var(--radius-lg);
             overflow: hidden;
-            backdrop-filter: var(--glass-blur);
         }
 
         .sm-js-item {
@@ -1361,9 +1273,8 @@
         .dom-panel {
             background: var(--panel-bg);
             border: 1px solid var(--panel-border);
-            border-radius: 14px;
+            border-radius: var(--radius-lg);
             overflow: hidden;
-            backdrop-filter: var(--glass-blur);
             display: flex;
             flex-direction: column;
             height: 100%;
@@ -1522,7 +1433,7 @@
 
         .dom-stat-val {
             font-size: 22px;
-            font-weight: 800;
+            font-weight: 700;
             font-family: 'Consolas', monospace;
         }
 
@@ -1569,21 +1480,19 @@
         .sci-stat-card {
             background: var(--panel-bg);
             border: 1px solid var(--panel-border);
-            border-radius: 12px;
+            border-radius: var(--radius-lg);
             padding: 16px;
             text-align: center;
-            backdrop-filter: var(--glass-blur);
-            transition: transform 0.2s, box-shadow 0.2s;
+            transition: border-color 0.2s;
         }
 
         .sci-stat-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+            border-color: var(--border-default);
         }
 
         .sci-stat-value {
-            font-size: 26px;
-            font-weight: 800;
+            font-size: 24px;
+            font-weight: 700;
             line-height: 1;
             margin-bottom: 4px;
         }
@@ -1640,17 +1549,14 @@
         .sci-component-card {
             background: var(--panel-bg);
             border: 1px solid var(--panel-border);
-            border-radius: 12px;
+            border-radius: var(--radius-lg);
             overflow: hidden;
-            backdrop-filter: var(--glass-blur);
-            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+            transition: border-color 0.2s;
             position: relative;
         }
 
         .sci-component-card:hover {
-            transform: translateY(-2px);
-            border-color: rgba(59, 130, 246, 0.3);
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+            border-color: var(--accent-border);
         }
 
         .sci-component-card.risk-critical {
@@ -1727,7 +1633,7 @@
             padding: 4px 10px;
             border-radius: 8px;
             font-size: 10px;
-            font-weight: 800;
+            font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
@@ -1792,7 +1698,7 @@
             padding: 2px 8px;
             border-radius: 6px;
             font-size: 10px;
-            font-weight: 800;
+            font-weight: 700;
         }
 
         /* CVE Accordion */
@@ -1851,7 +1757,7 @@
             padding: 1px 6px;
             border-radius: 4px;
             font-size: 9px;
-            font-weight: 800;
+            font-weight: 700;
             text-transform: uppercase;
         }
 
@@ -1876,14 +1782,10 @@
         }
 
         .sci-empty-icon {
-            font-size: 56px;
-            background: linear-gradient(135deg, rgba(59, 130, 246, 0.4), rgba(16, 185, 129, 0.3));
-            -webkit-background-clip: text;
-            background-clip: text;
-            -webkit-text-fill-color: transparent;
+            font-size: 48px;
+            color: var(--text-tertiary);
             display: block;
             margin-bottom: 20px;
-            filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.3));
         }
 
         /* SCI Scan Input */
@@ -1897,9 +1799,9 @@
             flex: 1;
             background: rgba(0, 0, 0, 0.25);
             border: 1px solid var(--panel-border);
-            border-radius: 10px;
+            border-radius: var(--radius-md);
             padding: 14px 18px;
-            color: #fff;
+            color: var(--text-main);
             font-family: 'Consolas', monospace;
             font-size: 14px;
             outline: none;
@@ -1908,7 +1810,7 @@
 
         .sci-search-row input:focus {
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+            box-shadow: 0 0 0 3px var(--accent-glow);
         }
 
         /* SCI Loading */
@@ -1978,17 +1880,12 @@
         }
     </script>
 
-    <!-- ADVANCED LOADING SCREEN -->
+    <!-- LOADING SCREEN -->
     <div id="dorm-loader">
         <div class="loader-content">
-            <div class="cyber-rings">
-                <div class="ring ring-1"></div>
-                <div class="ring ring-2"></div>
-                <div class="ring ring-3"></div>
-                <div class="core"></div>
-            </div>
+            <div class="loader-spinner"></div>
             <h1 class="loader-brand">DORM<span>COMMUNITY EDITION</span></h1>
-            <p class="loader-text">INITIALIZING CORE SYSTEMS...</p>
+            <p class="loader-text">INITIALIZING...</p>
         </div>
     </div>
 
@@ -2016,7 +1913,7 @@
             <div class="nav-item" id="nav-sci" onclick="switchView('sci')">
                 <i class="fas fa-link"></i> Supply Chain
                 <span id="sci-nav-badge"
-                    style="display:none; margin-left:auto; background: linear-gradient(135deg,#ef4444,#dc2626); color:#fff; font-size:9px; font-weight:800; padding:2px 6px; border-radius:10px; letter-spacing:0.5px;">RISK</span>
+                    style="display:none; margin-left:auto; background: var(--danger-subtle-bg); color: var(--danger); border: 1px solid rgba(239,68,68,0.35); font-size:9px; font-weight:700; padding:2px 6px; border-radius:4px; letter-spacing:0.5px;">RISK</span>
             </div>
             <div class="nav-item" onclick="switchView('sitemap')">
                 <i class="fas fa-sitemap"></i> Sitemap
@@ -2030,7 +1927,7 @@
         </div>
 
         <div style="margin-top:auto; font-size:12px; color:rgba(255,255,255,0.3); text-align:center; font-weight: 600;">
-            v1.25.0
+            v1.26.0
         </div>
     </div>
 
@@ -2041,7 +1938,7 @@
                 <div class="control-panel">
 
                     <div style="display:flex; justify-content: space-between; align-items:flex-end;">
-                        <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #fff;">Scan Configuration</h2>
+                        <h2 style="margin: 0; font-size: 20px; font-weight: 700; color: #fff;">Scan Configuration</h2>
                         <div id="timerDisplay">00:00</div>
                     </div>
 
@@ -2058,7 +1955,7 @@
                             </div>
                         </div>
                         <button onclick="startScan()" id="scanBtn"
-                            style="height: auto; align-self: stretch; min-width: 160px; justify-content: center; font-size: 16px;">
+                            style="height: 44px; align-self: center; min-width: 140px; justify-content: center;">
                             <i class="fas fa-play"></i> START SCAN
                         </button>
                     </div>
@@ -2081,17 +1978,17 @@
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 20px;">
                         <button onclick="togglePlugins()"
-                            style="background: linear-gradient(135deg, #1E3A8A, #3B82F6);">
+                            style="background: var(--accent);">
                             <i class="fas fa-layer-group"></i> PLUGINS
                         </button>
 
                         <div class="btn-group">
                             <button onclick="downloadReport()"
-                                style="background: linear-gradient(135deg, #6B21A8, #9333EA);">
+                                style="background: #7C3AED;">
                                 <i class="fas fa-file-code"></i> HTML REPORT
                             </button>
                             <button onclick="downloadPDF()"
-                                style="background: linear-gradient(135deg, #991B1B, #DC2626);">
+                                style="background: var(--danger);">
                                 <i class="fas fa-file-pdf"></i> PDF REPORT
                             </button>
                         </div>
@@ -2136,7 +2033,7 @@
             <div class="container">
                 <div class="control-panel">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #fff;">
+                        <h2 style="margin: 0; font-size: 20px; font-weight: 700; color: #fff;">
                             <i class="fas fa-shield-virus" style="color: var(--accent); margin-right: 10px;"></i>
                             WAF Bypass Settings (Stealth Mode)
                         </h2>
@@ -2222,7 +2119,7 @@
             <div class="container">
                 <div class="control-panel">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #fff;"><i
+                        <h2 style="margin: 0; font-size: 20px; font-weight: 700; color: #fff;"><i
                                 class="fas fa-shield-alt" style="color: var(--accent); margin-right: 10px;"></i>Upstream
                             Proxy</h2>
                         <label class="toggle-label">
@@ -2236,7 +2133,7 @@
                     </p>
                     <div class="input-group" style="align-items: center; margin-top: 15px;">
                         <input type="text" id="proxyUrlInput" value="http://127.0.0.1:8081"
-                            style="flex-grow: 1; background-color: rgba(0, 0, 0, 0.2); color: #4ADE80; border: 1px solid var(--panel-border); border-radius: 8px; padding: 16px; font-family: 'Consolas', monospace; font-size: 15px; outline: none; box-shadow: inset 0 2px 10px rgba(0,0,0,0.2);"
+                            style="flex-grow: 1; background-color: rgba(0, 0, 0, 0.2); color: var(--text-main); border: 1px solid var(--panel-border); border-radius: 6px; padding: 16px; font-family: 'Consolas', monospace; font-size: 15px; outline: none;"
                             placeholder="http://127.0.0.1:8081">
                     </div>
                 </div>
@@ -2285,7 +2182,7 @@
                                 style="background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); color: #94A3B8; padding: 8px 16px; margin-bottom: 15px; box-shadow: none;">
                                 <i class="fas fa-arrow-left"></i> BACK TO HISTORY
                             </button>
-                            <h2 style="margin: 0; font-size: 24px; font-weight: 800; color: #fff;" id="detailTarget">
+                            <h2 style="margin: 0; font-size: 24px; font-weight: 700; color: #fff;" id="detailTarget">
                                 Target</h2>
                             <p style="margin: 5px 0 0 0; color: var(--text-dim); font-size: 14px;" id="detailDate">Date
                             </p>
@@ -2294,19 +2191,19 @@
                             style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 10px;">
                             <div class="btn-group">
                                 <button onclick="viewSitemapForScan()"
-                                    style="background: linear-gradient(135deg, #059669, #10B981); padding: 8px 16px; font-size: 12px;">
+                                    style="background: var(--success); padding: 8px 16px; font-size: 12px;">
                                     <i class="fas fa-sitemap"></i> VIEW SITEMAP
                                 </button>
                                 <button onclick="downloadDetailReport()"
-                                    style="background: linear-gradient(135deg, #1E3A8A, #3B82F6); padding: 8px 16px; font-size: 12px;">
+                                    style="background: var(--accent); padding: 8px 16px; font-size: 12px;">
                                     <i class="fas fa-file-code"></i> HTML EXPORT
                                 </button>
                                 <button onclick="downloadDetailPDF()"
-                                    style="background: linear-gradient(135deg, #991B1B, #DC2626); padding: 8px 16px; font-size: 12px;">
+                                    style="background: var(--danger); padding: 8px 16px; font-size: 12px;">
                                     <i class="fas fa-file-pdf"></i> PDF EXPORT
                                 </button>
                             </div>
-                            <div style="font-family: 'Consolas', monospace; color: var(--accent); font-size: 18px; font-weight: bold; text-shadow: 0 0 10px var(--accent-glow);"
+                            <div style="font-family: 'Consolas', monospace; color: var(--accent); font-size: 18px; font-weight: bold;"
                                 id="detailTimer">00:00</div>
                         </div>
                     </div>
@@ -2342,7 +2239,7 @@
                         <div style="display: flex; align-items: center; gap: 14px;">
                             <i class="fas fa-spider" style="font-size: 22px; color: var(--accent);"></i>
                             <div>
-                                <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #fff;">DOM Crawler</h2>
+                                <h2 style="margin: 0; font-size: 20px; font-weight: 700; color: #fff;">DOM Crawler</h2>
                                 <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-dim);">SPA-Aware Browser
                                     Crawler — Real-Time Activity Feed</p>
                             </div>
@@ -2416,7 +2313,7 @@
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div style="display: flex; align-items: center; gap: 14px;">
                             <i class="fas fa-sitemap" style="font-size: 22px; color: var(--accent);"></i>
-                            <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #fff;">Site Map</h2>
+                            <h2 style="margin: 0; font-size: 20px; font-weight: 700; color: #fff;">Site Map</h2>
                             <select id="sitemapHostSelect" onchange="loadSitemap(this.value)"
                                 style="background: rgba(0,0,0,0.3); color: #fff; border: 1px solid var(--panel-border); border-radius: 8px; padding: 8px 14px; font-size: 13px; outline: none; cursor: pointer;">
                                 <option value="">— Select Target —</option>
@@ -2428,7 +2325,7 @@
                                 <i class="fas fa-sync-alt"></i> Refresh
                             </button>
                             <button onclick="exportSitemapJSON()"
-                                style="background: linear-gradient(135deg, #065F46, #10B981); padding: 10px 18px;">
+                                style="background: var(--success); padding: 10px 18px;">
                                 <i class="fas fa-file-export"></i> Export JSON
                             </button>
                         </div>
@@ -2463,7 +2360,7 @@
                                 <i class="fas fa-link"></i>
                             </div>
                             <div>
-                                <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #fff;">Supply Chain
+                                <h2 style="margin: 0; font-size: 20px; font-weight: 700; color: #fff;">Supply Chain
                                     Interface</h2>
                                 <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-dim);">Deep component
                                     fingerprinting & CVE enrichment for any target</p>
@@ -2483,7 +2380,7 @@
                             placeholder="Enter domain or URL... e.g. https://wordpress.org or example.com"
                             onkeypress="if(event.key==='Enter') analyzeSCI()">
                         <button onclick="analyzeSCI()" id="sciAnalyzeBtn"
-                            style="background: linear-gradient(135deg, #1E3A8A, #3B82F6); padding: 14px 28px; font-size: 14px; white-space: nowrap;">
+                            style="background: var(--accent); padding: 14px 28px; font-size: 14px; white-space: nowrap;">
                             <i class="fas fa-search-plus"></i> ANALYZE
                         </button>
                         <button onclick="clearSCI()"
@@ -2548,7 +2445,7 @@
                         <div style="display: flex; align-items: center; gap: 14px;">
                             <i class="fas fa-radiation" style="font-size: 22px; color: var(--accent);"></i>
                             <div>
-                                <h2 style="margin: 0; font-size: 20px; font-weight: 800; color: #fff;">CVE Center</h2>
+                                <h2 style="margin: 0; font-size: 20px; font-weight: 700; color: #fff;">CVE Center</h2>
                                 <p style="margin: 3px 0 0 0; font-size: 12px; color: var(--text-dim);">Specific CVE
                                     Targeted Scanning & Threat Intelligence</p>
                             </div>
@@ -2686,7 +2583,19 @@
 
         </div>
 
-        <script src="app.js"></script>
+        <script src="js/core.js"></script>
+        <script src="js/helpers.js"></script>
+        <script src="js/target-filtering.js"></script>
+        <script src="js/view-switching.js"></script>
+        <script src="js/dom-crawler.js"></script>
+        <script src="js/history.js"></script>
+        <script src="js/scanner.js"></script>
+        <script src="js/reports.js"></script>
+        <script src="js/sitemap.js"></script>
+        <script src="js/cve-center.js"></script>
+        <script src="js/supply-chain.js"></script>
+        <script src="js/legacy.js"></script>
+        <script src="js/init.js"></script>
 
 </body>
 

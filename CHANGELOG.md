@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.26.0] - 2026-09-12
+### 🎯 Four New Plugins, Enterprise Dashboard Redesign & Frontend Modularization
+
+A three-part update: four new detection plugins covering cache-deception, multi-cloud storage, AI/vector-DB infrastructure, and JS secret harvesting; a full visual overhaul of the web dashboard; and a split of the monolithic frontend `app.js` into 13 focused modules under `web/js/`.
+
+---
+
+#### 🛡️ Four New Plugins (`plugins/`)
+Added as plain single-file plugins (not PEP Engine sub-packages — kept flat/simple by design for this batch), each registered in `handlers.go` and listed in `plugins/helpers.go`'s `GetPluginInventory()`:
+- **Web Cache Deception** (`webcachedeception.go`) — distinct from the existing Web Cache Poisoning check: appends fake static extensions (`/test.css`, `;.css`, `%0a.png`, etc.) to dynamic-looking paths and confirms via a 3-way baseline/authenticated/anonymous comparison that the backend collapses the fake extension onto the real route and serves it to anonymous requests. Includes a negative-control check (a guaranteed-nonexistent path must NOT return the same content as the baseline) to avoid false positives on servers where every unmatched route falls through to the same catch-all page.
+- **Multi-Cloud Storage Exposure (Bucket/Blob Takeover)** (`cloudstorage.go`) — extends the previous S3-only substring check to Google Cloud Storage, Azure Blob Storage, DigitalOcean Spaces, and Cloudflare R2. Discovers bucket references from the target's homepage and its spider-discovered JS files, then actively verifies anonymous LIST access (always on) and, only when the scan opts in via `aggressiveCloudWrite=true`, anonymous PUT/write access — followed by a best-effort DELETE cleanup of the uniquely-named test object it wrote.
+- **AI/Vector Database Unauthorized Access** (`aivectordb.go`) — checks ChromaDB (8000), Qdrant (6333), Milvus (19530/9091), and Ollama (11434) for unauthenticated management-API access (collection enumeration, model inventory). Ollama's check also runs a minimal, capped (`num_predict: 5`, non-streaming) `/api/generate` call as supplementary proof once `/api/tags` already confirms unauthenticated access. Added the four new ports to `handlers.go`'s `commonPorts` port-discovery sweep — these ports fall outside `models.IsWebPort`'s whitelist, so without this the plugin would never be invoked.
+- **Webpack Source Map & Secret Harvester** (`secretharvester.go`) — reuses JS file URLs the spider/DOM-crawler already discovered (`sitemapper.GetSiteMap`) rather than re-crawling, probes each for a `//# sourceMappingURL=` comment or a guessed `.js.map`, parses recovered `sourcesContent`, and regex + Shannon-entropy scans both the JS bundles and recovered sources for AWS/GitHub/Stripe/Slack/OpenAI/Google keys and generic high-entropy tokens. Unlike the other three plugins (which return on first confirmed hit), this one aggregates every secret found across every file into a single finding so the report reads as a full inventory, not just the first leak. Matched values are always masked (first 6 / last 4 characters) before they reach the Description/SQLite history.
+- **New category `AI & LLM Infrastructure`** in the plugin picker — also now houses the existing "AI/LLM Prompt Injection Scanner" (moved out of "Advanced Logic") so all AI-threat plugins sit together.
+
+#### 🎨 Dashboard UI — Enterprise Dark Theme (`web/dashboard.html`, `web/js/`)
+Replaced the "luxury glassmorphism" look (translucent blurred panels, glow shadows, gradient-clip text, animated cyber-rings loader) with a flatter, restrained corporate palette in the same dark-mode/blue-accent family:
+- New design-token set in `:root` (solid surface colors, a tightened radius/spacing scale, sparse shadow usage) — panels, sidebar, nav, buttons, and badges all rebuilt on it without renaming any CSS class JS depends on for state (`.active`, `.open`, `.active-plugin`, etc.).
+- Results tables switched from a spaced "card-row" layout to a classic dense table; severity/status badges switched from solid bright pills to a soft translucent-background tag style, with the 5-tier severity palette finally unified between the CSS badges and the Chart.js doughnut charts (previously two different, inconsistent palettes).
+- Loading splash simplified from a 3-ring animated "cyber" spinner + shimmer wordmark to a single standard spinner.
+- Primary "Start Scan" button resized to match the other action buttons instead of stretching to the full height of the target editor.
+
+#### 🧵 Frontend Modularization (`web/js/`)
+Split the single 1674-line `web/app.js` into 13 feature-scoped files under `web/js/` (`core.js`, `helpers.js`, `target-filtering.js`, `view-switching.js`, `dom-crawler.js`, `history.js`, `scanner.js`, `reports.js`, `sitemap.js`, `cve-center.js`, `supply-chain.js`, `legacy.js`, `init.js`), loaded as ordinary classic `<script>` tags — no bundler, no `type="module"`, so every existing inline `onclick`/`onchange` handler in the markup keeps working unmodified. Cross-file shared state (`scanResults`, `vulnChart`, `sitemapPollInterval`, `window.currentSitemapScanID`/`currentDetailScanID`, etc.) was consolidated into `core.js`. `main.go` now serves the whole `web/js/` directory through one generic `http.FileServer`-based route (wrapped to preserve the existing no-cache headers) instead of the old single hardcoded `/app.js` route, so future files dropped into `web/js/` need no `main.go` change. The old `web/app.js` and its route were deleted once the split was verified end-to-end in the browser (all 9 views, the History→Sitemap handoff, report downloads, and a live scan).
+
 ## [v1.25.0] - 2026-09-08
 ### 🤖 Plugin Enhancement Pack 2.3 & Multi-Target Scanner UX
 
