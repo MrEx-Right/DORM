@@ -12,18 +12,12 @@ Unlike traditional scanners, DORM features a hybrid engine that utilizes a **Nat
 
 ## ✨ Dashboard Preview
 
-### 🖥️ Scanner Interface
 <p align="center">
-  <img src="docs/images/dashboard1.png" alt="Main Interface" width="100%">
-</p>
-
-### 📊 Live Results
-<p align="center">
-  <img src="docs/images/dashboard2.png" alt="Results Interface" width="100%">
+  <img src="docs/images/dashboard.png" alt="DORM Dashboard" width="100%">
 </p>
 
 <p align="center">
-  <i>Premium glassmorphism dark-themed dashboard with real-time SSE monitoring and persistent history management.</i>
+  <i>Enterprise-grade dark dashboard — a clean, corporate control surface with real-time SSE monitoring, multi-target grouping, and persistent history management.</i>
 </p>
 
 ---
@@ -46,8 +40,9 @@ Unlike traditional scanners, DORM features a hybrid engine that utilizes a **Nat
 DORM comes equipped with highly advanced, multi-phase plugins:
 - **Injection Pipelines:** Omni-SQLi (6-phase), Blind RCE "Phantom Strike" (dynamic WAF bypass), XXE "XML Devil", Next-Gen SSRF (Cloud metadata & DNS rebinding), SSTI, and CRLF.
 - **Authentication & Logic:** "Hydra Elite" Brute Force Engine, JWT "Key Breaker" (Algorithm Confusion), Advanced IDOR (Dual-Profile Authorization Matrix), GraphQL Introspection.
-- **Cloud & DevOps:** Service exposure detection for MongoDB Wire, Tomcat "Catalina Exploiter" (In-Memory WAR Deployment), Docker API, Kubernetes, Redis.
-- **AI & Emerging Threats:** Dedicated AI/LLM Prompt Injection Scanner, 403/401 Authorization Bypass, Web Cache Poisoning, and HTTP Request Smuggling.
+- **Cloud & DevOps:** Service exposure detection for MongoDB Wire, Tomcat "Catalina Exploiter" (In-Memory WAR Deployment), Docker API, Kubernetes, Redis, and a Multi-Cloud Storage probe (S3, GCS, Azure Blob, DigitalOcean Spaces, Cloudflare R2) with active anonymous LIST/write verification.
+- **AI & LLM Infrastructure:** Dedicated AI/LLM Prompt Injection Scanner plus unauthorized-access detection for exposed AI/vector-DB services — ChromaDB, Qdrant, Milvus, and Ollama.
+- **Recon & Secrets:** Webpack Source Map & Secret Harvester (regex + Shannon-entropy scanning of JS bundles and recovered source maps for leaked API keys/tokens), Web Cache Deception, Web Cache Poisoning, 403/401 Authorization Bypass, and HTTP Request Smuggling.
 
 ---
 
