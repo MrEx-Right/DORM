@@ -62,6 +62,36 @@ var (
 	kevCacheTTL    = 6 * time.Hour
 )
 
+// StartKEVSync launches a background loop that keeps the KEV cache warm by
+// refreshing it on a timer, the same proactive-sync shape SyncFullDatabase
+// uses for the CVE database. Without this, the cache only refreshes lazily
+// on whichever request happens to land after it goes stale, so that one
+// visitor eats the GitHub + EPSS round trip. Call once at startup.
+func StartKEVSync() {
+	go func() {
+		if _, err := GetRecentKEVs(); err != nil {
+			fmt.Printf("[-] CISA KEV: initial sync failed: %v\n", err)
+		} else {
+			fmt.Println("[+] CISA KEV: initial sync complete.")
+		}
+
+		ticker := time.NewTicker(kevCacheTTL)
+		defer ticker.Stop()
+		for range ticker.C {
+			buckets, err := fetchAndBuildKEVBuckets()
+			if err != nil {
+				fmt.Printf("[-] CISA KEV: background sync failed: %v\n", err)
+				continue
+			}
+			kevCacheMutex.Lock()
+			kevCache = buckets
+			lastKEVFetch = time.Now()
+			kevCacheMutex.Unlock()
+			fmt.Println("[+] CISA KEV: background sync refreshed catalog.")
+		}
+	}()
+}
+
 // GetRecentKEVs returns the bucketed KEV records. Uses caching to avoid rate limits.
 func GetRecentKEVs() (*KEVBuckets, error) {
 	kevCacheMutex.RLock()
@@ -93,7 +123,10 @@ func GetRecentKEVs() (*KEVBuckets, error) {
 func fetchAndBuildKEVBuckets() (*KEVBuckets, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 
-	req, err := http.NewRequest("GET", "https://raw.githubusercontent.com/EugenMayer/cisa-known-exploited-mirror/main/known_exploited_vulnerabilities.json", nil)
+	// EugenMayer/cisa-known-exploited-mirror was archived (deprecated) on 2026-08-29
+	// in favor of the official cisagov/kev-data mirror — using the old URL silently
+	// freezes the catalog at its last commit and newly added KEVs never show up.
+	req, err := http.NewRequest("GET", "https://raw.githubusercontent.com/cisagov/kev-data/refs/heads/develop/known_exploited_vulnerabilities.json", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %v", err)
 	}

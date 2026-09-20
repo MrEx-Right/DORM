@@ -111,24 +111,10 @@ func (p *IPSpoofPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		if bypassResult != nil {
 			return bypassResult
 		}
-		// Bypass unsuccessful — report as MEDIUM (rate-limit present but resilient)
-		return &models.Vulnerability{
-			Target:   target,
-			Name:     "MEDIUM — Rate-Limit Detected (Bypass Unsuccessful)",
-			Severity: "MEDIUM",
-			CVSS:     4.3,
-			Description: fmt.Sprintf(
-				"🟡 A rate-limiting mechanism was detected but could not be bypassed via IP header spoofing.\n\n"+
-					"Detection Method: Passive response header analysis (no active flooding performed)\n"+
-					"Rate-Limit Header Observed: %s\n"+
-					"Endpoint: %s\n\n"+
-					"The system is actively enforcing rate-limiting and appears resilient against header-based spoofing.\n"+
-					"This is a positive security indicator.",
-				passiveResult.rateLimitHeader, baseURL+passiveResult.rateLimitEndpoint,
-			),
-			Solution:  "The current rate-limit configuration appears adequate. Ensure that forwarding headers such as X-Forwarded-For are only trusted when originating from verified, internal reverse-proxies.",
-			Reference: "https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/",
-		}
+		// Bypass unsuccessful — the rate-limit held up under spoofing, which is a
+		// working control, not a vulnerability. Reporting this as a finding was
+		// the source of the false positive: a well-protected target got flagged.
+		return nil
 	}
 
 	// ==================================================================
@@ -137,7 +123,16 @@ func (p *IPSpoofPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	// ==================================================================
 	activeResult := minimalActiveProbe(client, baseURL, target)
 	if activeResult == nil {
-		// No rate-limiting detected — nothing to bypass
+		// No rate-limiting observed on THESE probe endpoints — but they're all
+		// generic infra health/ping/status paths (/health, /ping, /api/status, /),
+		// which are near-universally *intentionally* exempted from rate-limiting
+		// in real deployments (load-balancer and k8s liveness/readiness probes
+		// must never be throttled). Reporting "no rate-limiting protection" from
+		// that alone fired on almost every target regardless of how well its
+		// actual business endpoints (login, search, API) were protected — a much
+		// bigger false positive than the one this plugin originally had. Absence
+		// of evidence on a handful of exempt infra paths isn't evidence of
+		// absence for the app as a whole, so stay silent rather than guess.
 		return nil
 	}
 
@@ -299,11 +294,49 @@ func minimalActiveProbe(client *http.Client, baseURL string, target models.ScanT
 	return nil
 }
 
+// probeStillBlocked issues one control request with no spoof headers to confirm
+// a block detected earlier is still active right now. Rate-limit windows can
+// lapse naturally within the time this phase takes to iterate every spoof
+// header (up to ~1.8s across 12 headers); without this check, a block that
+// simply expired on its own gets misattributed to whichever spoof header
+// happened to be in flight when it lifted — a confidently-worded but entirely
+// false "HIGH: bypassed via header X" finding.
+func probeStillBlocked(client *http.Client, fullURL string) bool {
+	req, err := http.NewRequest("GET", fullURL, nil)
+	if err != nil {
+		return true // can't confirm either way — don't risk crediting a false bypass
+	}
+	req.Header.Set("User-Agent", "DORM-IPSpoof-Probe/1.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return true
+	}
+
+	body := readBody(resp, 4096)
+	if resp.StatusCode == 200 {
+		lowerBody := strings.ToLower(body)
+		for _, sig := range wafBodySigs {
+			if strings.Contains(lowerBody, sig) {
+				return true
+			}
+		}
+		return false // clean 200, no block signature — no longer blocked
+	}
+	return true
+}
+
 // ============================================================
 // PHASE 3: HEADER SPOOF BYPASS TEST
 // ============================================================
 func testHeaderSpoofBypass(client *http.Client, baseURL string, target models.ScanTarget, endpoint, detectedHeader string) *models.Vulnerability {
 	fullURL := baseURL + endpoint
+
+	if !probeStillBlocked(client, fullURL) {
+		// Already open before we tried a single spoof header — can't attribute
+		// this to spoofing, the block just lapsed on its own.
+		return nil
+	}
 
 	for _, sh := range spoofHeaders {
 		// RULE 5: One request per header — no retry loops
@@ -374,6 +407,12 @@ func testHeaderSpoofBypass(client *http.Client, baseURL string, target models.Sc
 // ============================================================
 func testCompoundHeaderAttack(client *http.Client, baseURL string, target models.ScanTarget, endpoint string) *models.Vulnerability {
 	fullURL := baseURL + endpoint
+
+	if !probeStillBlocked(client, fullURL) {
+		// Phase 3 already spent up to ~1.8s cycling 12 headers — re-check rather
+		// than assume the block state from several requests ago still holds.
+		return nil
+	}
 
 	// RULE 5: Single request with all headers combined
 	req, err := http.NewRequest("GET", fullURL, nil)

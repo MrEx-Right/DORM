@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.26.1] - 2026-09-20
+### 🩹 CVE Center Freshness & Accuracy Pass, Multi-Target Report Fix, Rate-Limit FP Fix
+
+A bug-fix pass covering four reported issues: a stale/broken CISA KEV feed, no way to see full CVE detail from a search hit, a false-positive/false-negative inversion in the rate-limit plugin, and multi-target reports rendering as one undifferentiated table.
+
+---
+
+#### 🔥 CISA KEV Feed Fix & Background Sync (`cve/kev.go`, `main.go`)
+- **Root cause of the frozen KEV list:** the catalog was fetched from `EugenMayer/cisa-known-exploited-mirror`, a community GitHub mirror that was **archived/deprecated on 2026-08-29** in favor of the official `cisagov/kev-data` continuation — the old URL still resolved, so it silently served the same frozen snapshot on every request instead of erroring. Switched the fetch URL to `raw.githubusercontent.com/cisagov/kev-data/refs/heads/develop/known_exploited_vulnerabilities.json`.
+- **New `StartKEVSync()`:** the KEV cache used to refresh only lazily, on whichever request happened to land after the 6h TTL expired, so that one visitor ate the GitHub+EPSS round trip. It now mirrors the proactive-sync shape `SyncFullDatabase()` already uses for the CVE database — a background goroutine (started from `main.go` at boot) does an immediate initial sync, then re-syncs on a `kevCacheTTL` (6h) ticker for the life of the process, so the cache is always warm before a request needs it.
+
+#### 🔍 Live CVE Detail Lookup (`cve/detail.go`, `handlers.go`, `web/js/cve-center.js`, `web/dashboard.html`)
+- The local CVE index (`cve_full.json`) only ever stored a truncated (≤400 char) description and a handful of fields, so a CVE Database Explorer search hit had nothing worth showing beyond ID/CVSS/product. Added a new `/api/cvedb/detail?id=` endpoint backed by a live NVD REST API (`services.nvd.nist.gov`) lookup — full description, CVSS vector string, CWE weaknesses, references (with tags), and CISA KEV linkage — cached per-process per CVE ID to stay well under NVD's unauthenticated rate limit on repeat views.
+- Added a **Details** button next to each CVE Database Explorer search result (alongside the existing **Target** button) that opens a modal rendering the live NVD data.
+
+#### 🎯 Rate-Limit Plugin — False-Positive Pass (`plugins/ip_spoof.go`)
+Three separate false-positive sources in the IP Spoof / Rate-Limit plugin, found and fixed together:
+- **Working protection flagged as a finding:** when a rate-limiter was detected and successfully resisted header-spoofing bypass — a working control, i.e. good security — it was still reported as a `MEDIUM` finding. It now correctly returns no finding in this case.
+- **"No rate-limiting" claim from exempt infra endpoints:** a first pass at this fix added a `MEDIUM — No Rate-Limiting Protection Detected` finding whenever none of the probe endpoints (`/health`, `/ping`, `/api/status`, `/`, etc.) showed throttling. Those are all generic infra health/ping/status paths that are near-universally *intentionally* exempted from rate-limiting in real deployments (load-balancer and k8s liveness/readiness probes must never be throttled), so this fired on almost every target regardless of how well its actual business endpoints were protected — a bigger false positive than the original one. Removed; the plugin now stays silent rather than draw a conclusion the evidence doesn't support.
+- **Bypass credited to a header that never caused it:** `testHeaderSpoofBypass` cycles 12 spoof headers ~150ms apart, crediting whichever one first got a clean `200` as "the header that bypassed the block." With no check that the block was still active at that moment, a rate-limit window lapsing naturally partway through the loop (common with short/per-second windows) got misattributed to whichever header happened to be in flight when it lifted — a confidently-worded but entirely false `HIGH` finding. Same risk applied to the compound-header attack, which runs even later. Added `probeStillBlocked()`, one control request (no spoof headers) sent immediately before each phase, so a block that already lifted on its own is no longer credited to spoofing.
+
+#### 📄 Multi-Target Report Grouping (`web/js/reports.js`)
+Both the HTML and PDF report exports (live scan and Scan History archive) dumped every target's findings into one flat, interleaved table with no indication of which host a row belonged to — unreadable on a multi-target scan. Results are now grouped by target (`groupResultsByTarget()`): the PDF gives each target its own page with a `Target: <ip:port> (N findings)` header before its table, and the HTML report gets a matching per-target section heading. Single-target reports are unchanged — no extra headers are added when there's only one target.
+
+#### ♻️ CVE Center — Live Refresh on Every Open (`web/js/cve-center.js`)
+The KEV panel was gated behind the same "load once per session" flag as the (near-static) CVE stats/severity chart, so switching away from and back to the CVE Center tab never re-fetched KEV data — only the very first open of the session did. KEV loading was split into its own `loadKEVData()` and is now called unconditionally on every CVE Center open, so it always renders from the backend's warm, continuously-synced cache; the stats/chart fetch stays one-time.
+
 ## [v1.26.0] - 2026-09-12
 ### 🎯 Four New Plugins, Enterprise Dashboard Redesign & Frontend Modularization
 

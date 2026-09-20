@@ -32,6 +32,11 @@ func main() {
 	// 2. Sync full CVEProject database (~280K CVEs) — blocking at startup
 	cve.SyncFullDatabase()
 
+	// 2b. Keep the CISA KEV catalog warm in the background so the CVE Center
+	// always renders from a fresh cache instead of stalling on the first
+	// request after the cache goes stale.
+	cve.StartKEVSync()
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		http.ServeFile(w, r, "web/dashboard.html")
@@ -54,6 +59,7 @@ func main() {
 	// CVE DB API Routes
 	http.HandleFunc("/api/cvedb", handleCVEDatabase)
 	http.HandleFunc("/api/cvedb/search", handleCVESearch)
+	http.HandleFunc("/api/cvedb/detail", handleCVEDetail)
 	http.HandleFunc("/api/kev", handleKEV)
 
 	// Supply Chain Interface API
@@ -75,7 +81,7 @@ func main() {
 ██║  ██║██║   ██║██████╔╝██╔████╔██║
 ██║  ██║██║   ██║██╔══██╗██║╚██╔╝██║
 ██████╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
-╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.26.0
+╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.26.1
 
        [ Security Engine • Active ]
 `
