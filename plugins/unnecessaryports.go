@@ -32,26 +32,22 @@ func (p *UnnecessaryPortsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 			Reference:   "https://cheatsheetseries.owasp.org/cheatsheets/Transport_Layer_Security_Cheat_Sheet.html",
 		}
 	case 23:
-		// Telnet is genuinely dangerous — keep as MEDIUM but lower CVSS to reflect
-		// that the port being open alone is not a confirmed vulnerability.
 		return &models.Vulnerability{
 			Target:      target,
 			Name:        "Open Port: Telnet (23)",
-			Severity:    "MEDIUM",
-			CVSS:        5.3,
-			Description: "Telnet is listening on port 23. Telnet is an obsolete, fully unencrypted protocol that transmits all data — including credentials — in plaintext over the network.",
+			Severity:    "INFO",
+			CVSS:        0.0,
+			Description: "Telnet is listening on port 23. Telnet is an obsolete, fully unencrypted protocol that transmits all data — including credentials — in plaintext over the network. This is an informational finding; the port being open does not by itself confirm exploitability.",
 			Solution:    "Disable Telnet and use SSH for remote administration.",
 			Reference:   "https://www.sans.org/blog/why-telnet-must-die/",
 		}
 	case 445:
-		// SMB exposure to the public internet is a genuine risk (EternalBlue, WannaCry),
-		// but port presence alone is not a confirmed exploit — MEDIUM is appropriate.
 		return &models.Vulnerability{
 			Target:      target,
 			Name:        "Open Port: SMB (445)",
-			Severity:    "MEDIUM",
-			CVSS:        5.3,
-			Description: "Server Message Block (SMB) is listening on port 445. SMB is a high-risk file-sharing protocol historically associated with critical exploits (e.g., EternalBlue, WannaCry). It should never be exposed to external networks.",
+			Severity:    "INFO",
+			CVSS:        0.0,
+			Description: "Server Message Block (SMB) is listening on port 445. SMB is a high-risk file-sharing protocol historically associated with critical exploits (e.g., EternalBlue, WannaCry). This is an informational finding; the port being open does not by itself confirm exploitability.",
 			Solution:    "Block port 445 at the network perimeter firewall. Only allow access over a secure internal network or VPN.",
 			Reference:   "https://support.microsoft.com/en-us/help/3185535/preventing-smb-traffic-from-lateral-connections-and-entering-or-leav",
 		}
@@ -59,9 +55,9 @@ func (p *UnnecessaryPortsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 		return &models.Vulnerability{
 			Target:      target,
 			Name:        "Open Port: RDP (3389)",
-			Severity:    "LOW",
-			CVSS:        3.5,
-			Description: "Remote Desktop Protocol (RDP) is listening on port 3389. Exposing RDP to the public internet invites brute-force login attempts and exploitation of known RDP vulnerabilities.",
+			Severity:    "INFO",
+			CVSS:        0.0,
+			Description: "Remote Desktop Protocol (RDP) is listening on port 3389. Exposing RDP to the public internet invites brute-force login attempts and exploitation of known RDP vulnerabilities. This is an informational finding; the port being open does not by itself confirm exploitability.",
 			Solution:    "Restrict RDP access behind a VPN or use an RDP gateway with Multi-Factor Authentication (MFA). Do not expose it directly to the internet.",
 			Reference:   "https://www.cisa.gov/news-events/cybersecurity-advisories/aa20-014a",
 		}
@@ -69,9 +65,9 @@ func (p *UnnecessaryPortsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 		return &models.Vulnerability{
 			Target:      target,
 			Name:        "Open Port: VNC (5900/5901)",
-			Severity:    "LOW",
-			CVSS:        3.5,
-			Description: fmt.Sprintf("Virtual Network Computing (VNC) is listening on port %d. VNC is an unencrypted or weakly encrypted desktop-sharing protocol prone to brute-forcing and session interception.", port),
+			Severity:    "INFO",
+			CVSS:        0.0,
+			Description: fmt.Sprintf("Virtual Network Computing (VNC) is listening on port %d. VNC is an unencrypted or weakly encrypted desktop-sharing protocol prone to brute-forcing and session interception. This is an informational finding; the port being open does not by itself confirm exploitability.", port),
 			Solution:    "Close the exposed VNC port. Tunnel VNC over SSH or restrict access behind a corporate VPN.",
 			Reference:   "https://www.elastic.co/blog/detecting-vnc-exposure-with-elastic-security",
 		}
@@ -102,8 +98,10 @@ func (p *UnnecessaryPortsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 		}
 	}
 
-	// 3. DevOps / Infrastructure API ports — LOW severity.
+	// 3. DevOps / Infrastructure API ports — INFO only.
 	//    Exposure is noteworthy but does not confirm misconfiguration on its own.
+	//    Dedicated plugins (dockerapi.go, kubelet.go, etc.) perform the real
+	//    authentication/exploit checks and emit higher-severity findings when needed.
 	devopsApis := map[int]string{
 		2375:  "Docker API (Plaintext)",
 		2376:  "Docker API (TLS)",
@@ -116,9 +114,9 @@ func (p *UnnecessaryPortsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 		return &models.Vulnerability{
 			Target:      target,
 			Name:        fmt.Sprintf("Open Port: %s (%d)", apiName, port),
-			Severity:    "LOW",
-			CVSS:        3.1,
-			Description: fmt.Sprintf("%s is listening on port %d. Exposing infrastructure control-plane services may allow attackers to manipulate deployments, access secrets, or inject malicious workloads if authentication is misconfigured.", apiName, port),
+			Severity:    "INFO",
+			CVSS:        0.0,
+			Description: fmt.Sprintf("%s is listening on port %d. Exposing infrastructure control-plane services may allow attackers to manipulate deployments, access secrets, or inject malicious workloads if authentication is misconfigured. This is an informational finding; dedicated scan modules will test for unauthenticated access.", apiName, port),
 			Solution:    "Enforce strict firewall rules. Enable authentication/TLS and restrict access to trusted networks or bastion hosts only.",
 			Reference:   "https://kubernetes.io/docs/concepts/security/controlling-access/",
 		}
@@ -228,9 +226,9 @@ func (p *UnnecessaryPortsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 			return &models.Vulnerability{
 				Target:      target,
 				Name:        fmt.Sprintf("Exposed Development/Debug Service on Port %d", port),
-				Severity:    "MEDIUM",
-				CVSS:        6.0,
-				Description: fmt.Sprintf("A development or debug-enabled web service was detected on port %d (Detected: %s). Development servers often have debugging utilities active, leak source code files, lack proper rate-limiting, and might expose interactive consoles permitting remote command execution.", port, devReason),
+				Severity:    "INFO",
+				CVSS:        0.0,
+				Description: fmt.Sprintf("A development or debug-enabled web service was detected on port %d (Detected: %s). Development servers often have debugging utilities active, leak source code files, lack proper rate-limiting, and might expose interactive consoles permitting remote command execution. This is an informational finding; the signature match alone does not confirm exploitability.", port, devReason),
 				Solution:    "Disable development debug features in production environments. Do not expose bundlers or live-reloading tooling to the public web. Ensure compilation output does not contain source maps or debug pages.",
 				Reference:   "https://owasp.org/www-project-top-ten/2021/A05_2021-Security_Misconfiguration",
 			}

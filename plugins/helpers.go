@@ -156,6 +156,7 @@ func GetPluginInventory() map[string][]string {
 		},
 		"AI & LLM Infrastructure": {
 			"AI/Vector Database Unauthorized Access", "AI/LLM Prompt Injection Scanner",
+			"AI Dependency Hallucination (Slopsquatting) Scanner", "MCP Server Exposure Scanner",
 		},
 		"Authentication & Sessions": {
 			"WordPress User Disclosure", "Open Redirect", "Cookie Security", "Tomcat Manager Panel", "Admin Panel Bypass (IP Spoof)",

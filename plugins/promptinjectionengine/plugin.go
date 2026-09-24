@@ -18,5 +18,8 @@ func (p *PromptInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerabil
 	// in the background at process start (see sync.go / StartBackgroundSync).
 	payloads := LoadPayloads()
 
-	return RunDirectInjection(client, target, payloads)
+	if v := RunDirectInjection(client, target, payloads); v != nil {
+		return v
+	}
+	return RunSystemPromptLeakage(client, target, SystemPromptLeakagePayloads)
 }

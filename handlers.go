@@ -518,6 +518,8 @@ WaitLoop:
 	engine.AddPlugin(&plugins.S3BucketPlugin{})
 	engine.AddPlugin(&plugins.CloudStoragePlugin{})  // Multi-Cloud Storage Deep Probe (GCS/Azure/DO/R2)
 	engine.AddPlugin(&plugins.AIVectorDBPlugin{})    // ChromaDB/Qdrant/Milvus/Ollama unauthorized access
+	engine.AddPlugin(&plugins.SlopsquattingPlugin{}) // AI dependency hallucination / slopsquatting
+	engine.AddPlugin(&plugins.MCPExposurePlugin{})   // MCP server exposure / excessive agency
 
 	engine.AddPlugin(&plugins.ClickjackingPlugin{})
 	engine.AddPlugin(&plugins.GraphQLPlugin{})
