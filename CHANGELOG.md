@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.27.1] - 2026-09-27
+### 🩹 Scan Engine Fairness/Timeout Patch, 3 Dead-Code Fixes
+
+A bug-fix pass from a full live-fire test of every plugin against a real, deliberately-vulnerable lab target: fixes a scheduling/timeout defect in the core engine that was silently dropping real findings from several plugins, plus three plugins confirmed unreachable dead code by direct source inspection.
+
+---
+
+#### ⏱️ Scan Engine — Job Fairness & Timeout Fix (`engine.go`, `handlers.go`)
+Live-fire testing against a real target proved several plugins were missing genuine, confirmed-present vulnerabilities — not a detection-logic bug, but the engine cutting them off or starving them of a turn before they could run:
+
+- **`pluginTimeout`: 45s → 150s.** Multi-phase engines (SQL Injection's Omni-SQLi Phase 1 alone, LFI) walk a fixed endpoint × param × payload grid that runs to several thousand real HTTP requests against a single target — comfortably past 45s on a normal network round-trip. Apache access logs on the live-fire target confirmed the request that would have proven a real SQLi finding was still in flight when the old 45s timeout fired and the goroutine's result was discarded; the finding was never reported despite the plugin having actually reached and hit the vulnerable request moments too late.
+- **Job queue order: target-then-plugin → plugin-then-target.** The dispatcher used to enqueue all ~100 plugins for target 1 before target 2 got a single job. A fast, single-request plugin (`HostHeaderPlugin`, `ViewStatePlugin`) registered near the end of `handlers.go`'s `AddPlugin` list could sit behind *every* plugin — including every slow multi-phase engine — for *every earlier target* combined, on a multi-target scan. Re-ordered to plugin-outer/target-inner: plugin 1 runs against every target, then plugin 2, and so on, so one heavy engine on one target can no longer starve unrelated fast checks on other targets.
+- **Per-job sleep: 300ms → 40ms.** This fixed delay ran unconditionally before *every* job regardless of plugin weight; across the ~90 mostly-instant recon/misconfig plugins in a scan, it alone added tens of seconds of pure dead queue time per target. Kept short rather than removed outright — it still provides jitter/politeness toward the target.
+- **Engine concurrency: 10 → 30 workers** (`NewEngine(10)` → `NewEngine(30)` in `handlers.go`), so the shared job queue drains faster on scans covering many targets/ports.
+- Confirmed via repeated live re-scans against the same lab target: `HostHeaderPlugin`, `ViewStatePlugin`, `PrototypePollutionPlugin`, and `RaceConditionPlugin` findings that were previously flaky-to-absent now report consistently; `SQLInjectionPlugin` and `LFIPlugin` now reliably complete their full guess-list against a single target within the new timeout.
+
+#### 💀 Three Confirmed-Dead Plugins Fixed
+Found via direct source inspection during the same live-fire pass — each was structurally incapable of ever returning a finding, on any target:
+
+- **`plugins/kubelet.go`** — gated on `target.Port == 10250`, but `10250` was never in `handlers.go`'s port-discovery list (`commonPorts`), so the engine would never even offer this plugin a target to run against. Added `10250` to `commonPorts`.
+- **`plugins/cmstest.go`** — checked `if profile.CMS != ""`, but nothing in the codebase ever assigned `TechProfile.CMS` — `engine.go`'s `DeepScanTarget` populated `.Techs` and `.WAF` only. Added real CMS fingerprinting to `DeepScanTarget` (WordPress via `X-Pingback` header or `wp-*`/`wordpress` cookie names, Drupal via `X-Generator`/`X-Drupal-Cache`, Shopify via `X-ShopId`, Joomla/CakePHP via cookie names) so the field is actually populated from data already fetched for the WAF/tech checks — no extra request.
+- **`plugins/struts.go`** — the entire response-verification block was commented out, so `Run()` unconditionally `return nil`'d regardless of target; the commented-out logic was also itself wrong (it checked the *request's* `Content-Type` header — the OGNL payload we ourselves had just set — instead of the response). Rewrote it to check the response body for genuine Struts/OGNL exception signatures (`ognl.OgnlException`, `com.opensymphony.xwork2`, `org.apache.struts2`, etc.), which is what actually proves the backend parsed and evaluated the injected expression.
+
 ## [v1.27.0] - 2026-09-24
 ### 🧠 AI/LLM Threat Coverage Expansion — Slopsquatting, MCP Exposure, LLM Key Leakage & System Prompt Leakage
 

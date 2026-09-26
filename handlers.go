@@ -390,7 +390,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		80, 443, 8080, 8443, 8000, 8001, 8081, 8888, 3000, 5000, 9000, 9090,
 		22, 23, 3389, 5900, 5901, 20, 21,
 		3306, 5432, 1433, 1434, 1521, 27017, 6379, 9200,
-		2375, 2376, 6443, 11211, 5672, 15672, 8500,
+		2375, 2376, 6443, 11211, 5672, 15672, 8500, 10250, // 10250 = Kubelet API
 		25, 465, 587, 110, 995, 143, 993, 389, 636, 53, 161, 445,
 		6333, 19530, 9091, 11434, // Qdrant, Milvus (gRPC + metrics), Ollama
 	}
@@ -464,7 +464,10 @@ WaitLoop:
 
 
 	// STEP 2: PREPARE AND RUN ENGINE
-	engine := NewEngine(10) // Concurrency 10
+	engine := NewEngine(30) // Concurrency 30 — was 10; a fixed target-then-plugin queue plus a
+	// 45s-per-job cap meant a handful of slow, high-combinatorics engines (SQLi, LFI, XSS...)
+	// could starve fast single-request plugins (HostHeader, ViewState...) queued behind them
+	// for many minutes on multi-target scans. More workers drain the shared queue faster.
 	engine.Ctx = ctx        // PASS CONTEXT TO ENGINE
 
 	// ── Engine-Powered Plugins (Prioritized) ──

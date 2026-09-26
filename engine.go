@@ -58,7 +58,16 @@ func (e *Engine) SetFilter(pluginNames string) {
 // pluginTimeout bounds how long a worker waits on a single plugin.Run call
 // before moving on. ScannerPlugin.Run takes no context, so a timed-out call
 // cannot be killed — its goroutine is left to finish/return on its own.
-const pluginTimeout = 45 * time.Second
+//
+// Was 45s. Several multi-phase engines (SQLi Omni-SQLi, LFI) walk a fixed
+// endpoint x param x payload grid that runs to several thousand real HTTP
+// requests per target for Phase 1 alone — comfortably past 45s on a normal
+// network round-trip, so a real vulnerability positioned late in the guessed
+// endpoint list was silently missed (the request that would have confirmed
+// it was proven, via live-fire testing, to still be in flight when the
+// timeout fired and its goroutine's result was discarded). 45s never gave
+// those engines a fair shot at finishing even phase 1 against a single port.
+const pluginTimeout = 150 * time.Second
 
 func (e *Engine) Start() {
 	var wg sync.WaitGroup
@@ -93,7 +102,13 @@ func (e *Engine) Start() {
 						}
 					}
 
-					time.Sleep(300 * time.Millisecond)
+					// Was 300ms flat on every job regardless of plugin weight — across the
+					// ~100 mostly-instant recon/misconfig plugins this alone added tens of
+					// seconds of pure dead time per target that fast single-request plugins
+					// (HostHeader, ViewState...) had to wait out behind everything queued
+					// ahead of them. Kept short (politeness/jitter toward the target) rather
+					// than removed outright.
+					time.Sleep(40 * time.Millisecond)
 
 					// Run the plugin on its own goroutine so a hung/slow plugin.Run
 					// (ScannerPlugin has no context parameter, so it cannot be
@@ -135,10 +150,19 @@ func (e *Engine) Start() {
 	}
 
 	go func() {
-		for _, target := range e.Targets {
-			for _, plugin := range e.Plugins {
+		// Plugin-outer, target-inner: a scan of N targets enqueues plugin[0]
+		// against every target, then plugin[1] against every target, and so on —
+		// not all ~100 plugins for target[0] before target[1] gets a single job.
+		// With the old target-outer order, a fast single-request plugin
+		// registered near the end of AddPlugin (HostHeader, ViewState) sat behind
+		// every slow engine for every earlier target combined; here it sits
+		// behind only the same earlier plugins, once, across all targets —
+		// bounding how badly one heavy engine on one target can starve
+		// unrelated fast checks on other targets.
+		for _, plugin := range e.Plugins {
+			for _, target := range e.Targets {
 				select {
-				case <-e.Ctx.Done(): 
+				case <-e.Ctx.Done():
 					goto FINISH
 				case jobs <- Job{Target: target, Plugin: plugin}:
 				}
@@ -226,6 +250,33 @@ func DeepScanTarget(targetURL string) *models.TechProfile {
 			profile.Techs = append(profile.Techs, models.TechNode{Product: "php", Version: ""})
 		} else if strings.Contains(cookieName, "ASPSESSIONID") || strings.Contains(cookieName, "ASP.NET_SESSIONID") {
 			profile.Techs = append(profile.Techs, models.TechNode{Product: "asp.net", Version: ""})
+		}
+	}
+
+	// CMS fingerprint — was never populated anywhere in the codebase, which
+	// left CMSTestPlugin's `if profile.CMS != ""` permanently unreachable
+	// dead code regardless of target. Detected from the same HEAD-request
+	// headers/cookies already fetched above, no extra request needed.
+	if resp.Header.Get("X-Pingback") != "" {
+		profile.CMS = "WordPress"
+	} else if strings.Contains(strings.ToLower(resp.Header.Get("X-Generator")), "drupal") ||
+		resp.Header.Get("X-Drupal-Cache") != "" || resp.Header.Get("X-Drupal-Dynamic-Cache") != "" {
+		profile.CMS = "Drupal"
+	} else if resp.Header.Get("X-Shopify-Stage") != "" || resp.Header.Get("X-ShopId") != "" {
+		profile.CMS = "Shopify"
+	} else {
+		for _, cookie := range resp.Cookies() {
+			lower := strings.ToLower(cookie.Name)
+			if strings.Contains(lower, "wordpress") || strings.HasPrefix(lower, "wp-") {
+				profile.CMS = "WordPress"
+				break
+			} else if strings.Contains(lower, "joomla") {
+				profile.CMS = "Joomla"
+				break
+			} else if strings.Contains(lower, "cakephp") {
+				profile.CMS = "CakePHP"
+				break
+			}
 		}
 	}
 
