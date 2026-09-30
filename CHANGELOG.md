@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.27.2] - 2026-09-27
+### 🩹 Scan History Status/Duration Fix, CVE Detail Score Mismatch, CVE Center UX Pass, Plugins Sidebar
+
+A user-reported bug-fix + UX pass: interrupted scans stuck forever at "Running" with a nonsensical multi-billion-second duration, the CVE detail modal showing a different CVSS score than the row it was opened from, and three small CVE Center / navigation UX complaints.
+
+---
+
+#### 🩹 Scan History — Stuck "Running" Status & Bogus Duration (`handlers.go`, `storage.go`, `main.go`, `engine.go`, `web/js/history.js`)
+- **Root cause:** `ScanRecord.EndTime` was only ever set on the single happy-path return at the bottom of `handleScan` — any other exit (the app closed/crashed mid-scan, a panic inside a plugin, or the record's own status never getting past `"Running"`) left it at Go's zero-value timestamp (year 1). The frontend's `new Date(end_time) - new Date(start_time)` against that zero value produced a duration like `-63924808719s`, and the record itself stayed shown as "Running" forever.
+- **`handleScan` now finalizes via a single `defer`** (`handlers.go`) registered right after the record is created, so it runs no matter how the handler exits: normal completion, the early "no reachable ports" return, a `recover()`-caught panic deep in a plugin, or a user-triggered Stop. It classifies the outcome itself — `ctx.Err() != nil` → `"Stopped"`, a caught panic → `"Failed"`, otherwise `"Completed"` — and always writes a real `EndTime` plus whatever vulnerabilities were found up to that point.
+- **`StorageManager.SweepStaleRunningScans()`** (`storage.go`), called once at boot from `main.go`: marks any record still `"Running"` from a previous process instance (crash, manual close, restart) as `"Interrupted"`, so old stuck rows get cleaned up automatically instead of sitting in history forever.
+- **`activeScanRecordID`** (`engine.go`) tracks the in-flight record's ID alongside the existing `activeScanCancel`, so the Stop endpoint and the finalize `defer` can agree on which record is active.
+- **Frontend (`web/js/history.js`):** duration is now derived from `status`, not a raw timestamp subtraction — `"Running"` → `Running...`, `"Completed"` with a real `end_time` → computed seconds, anything else (`Stopped`/`Interrupted`/`Failed`) → `-`. Added a `.status-stopped` style (amber) for the new non-terminal-but-not-running statuses.
+- Verified against the live DB: four scans that had been stuck at `Running` for weeks now show `Interrupted`/`Stopped` with `-` duration; a fresh scan cancelled mid-run by starting a new one correctly finalizes as `Stopped` with the vulnerabilities it had already found, not zero.
+
+#### 🩹 CVE Detail Modal — CVSS Score Mismatch vs. the List (`cve/detail.go`)
+- **Root cause:** NVD now scores some CVEs with CVSS **v4.0 only**, but the live NVD lookup backing the CVE detail modal (`GetCVEDetail`) never parsed `cvssMetricV40` at all — only v3.1/v3.0/v2.0 — so it silently fell back to `0`/blank while the CVE Database Explorer's list (`cve/sync.go`, which does parse v4.0 from the raw CVE JSON5 records) showed the real score for the same CVE. Confirmed live on `CVE-2026-97163`: list showed `10.0`, detail modal showed `0.0`.
+- Added `cvssMetricV40` parsing with the same version-priority order already used by `sync.go` (v4.0 → v3.1 → v3.0 → v2.0).
+- **New fallback for CVEs NVD hasn't scored at all yet** ("Awaiting Analysis" — common for very recently published CVEs): when NVD returns no CVSS metric in any version, `GetCVEDetail` now falls back to DORM's own indexed score (`GetCVEByID`) instead of showing `0`/blank, and tags the response with `cvssSource` so the modal (`web/js/cve-center.js`) can show a small "via DORM CVE Database" note under the score instead of presenting it as an NVD figure it isn't.
+- Verified against 8 live High/Critical CVEs: list and detail scores now match in all 8 (5 via the v4.0 fix, 3 via the DORM-DB fallback).
+
+#### 🩹 CVE Center — Default Listing, KEV Click-Through, Explorer Cleanup (`cve/sync.go`, `web/js/cve-center.js`, `web/dashboard.html`)
+- **CVE Database Explorer now shows the latest 30 High/Critical CVEs by default** instead of an empty "search to explore" placeholder — `GetThreatRadar()` widened from Critical-only/top-10 to CVSS ≥ 7.0/top-30. Clearing the search box returns to this default list.
+- **CISA KEV cards (Since Yesterday / Last 7 Days / Last 30 Days) are now clickable** and open the same live CVE detail modal as the Explorer table — previously they had hover styling implying interactivity but no `onclick` at all.
+- **Removed the broken "Target" button** from Explorer search results — it wrote into a `#targetCveInput` element that doesn't exist anywhere in `dashboard.html`, so it silently did nothing on click. The remaining **Details** button is now centered and enlarged in its column.
+
+#### 🔌 Plugins Moved to Sidebar (`web/dashboard.html`, `web/js/helpers.js`)
+- The plugin selection grid was previously a collapsible panel inline in the New Scan view, toggled by a "PLUGINS" button. It's now its own sidebar entry (`Plugins`, directly under `New Scan`) with a dedicated view — same grid, same Select All/Clear All controls, same checkboxes feeding `startScan()`, just no longer competing for space with scan configuration. Removed the now-dead `togglePlugins()` toggle.
+
 ## [v1.27.1] - 2026-09-27
 ### 🩹 Scan Engine Fairness/Timeout Patch, 3 Dead-Code Fixes
 

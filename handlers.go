@@ -112,7 +112,9 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 
 	if cancel != nil {
 		fmt.Println("[!] USER ABORTED THE SCAN!")
-		cancel() // Hit the brakes!
+		cancel() // Hit the brakes! handleScan's own deferred finalize (see
+		// its ctx.Err() check) persists Status="Stopped" once engine.Start()
+		// unwinds, including whatever vulnerabilities were already found.
 		_, _ = w.Write([]byte("Scan stopped"))
 	} else {
 		_, _ = w.Write([]byte("No active scan"))
@@ -283,6 +285,10 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	record := NewScanRecord(recordTitle)
 	_ = DB.SaveScan(record)
 
+	activeScanMu.Lock()
+	activeScanRecordID = record.ID
+	activeScanMu.Unlock()
+
 	// Stream the generated ScanID back to the frontend immediately so live updates work!
 	_, _ = fmt.Fprintf(w, "data: {\"Status\": \"STARTED\", \"ScanID\": \"%s\"}\n\n", record.ID)
 	flusher.Flush()
@@ -290,6 +296,70 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	var foundVulns []*models.Vulnerability
 	var muVulns sync.Mutex
 	// --- STORAGE INTEGRATION END ---
+
+	// Finalize the record no matter how this handler exits — normal
+	// completion, early return (e.g. no reachable ports), a panic from deep
+	// inside a plugin, or a user-triggered stop. Without this, any exit path
+	// other than the happy one at the bottom left the record stuck at
+	// "Running" forever with a zero EndTime (which then rendered as a
+	// nonsensical multi-billion-second duration in the history view).
+	finalized := false
+	defer func() {
+		panicVal := recover()
+
+		if finalized {
+			if panicVal != nil {
+				fmt.Printf("[!] Panic after scan finalize: %v\n", panicVal)
+			}
+			return
+		}
+		finalized = true
+
+		// A prior explicit finalize (e.g. handleStop marking it Stopped)
+		// may have already run — don't clobber it with "Completed".
+		latest, err := DB.GetByID(record.ID)
+		if err == nil && latest.Status != "Running" {
+			activeScanMu.Lock()
+			if activeScanRecordID == record.ID {
+				activeScanRecordID = ""
+			}
+			activeScanMu.Unlock()
+			if panicVal != nil {
+				fmt.Printf("[!] Scan handler panic: %v\n", panicVal)
+			}
+			return
+		}
+
+		switch {
+		case panicVal != nil:
+			fmt.Printf("[!] Scan handler panic: %v\n", panicVal)
+			record.Status = "Failed"
+		case ctx.Err() != nil:
+			record.Status = "Stopped"
+		case record.Status == "" || record.Status == "Running":
+			record.Status = "Completed"
+		}
+		record.EndTime = time.Now()
+
+		muVulns.Lock()
+		record.Vulnerabilities = foundVulns
+		record.TotalVulns = len(foundVulns)
+		muVulns.Unlock()
+
+		stats := make(map[string]int)
+		for _, v := range record.Vulnerabilities {
+			stats[v.Severity]++
+		}
+		record.SeverityStats = stats
+
+		_ = DB.UpdateScan(record.ID, record)
+
+		activeScanMu.Lock()
+		if activeScanRecordID == record.ID {
+			activeScanRecordID = ""
+		}
+		activeScanMu.Unlock()
+	}()
 
 	// STEP 1: PRE-SCAN — Run Sitemapper + DOM-Crawler in parallel.
 	//
@@ -602,9 +672,7 @@ WaitLoop:
 		_, _ = fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
 		flusher.Flush()
 		record.Status = "Failed"
-		record.EndTime = time.Now()
-		_ = DB.UpdateScan(record.ID, record)
-		return
+		return // deferred finalize persists Status/EndTime
 	}
 
 	// ADD ALL DISCOVERED TARGET/PORT COMBINATIONS TO ENGINE
@@ -629,21 +697,7 @@ WaitLoop:
 	analyzer.OnVulnFound = engine.OnFind
 
 	engine.Start()
-
-	// --- STORAGE INTEGRATION START (2/2) ---
-	record.EndTime = time.Now()
-	record.Status = "Completed"
-	record.Vulnerabilities = foundVulns
-	record.TotalVulns = len(foundVulns)
-
-	stats := make(map[string]int)
-	for _, v := range foundVulns {
-		stats[v.Severity]++
-	}
-	record.SeverityStats = stats
-
-	_ = DB.UpdateScan(record.ID, record)
-	// --- STORAGE INTEGRATION END ---
+	// Deferred finalize (registered above) persists EndTime/Status/Vulnerabilities.
 
 	_, _ = fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
 	flusher.Flush()

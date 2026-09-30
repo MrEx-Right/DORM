@@ -22,6 +22,13 @@ func main() {
 	// 1. Initialize the Database
 	InitDB("dorm_engine.db")
 
+	// Clean up any scans left "Running" by a previous process instance
+	// (crash, manual close, restart) — otherwise they sit in history forever
+	// with no end time.
+	if err := DB.SweepStaleRunningScans(); err != nil {
+		fmt.Printf("[!] Failed to sweep stale running scans: %v\n", err)
+	}
+
 	// Wire sitemapper DB callback (avoids circular import)
 	sitemapper.OnSiteMapReady = func(host, scanID string, sm *sitemapper.SiteMap) {
 		if err := DB.SaveSiteMap(host, scanID, sm); err != nil {
@@ -81,7 +88,7 @@ func main() {
 ██║  ██║██║   ██║██████╔╝██╔████╔██║
 ██║  ██║██║   ██║██╔══██╗██║╚██╔╝██║
 ██████╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
-╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.27.1
+╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.27.2
 
        [ Security Engine • Active ]
 `

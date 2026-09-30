@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	activeScanMu     sync.Mutex
-	activeScanCancel context.CancelFunc
+	activeScanMu       sync.Mutex
+	activeScanCancel   context.CancelFunc
+	activeScanRecordID string
 )
 
 type Engine struct {

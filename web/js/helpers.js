@@ -9,8 +9,6 @@ function escapeHtml(text) {
         .replace(/'/g, "&#039;");
 }
 
-function togglePlugins() { const s = document.getElementById('plugin-section'); s.style.display = s.style.display === 'block' ? 'none' : 'block'; }
-
 function toggleAuth() {
     const el = document.getElementById('authContainer');
     const arrow = document.getElementById('authArrow');

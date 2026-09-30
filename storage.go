@@ -221,6 +221,20 @@ func (s *StorageManager) DeleteAllScans() error {
 	return s.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&DBScanRecord{}).Error
 }
 
+// SweepStaleRunningScans marks any scan record still "Running" as
+// "Interrupted". These are leftovers from a previous process instance that
+// exited (crash, manual close, restart) before the scan handler's own
+// finalize logic ran — left unswept, they show up in history stuck at
+// "Running" forever with a zero EndTime.
+func (s *StorageManager) SweepStaleRunningScans() error {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	return s.db.Model(&DBScanRecord{}).
+		Where("status = ?", "Running").
+		Update("status", "Interrupted").Error
+}
+
 func NewScanRecord(target string) ScanRecord {
 	return ScanRecord{
 		ID:              uuid.New().String(),

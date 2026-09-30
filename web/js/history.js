@@ -1,4 +1,19 @@
 // --- HISTORY LOGIC ---
+
+// A scan interrupted before it could set a real EndTime (crash, stop, app
+// restart) either has status !== 'Completed' or an end_time that is Go's
+// zero-value timestamp — computing a diff against that produces a bogus
+// multi-billion-second duration, so guard against both explicitly.
+function formatScanDuration(rec) {
+    if (rec.status === 'Running') return 'Running...';
+    if (rec.status !== 'Completed') return '-';
+    if (!rec.end_time || rec.end_time.startsWith('0001-01-01')) return '-';
+
+    const diff = Math.round((new Date(rec.end_time) - new Date(rec.start_time)) / 1000);
+    if (!Number.isFinite(diff) || diff < 0) return '-';
+    return diff + 's';
+}
+
 async function loadHistory() {
     const tbody = document.getElementById('historyBody');
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#3B82F6;">Loading history...</td></tr>';
@@ -13,8 +28,10 @@ async function loadHistory() {
         }
         records.forEach(rec => {
             const date = new Date(rec.start_time).toLocaleString();
-            const duration = rec.end_time ? Math.round((new Date(rec.end_time) - new Date(rec.start_time)) / 1000) + 's' : 'Running...';
-            const statusClass = rec.status === 'Completed' ? 'status-completed' : 'status-running';
+            const duration = formatScanDuration(rec);
+            const statusClass = rec.status === 'Completed' ? 'status-completed'
+                : rec.status === 'Running' ? 'status-running'
+                : 'status-stopped';
             const html = `
                 <tr>
                     <td class="${statusClass}">${escapeHtml(rec.status)}</td>
@@ -123,12 +140,14 @@ function viewScan(id) {
     renderTargetTabs('detailTargetTabs', detailTargetCounts, detailTargetFilter, selectDetailTarget);
 
     // Set timer display based on duration
-    if (rec.start_time && rec.end_time) {
+    if (rec.status === 'Completed' && rec.start_time && rec.end_time && !rec.end_time.startsWith('0001-01-01')) {
         const diff = Math.round((new Date(rec.end_time) - new Date(rec.start_time)) / 1000);
         const m = Math.floor(diff / 60).toString().padStart(2, '0');
         const s = (diff % 60).toString().padStart(2, '0');
-        document.getElementById('detailTimer').innerText = `${m}:${s}`;
-    } else {
+        document.getElementById('detailTimer').innerText = (diff >= 0) ? `${m}:${s}` : '--:--';
+    } else if (rec.status === 'Running') {
         document.getElementById('detailTimer').innerText = 'Running...';
+    } else {
+        document.getElementById('detailTimer').innerText = '--:--';
     }
 }

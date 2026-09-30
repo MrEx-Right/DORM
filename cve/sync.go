@@ -739,17 +739,20 @@ func GetStats() map[string]interface{} {
 	}
 }
 
-// GetThreatRadar returns the latest 10 Critical CVEs (by scanning backwards).
+// GetThreatRadar returns the latest 30 High/Critical CVEs (CVSS >= 7.0),
+// scanning backwards since newer CVEs are appended near the end of MemoryDB.
+// Used to populate the CVE Center's explorer table by default, before the
+// user has typed a search query.
 func GetThreatRadar() []models.LocalCVE {
 	indexMu.RLock()
 	defer indexMu.RUnlock()
-	
+
 	var radar []models.LocalCVE
 	// Scan backwards assuming newer CVEs are near the end
 	for i := len(MemoryDB) - 1; i >= 0; i-- {
-		if MemoryDB[i].CVSS >= 9.0 {
+		if MemoryDB[i].CVSS >= 7.0 {
 			radar = append(radar, MemoryDB[i])
-			if len(radar) >= 10 {
+			if len(radar) >= 30 {
 				break
 			}
 		}

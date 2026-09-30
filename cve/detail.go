@@ -27,6 +27,7 @@ type CVEDetail struct {
 	CVSSVersion  string   `json:"cvssVersion"`
 	CVSSVector   string   `json:"cvssVector"`
 	CVSSScore    float64  `json:"cvssScore"`
+	CVSSSource   string   `json:"cvssSource"`
 	Severity     string   `json:"severity"`
 	CWEs         []string `json:"cwes"`
 	References   []CVERef `json:"references"`
@@ -53,6 +54,7 @@ type nvdAPIResponse struct {
 				Value string `json:"value"`
 			} `json:"descriptions"`
 			Metrics struct {
+				CvssMetricV40 []nvdCvssMetric `json:"cvssMetricV40"`
 				CvssMetricV31 []nvdCvssMetric `json:"cvssMetricV31"`
 				CvssMetricV30 []nvdCvssMetric `json:"cvssMetricV30"`
 				CvssMetricV2  []nvdCvssMetric `json:"cvssMetricV2"`
@@ -169,8 +171,15 @@ func fetchCVEDetailFromNVD(id string) (*CVEDetail, error) {
 		LastModified: cve.LastModified,
 	}
 
-	// Prefer the newest CVSS version available.
+	// Prefer the newest CVSS version available — matches the priority order
+	// sync.go uses when parsing the raw CVE JSON5 records, so the score
+	// shown here agrees with the one shown in the list/table for the same
+	// CVE instead of silently falling back to 0 when NVD has only scored
+	// a CVE with v4.0 (a struct that used to be missing here entirely).
 	switch {
+	case len(cve.Metrics.CvssMetricV40) > 0:
+		m := cve.Metrics.CvssMetricV40[0].CvssData
+		detail.CVSSVersion, detail.CVSSVector, detail.CVSSScore, detail.Severity = m.Version, m.VectorString, m.BaseScore, m.BaseSeverity
 	case len(cve.Metrics.CvssMetricV31) > 0:
 		m := cve.Metrics.CvssMetricV31[0].CvssData
 		detail.CVSSVersion, detail.CVSSVector, detail.CVSSScore, detail.Severity = m.Version, m.VectorString, m.BaseScore, m.BaseSeverity
@@ -180,6 +189,18 @@ func fetchCVEDetailFromNVD(id string) (*CVEDetail, error) {
 	case len(cve.Metrics.CvssMetricV2) > 0:
 		m := cve.Metrics.CvssMetricV2[0].CvssData
 		detail.CVSSVersion, detail.CVSSVector, detail.CVSSScore, detail.Severity = m.Version, m.VectorString, m.BaseScore, CVSSToSeverity(m.BaseScore)
+	}
+
+	if detail.CVSSScore > 0 {
+		detail.CVSSSource = "NVD"
+	} else if local := GetCVEByID(id); local != nil && local.CVSS > 0 {
+		// NVD hasn't scored this CVE yet (common for freshly published
+		// CVEs — "Awaiting Analysis"). Fall back to our own indexed score
+		// so the detail view doesn't show 0/blank while the list next to
+		// it shows a real number for the same CVE.
+		detail.CVSSScore = local.CVSS
+		detail.Severity = local.Severity
+		detail.CVSSSource = "DORM CVE Database"
 	}
 
 	for _, w := range cve.Weaknesses {
