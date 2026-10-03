@@ -76,6 +76,13 @@ func main() {
 	http.HandleFunc("/api/sitemap", handleSiteMap)
 	http.HandleFunc("/api/sitemap/list", handleSiteMapList)
 
+	// Scan Template API Routes (personal, UI-built vulnerability templates)
+	http.HandleFunc("/api/templates", handleTemplates)             // GET list, POST create
+	http.HandleFunc("/api/templates/get", handleTemplateGet)       // GET ?id=
+	http.HandleFunc("/api/templates/update", handleTemplateUpdate) // POST
+	http.HandleFunc("/api/templates/delete", handleTemplateDelete) // POST ?id=
+	http.HandleFunc("/api/templates/options", handleTemplateOptions)
+
 	// DOM-Crawler real-time event stream (SSE)
 	http.HandleFunc("/dom-events", handleDOMEvents)
 
@@ -88,7 +95,7 @@ func main() {
 ██║  ██║██║   ██║██████╔╝██╔████╔██║
 ██║  ██║██║   ██║██╔══██╗██║╚██╔╝██║
 ██████╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
-╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.27.2
+╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.28.0
 
        [ Security Engine • Active ]
 `

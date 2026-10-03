@@ -3,6 +3,7 @@ package main
 import (
 	"DORM/models"
 	"DORM/sitemapper"
+	"DORM/templates"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -84,7 +85,7 @@ func InitDB(path string) {
 		log.Fatalf("[!] Failed to connect to database: %v", err)
 	}
 
-	err = database.AutoMigrate(&DBScanRecord{}, &DBSiteMap{})
+	err = database.AutoMigrate(&DBScanRecord{}, &DBSiteMap{}, &templates.DBScanTemplate{})
 	if err != nil {
 		log.Fatalf("[!] Database migration failed: %v", err)
 	}
@@ -219,6 +220,107 @@ func (s *StorageManager) DeleteAllScans() error {
 	defer s.Mutex.Unlock()
 
 	return s.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&DBScanRecord{}).Error
+}
+
+// --- SCAN TEMPLATE OPERATIONS ---
+// Same dorm_engine.db, same StorageManager — templates are not a separate
+// store, just another table alongside DBScanRecord/DBSiteMap.
+
+func (s *StorageManager) SaveTemplate(t templates.ScanTemplate) (templates.ScanTemplate, error) {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	now := time.Now()
+	t.ID = uuid.New().String()
+	t.CreatedAt = now
+	t.UpdatedAt = now
+
+	dbRecord, err := templates.FromAppModel(t)
+	if err != nil {
+		return templates.ScanTemplate{}, err
+	}
+	if err := s.db.Create(&dbRecord).Error; err != nil {
+		return templates.ScanTemplate{}, err
+	}
+	return dbRecord.ToAppModel()
+}
+
+func (s *StorageManager) GetAllTemplates() ([]templates.ScanTemplate, error) {
+	s.Mutex.RLock()
+	defer s.Mutex.RUnlock()
+
+	var dbRecords []templates.DBScanTemplate
+	if err := s.db.Order("created_at desc").Find(&dbRecords).Error; err != nil {
+		return nil, err
+	}
+
+	result := make([]templates.ScanTemplate, 0, len(dbRecords))
+	for _, r := range dbRecords {
+		t, err := r.ToAppModel()
+		if err != nil {
+			continue
+		}
+		result = append(result, t)
+	}
+	return result, nil
+}
+
+func (s *StorageManager) GetTemplate(id string) (templates.ScanTemplate, error) {
+	s.Mutex.RLock()
+	defer s.Mutex.RUnlock()
+
+	var dbRecord templates.DBScanTemplate
+	if err := s.db.First(&dbRecord, "id = ?", id).Error; err != nil {
+		return templates.ScanTemplate{}, fmt.Errorf("template not found for ID: %s", id)
+	}
+	return dbRecord.ToAppModel()
+}
+
+func (s *StorageManager) UpdateTemplate(id string, t templates.ScanTemplate) (templates.ScanTemplate, error) {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	t.ID = id
+	t.UpdatedAt = time.Now()
+
+	dbRecord, err := templates.FromAppModel(t)
+	if err != nil {
+		return templates.ScanTemplate{}, err
+	}
+
+	// Only touch name/config/updated_at — CreatedAt is never part of this
+	// update, so it survives regardless of what the client sent.
+	result := s.db.Model(&templates.DBScanTemplate{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"name":       dbRecord.Name,
+		"config":     dbRecord.Config,
+		"updated_at": dbRecord.UpdatedAt,
+	})
+	if result.Error != nil {
+		return templates.ScanTemplate{}, result.Error
+	}
+	if result.RowsAffected == 0 {
+		return templates.ScanTemplate{}, fmt.Errorf("cannot update: template ID %s not found", id)
+	}
+
+	var updated templates.DBScanTemplate
+	if err := s.db.First(&updated, "id = ?", id).Error; err != nil {
+		return templates.ScanTemplate{}, err
+	}
+	return updated.ToAppModel()
+}
+
+func (s *StorageManager) DeleteTemplate(id string) error {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	result := s.db.Where("id = ?", id).Delete(&templates.DBScanTemplate{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("cannot delete: template ID %s not found", id)
+	}
+	return nil
 }
 
 // SweepStaleRunningScans marks any scan record still "Running" as

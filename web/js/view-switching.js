@@ -13,4 +13,5 @@ function switchView(viewName) {
     if (viewName === 'cvecenter') loadCVECenter();
     if (viewName === 'sitemap') initSitemapView();
     if (viewName === 'sci') initSCIView();
+    if (viewName === 'templates') initTemplatesView();
 }

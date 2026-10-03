@@ -1,8 +1,8 @@
 package xssengine
 
 import (
+	"DORM/bypassers"
 	"fmt"
-	"net/url"
 	"strings"
 )
 
@@ -19,8 +19,10 @@ func EncodePayload(payload string) []string {
 	// Original
 	results = append(results, payload)
 
-	// Double URL encoding
-	results = append(results, DoubleURLEncode(payload))
+	// Double URL encoding — "UEP" toggle in the WAF Bypass sidebar
+	if bypassers.GlobalEncodingConfig.UEPEnabled {
+		results = append(results, bypassers.DoubleURLEncode(payload))
+	}
 
 	// Unicode escape sequences
 	results = append(results, UnicodeEscape(payload))
@@ -34,16 +36,13 @@ func EncodePayload(payload string) []string {
 	// Mixed encoding (partial encode)
 	results = append(results, MixedEncode(payload))
 
-	// Null byte prefix
-	results = append(results, "%00"+payload)
+	// Null byte prefix/suffix — "Null-Byte Injection" toggle in the WAF Bypass sidebar
+	if bypassers.GlobalEncodingConfig.NullByteEnabled {
+		results = append(results, "%00"+payload)
+		results = append(results, bypassers.InjectNullByte(payload))
+	}
 
 	return results
-}
-
-// DoubleURLEncode applies URL encoding twice.
-func DoubleURLEncode(s string) string {
-	first := url.QueryEscape(s)
-	return url.QueryEscape(first)
 }
 
 // UnicodeEscape converts critical characters to unicode escape sequences.

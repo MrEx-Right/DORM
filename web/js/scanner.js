@@ -41,6 +41,8 @@ function startScan() {
     const wafNullByte = document.getElementById('wafNullByteToggle') ? document.getElementById('wafNullByteToggle').checked : false;
     const wafUEP = document.getElementById('wafUEPToggle') ? document.getElementById('wafUEPToggle').checked : false;
     const wafTLS = document.getElementById('wafTLSToggle') ? document.getElementById('wafTLSToggle').checked : false;
+    const wafCaseAlt = document.getElementById('wafCaseAltToggle') ? document.getElementById('wafCaseAltToggle').checked : false;
+    const wafHPP = document.getElementById('wafHPPToggle') ? document.getElementById('wafHPPToggle').checked : false;
 
     // 2. Get selected plugins from grid
     const selected = Array.from(document.querySelectorAll('.plugin-check:checked')).map(c => c.value);
@@ -88,7 +90,7 @@ function startScan() {
     const cveRadar = false; // Toggle was removed from UI
 
     // Assign to global variable (Notice: query param is now "targets")
-    scanEventSource = new EventSource(`/scan?targets=${encodeURIComponent(targetString)}&plugins=${encodeURIComponent(selected.join(","))}&auth=${encodeURIComponent(authHeader)}&proxyEnabled=${proxyEnabled}&proxyUrl=${encodeURIComponent(proxyUrl)}&wafDelay=${wafDelay}&wafJitter=${wafJitter}&wafNullByte=${wafNullByte}&wafUEP=${wafUEP}&wafTLS=${wafTLS}`);
+    scanEventSource = new EventSource(`/scan?targets=${encodeURIComponent(targetString)}&plugins=${encodeURIComponent(selected.join(","))}&auth=${encodeURIComponent(authHeader)}&proxyEnabled=${proxyEnabled}&proxyUrl=${encodeURIComponent(proxyUrl)}&wafDelay=${wafDelay}&wafJitter=${wafJitter}&wafNullByte=${wafNullByte}&wafUEP=${wafUEP}&wafTLS=${wafTLS}&wafCaseAlt=${wafCaseAlt}&wafHPP=${wafHPP}`);
 
     scanEventSource.onmessage = (e) => {
         const data = JSON.parse(e.data);

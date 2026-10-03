@@ -20,6 +20,7 @@ import (
 	"DORM/plugins/xssengine"
 	"DORM/sci"
 	"DORM/sitemapper"
+	"DORM/templates"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -205,6 +206,14 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		targetsParam = r.URL.Query().Get("target") // Fallback: If old app.js is running, grab this!
 	}
 	selectedPluginsStr := r.URL.Query().Get("plugins")
+	// A template-only run (Scan Templates page) is the only caller that ever
+	// sends customTemplates — its DynamicPlugin checks only ever hit the one
+	// literal path/payload the template defines, never the sitemapper's
+	// discovered-endpoint list a normal plugin suite relies on. Spinning up
+	// a headless-browser DOM crawl for that is pure dead weight, and against
+	// a bare test/API-style target it was stalling the whole pre-scan phase
+	// for up to its 120s timeout on every single run.
+	skipDOMCrawl := r.URL.Query().Get("customTemplates") != ""
 
 	// --- UPDATE CLIENT SETTINGS (Located in client.go) ---
 	authHeader := r.URL.Query().Get("auth")
@@ -226,6 +235,10 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 			bypassers.GlobalDelayConfig.JitterMs = j
 		}
 	}
+	bypassers.GlobalEncodingConfig.NullByteEnabled = r.URL.Query().Get("wafNullByte") == "true"
+	bypassers.GlobalEncodingConfig.UEPEnabled = r.URL.Query().Get("wafUEP") == "true"
+	bypassers.GlobalEncodingConfig.CaseAlternateEnabled = r.URL.Query().Get("wafCaseAlt") == "true"
+	bypassers.GlobalEncodingConfig.HPPEnabled = r.URL.Query().Get("wafHPP") == "true"
 	// ----------------------------------------------------
 
 	// Opt-in: allow CloudStoragePlugin's anonymous PUT/write test. Off by
@@ -398,21 +411,28 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 			}()
 
 			// ── Sub-goroutine B: DOM-Crawler (browser crawl) ───────────────
+			// Skipped entirely for a template-only scan — see skipDOMCrawl above.
 			type domResult struct {
 				result *dom.DOMResult
 				err    error
 			}
 			domCh := make(chan domResult, 1)
-			go func() {
-				result, err := dom.Crawl(prescanCtx, tURL, dom.FastDOMConfig())
-				domCh <- domResult{result, err}
-			}()
+			if !skipDOMCrawl {
+				go func() {
+					result, err := dom.Crawl(prescanCtx, tURL, dom.FastDOMConfig())
+					domCh <- domResult{result, err}
+				}()
+			}
 
-			// ── Wait for BOTH to complete (prescanCtx deadline is the cap) ─
+			// ── Wait for pre-scan goroutine(s) to complete (prescanCtx deadline is the cap) ─
 			var finalSM *sitemapper.SiteMap
 			var finalDOM *dom.DOMResult
 
-			for pending := 2; pending > 0; pending-- {
+			pendingCount := 2
+			if skipDOMCrawl {
+				pendingCount = 1 // only waiting on the sitemapper goroutine
+			}
+			for pending := pendingCount; pending > 0; pending-- {
 				select {
 				case r := <-smCh:
 					if r.err != nil {
@@ -666,6 +686,26 @@ WaitLoop:
 	// Apply User Filters
 	engine.SetFilter(selectedPluginsStr)
 
+	// Inject user-selected custom vulnerability templates (built via the
+	// "Scan Templates" page) as regular plugins. Their names are added to
+	// AllowedPlugins explicitly so the static-plugin checkbox filter above
+	// can never accidentally exclude a template the user picked on purpose.
+	customTemplateIDs := r.URL.Query().Get("customTemplates")
+	if customTemplateIDs != "" {
+		for _, id := range strings.Split(customTemplateIDs, ",") {
+			id = strings.TrimSpace(id)
+			if id == "" {
+				continue
+			}
+			tpl, err := DB.GetTemplate(id)
+			if err != nil {
+				continue
+			}
+			engine.AddPlugin(&templates.DynamicPlugin{Template: tpl})
+			engine.AllowedPlugins[tpl.Name] = true
+		}
+	}
+
 	if len(activeTargets) == 0 {
 		// Send explicit error to frontend so it doesn't just silently stop
 		_, _ = fmt.Fprintf(w, "data: {\"Status\": \"ERROR\", \"Message\": \"No reachable ports found for the provided target(s). Check your input or network.\"}\n\n")
@@ -821,6 +861,119 @@ func handleDeleteAll(w http.ResponseWriter, r *http.Request) {
 	_ = DB.DeleteAllSiteMaps()
 
 	_, _ = fmt.Fprintf(w, `{"status":"success"}`)
+}
+
+// --- SCAN TEMPLATE API HANDLERS ---
+// Personal, UI-built vulnerability templates (DORM's equivalent of a
+// hand-written Nuclei YAML template) — stored in the same dorm_engine.db
+// as every other record, via DB (StorageManager).
+
+func handleTemplates(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+
+	switch r.Method {
+	case http.MethodGet:
+		list, err := DB.GetAllTemplates()
+		if err != nil {
+			http.Error(w, `{"error":"Database error"}`, http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(list)
+
+	case http.MethodPost:
+		var t templates.ScanTemplate
+		if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+			http.Error(w, `{"error":"Invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(t.Name) == "" {
+			http.Error(w, `{"error":"Template name is required"}`, http.StatusBadRequest)
+			return
+		}
+		saved, err := DB.SaveTemplate(t)
+		if err != nil {
+			http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusInternalServerError)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(saved)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func handleTemplateGet(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, `{"error":"Missing 'id' parameter"}`, http.StatusBadRequest)
+		return
+	}
+
+	t, err := DB.GetTemplate(id)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusNotFound)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(t)
+}
+
+func handleTemplateUpdate(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var t templates.ScanTemplate
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		http.Error(w, `{"error":"Invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(t.ID) == "" {
+		http.Error(w, `{"error":"Missing 'id' field"}`, http.StatusBadRequest)
+		return
+	}
+
+	updated, err := DB.UpdateTemplate(t.ID, t)
+	if err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusInternalServerError)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(updated)
+}
+
+func handleTemplateDelete(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "Missing 'id' parameter", http.StatusBadRequest)
+		return
+	}
+
+	if err := DB.DeleteTemplate(id); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"%v"}`, err), http.StatusInternalServerError)
+		return
+	}
+
+	_, _ = fmt.Fprintf(w, `{"status":"success"}`)
+}
+
+func handleTemplateOptions(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(templates.GetBuilderOptions())
 }
 
 func handleKEV(w http.ResponseWriter, r *http.Request) {

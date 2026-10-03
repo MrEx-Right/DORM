@@ -103,6 +103,41 @@ func (p *XSSPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 
 	// ================================================================
+	// PHASE 2b: ENCODING-BYPASS VARIANTS (double URL, unicode, HTML
+	// entity, mixed, null-byte encodings of a small core payload set —
+	// catches filters that block raw payloads but decode/normalize
+	// encoded input before rendering it back unescaped)
+	// ================================================================
+	encodedPayloads := GenerateEncodedPayloads(canary)
+
+	for _, ep := range endpoints {
+		for _, param := range params {
+			for _, payload := range encodedPayloads {
+				targetURL := fmt.Sprintf("%s%s?%s=%s", baseURL, ep, param, url.QueryEscape(payload))
+				resp, err := client.Get(targetURL)
+				if err != nil {
+					continue
+				}
+				body := models.ReadBody(resp, 32768)
+
+				if strings.Contains(body, canary) {
+					if ContainsXSSIndicator(body) {
+						return &models.Vulnerability{
+							Target:      target,
+							Name:        "Reflected XSS (Encoding-Bypass Variant)",
+							Severity:    "HIGH",
+							CVSS:        7.5,
+							Description: fmt.Sprintf("An encoding-transformed XSS payload (double URL / unicode / HTML entity / null-byte) reflected and executed unencoded in the response body.\nURL: %s\nParameter: %s\nPayload: %s", targetURL, param, payload),
+							Solution:    "Normalize and validate all input encodings before output. Apply context-aware output encoding after full decoding, not before. Deploy strict Content-Security-Policy headers.",
+							Reference:   "https://owasp.org/www-community/attacks/xss/",
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// ================================================================
 	// PHASE 3: SPIDER ENDPOINT INTEGRATION — GET & POST
 	// ================================================================
 	key := "endpoints_" + target.IP

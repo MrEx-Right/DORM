@@ -1,6 +1,7 @@
 package sqliengine
 
 import (
+	"DORM/bypassers"
 	"DORM/models"
 	"fmt"
 	"io"
@@ -47,6 +48,19 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	// ══════════════════════════════════════════════════════════════════════
 	errorPayloads := GetErrorPayloads(wafType)
 
+	// "Case Alternation" toggle in the WAF Bypass sidebar — doubles the
+	// payload set with a case-randomized variant of each (sElEcT, oR).
+	// Safe for SQL keywords (case-insensitive in every mainstream dialect),
+	// unlike doing this to XSS payloads where "alert" is a case-sensitive
+	// JS identifier.
+	if bypassers.GlobalEncodingConfig.CaseAlternateEnabled {
+		altPayloads := make([]string, 0, len(errorPayloads))
+		for _, p := range errorPayloads {
+			altPayloads = append(altPayloads, bypassers.CaseAlternate(p))
+		}
+		errorPayloads = append(errorPayloads, altPayloads...)
+	}
+
 	for _, ep := range endpoints {
 		for _, param := range params {
 			for _, payload := range errorPayloads {
@@ -72,6 +86,47 @@ func (p *SQLInjectionPlugin) Run(target models.ScanTarget) *models.Vulnerability
 								targetURL, payload, errMsg, db,
 							),
 							Solution:  "Use Prepared Statements / Parameterized Queries.",
+							Reference: "OWASP A03:2021 – Injection",
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// ══════════════════════════════════════════════════════════════════════
+	// PHASE 1b — HTTP Parameter Pollution ("HPP" toggle in the WAF Bypass
+	// sidebar). Duplicates the target param with a benign decoy value plus
+	// the real payload — WAFs/proxies that only inspect the first (or
+	// last) occurrence of a repeated key can miss the value the backend
+	// actually resolves.
+	// ══════════════════════════════════════════════════════════════════════
+	if bypassers.GlobalEncodingConfig.HPPEnabled {
+		for _, ep := range endpoints {
+			for _, param := range params {
+				q := bypassers.PolluteParam(url.Values{}, param, "1", `' OR 1=1--`)
+				targetURL := fmt.Sprintf("%s%s?%s", baseURL, ep, q.Encode())
+				resp, err := client.Get(targetURL)
+				if err != nil {
+					continue
+				}
+				bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 65536))
+				_ = resp.Body.Close()
+				bodyStr := string(bodyBytes)
+
+				for _, errMsg := range DBErrors {
+					if strings.Contains(bodyStr, errMsg) {
+						db := FingerprintDB(bodyStr)
+						return &models.Vulnerability{
+							Target:   target,
+							Name:     "SQL Injection (HTTP Parameter Pollution)",
+							Severity: "CRITICAL",
+							CVSS:     9.8,
+							Description: fmt.Sprintf(
+								"Database error triggered via a duplicated ('polluted') query parameter — the backend resolved a different occurrence of the parameter than a WAF/proxy inspecting only the first or last one would have.\nURL: %s\nError Match: %s\nDetected DB: %s",
+								targetURL, errMsg, db,
+							),
+							Solution:  "Use Prepared Statements / Parameterized Queries. Reject requests with duplicate parameter names, or explicitly define and enforce single-value handling.",
 							Reference: "OWASP A03:2021 – Injection",
 						}
 					}

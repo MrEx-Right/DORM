@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.28.0] - 2026-10-02
+### ✨ New: Scan Templates, Plus a WAF Bypass Module Overhaul
+
+This release adds **Scan Templates** — build and run your own custom vulnerability checks straight from DORM's UI, no YAML required — on top of a full audit-and-fix pass on the `bypassers/` package and its WAF Bypass sidebar.
+
+---
+
+#### ✨ New: Scan Templates — Build Your Own Vulnerability Checks, No YAML Required (`templates/`, `storage.go`, `handlers.go`, `web/dashboard.html`, `web/js/scanner.js`, `web/js/template-builder.js`)
+- DORM can now run **your own custom vulnerability checks** — the same idea as a single-request Nuclei template, but built entirely with dropdowns, toggles and text fields instead of hand-written YAML. Define an HTTP request (method, path, headers, body, with optional `{{payload}}` substitution across all three) and a matcher (status code / word / regex, AND/OR, optional negate for "vulnerable when absent") — save it, and it runs during a scan exactly like one of DORM's ~100 built-in plugins.
+- Build and manage templates on their own new sidebar page, **Scan Templates**. Run them from the New Scan page itself: an "Include custom templates" picker selects which saved template(s) to include, arming START SCAN into a dedicated "RUN TEMPLATE SCAN" mode. These runs report into their own **Custom Template Findings** panel, kept separate from the general results table, so your own checks are always easy to tell apart from the built-in plugin suite.
+- Verified with 11 templates covering every request/matcher combination (GET/PUT, payload substitution in path/body/header, all three matcher types, AND/OR, negate, zero-payload requests), run together against a live target: every template designed to match did, and two deliberately-unmatchable control templates correctly produced nothing.
+
+#### 🛡️ WAF Bypass Module Overhaul — Dead Code Reconnected, UI Toggles Wired, 2 New Techniques
+
+A full audit-and-fix pass on the `bypassers/` package and its WAF Bypass sidebar: two existing bypass primitives were fully implemented but never called from anywhere in the scan engine, two UI toggles for those exact techniques existed on screen but were silently dropped server-side, and two new bypass techniques were added to close gaps the engine's own bypass-advisory text had been recommending without ever implementing.
+
+#### 💀 Dead Bypass Code Reconnected (`plugins/xssengine/encoders.go`, `plugins/xssengine/plugin.go`)
+- **Root cause:** `bypassers.DoubleURLEncode` (`uep.go`) and `bypassers.InjectNullByte` (`nullbyte.go`) had zero call sites anywhere in the repo — confirmed by this project's own prior CHANGELOG entry describing `nullbyte.go` as implemented "for future payloads." `plugins/xssengine/encoders.go` carried its own independent, unused duplicate of double-URL-encoding, and its entire `EncodePayload`/`GenerateEncodedPayloads` encoding-bypass engine (Unicode escape, HTML entity, mixed encoding, null-byte) was itself never invoked from the XSS plugin's `Run()`.
+- `encoders.go`'s local `DoubleURLEncode` removed in favor of `bypassers.DoubleURLEncode`; a null-byte **suffix** variant via `bypassers.InjectNullByte` added alongside the pre-existing prefix variant.
+- New **Phase 2b** in `XSSPlugin.Run()` actually invokes `GenerateEncodedPayloads` against every endpoint/param combination — the whole encoding-bypass engine now runs during a real scan instead of sitting unreferenced.
+- Verified live against a lab target: all 24 generated encoding variants well-formed (no empty/malformed payloads), full pipeline completes without error, confirmed end-to-end through the real `/scan` API with the resulting scan record persisted and readable back from the database.
+
+#### 🔌 WAF Bypass Sidebar — Toggle-to-Backend Gap Closed (`handlers.go`, `bypassers/config.go`, `plugins/xssengine/encoders.go`)
+- **Root cause:** the "Null-Byte Injection" and "UEP (Double URL Encode)" checkboxes in the WAF Bypass sidebar were fully wired client-side (`scanner.js` read them and appended `wafNullByte`/`wafUEP` to the `/scan` request) but `handlers.go` never read either query parameter anywhere — the toggles had no effect on a scan regardless of their on/off state.
+- New `bypassers.GlobalEncodingConfig` (`bypassers/config.go`) holds the active toggle state, set from `handlers.go` at scan start (same pattern as the existing `GlobalDelayConfig`).
+- `encoders.go`'s double-URL-encode and null-byte variants are now gated behind `UEPEnabled`/`NullByteEnabled` — off by default, matching the checkboxes' unchecked default state.
+- Verified live through the actual running server and browser: toggled both checkboxes on in the UI, started a scan, confirmed the outgoing `/scan` request carried `wafUEP=true`/`wafNullByte=true` and the server returned `200 OK`.
+
+#### ✨ Two New Bypass Techniques (`bypassers/casealt.go`, `bypassers/hpp.go`, `plugins/sqliengine/plugin.go`)
+- **`CaseAlternate`** — randomly flips letter case in a payload (`sElEcT`, `oR`), leaving non-letters untouched. Wired into `SQLInjectionPlugin`'s error-based payload set (doubles it with case-randomized variants) rather than XSS — SQL keywords are case-insensitive in every mainstream dialect, while XSS payloads embed `alert(...)`, a case-*sensitive* JS identifier that case-alternation would break.
+- **`PolluteParam`** (`bypassers/hpp.go`) — HTTP Parameter Pollution: duplicates a query parameter across multiple values instead of one. New **Phase 1b** in `SQLInjectionPlugin.Run()` fires a polluted-parameter request (e.g. `id=1&id=' OR 1=1--`) per endpoint/param and can independently report `SQL Injection (HTTP Parameter Pollution)`.
+- Both techniques were already named in the engine's own `wafengine/bypass_advisor.go` bypass-advisory text (case alternation in 6 WAF-specific strategy strings, HPP in 4) without either ever being implemented anywhere in the codebase.
+- Two new cards ("Case Alternation", "HTTP Parameter Pollution") added to the WAF Bypass sidebar, wired `scanner.js` → `/scan?wafCaseAlt=&wafHPP=` → `handlers.go` → `GlobalEncodingConfig`, matching the existing delay/null-byte/UEP toggle pattern.
+- Verified in isolation (generated payload count scales 15 → 18 → 21 → 24 as each toggle combination is enabled) and live end-to-end: checked both new boxes in the running UI, started a scan, confirmed `wafCaseAlt=true&wafHPP=true` on the actual outgoing request with a `200 OK` response.
+
 ## [v1.27.2] - 2026-09-27
 ### 🩹 Scan History Status/Duration Fix, CVE Detail Score Mismatch, CVE Center UX Pass, Plugins Sidebar
 
