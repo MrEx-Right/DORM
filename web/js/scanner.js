@@ -49,7 +49,7 @@ function startScan() {
 
     // 3. MULTI-TARGET LOGIC: Split by newline, trim, and remove empty lines
     const targetsArray = rawTargets.split('\n').map(t => t.trim()).filter(t => t !== '');
-    if (targetsArray.length === 0) return alert("Please enter at least one target!");
+    if (targetsArray.length === 0) return showToast("Please enter at least one target!", 'warn');
 
     // Join multiple targets with a comma to send via GET request
     const targetString = targetsArray.join(',');
@@ -93,7 +93,13 @@ function startScan() {
     scanEventSource = new EventSource(`/scan?targets=${encodeURIComponent(targetString)}&plugins=${encodeURIComponent(selected.join(","))}&auth=${encodeURIComponent(authHeader)}&proxyEnabled=${proxyEnabled}&proxyUrl=${encodeURIComponent(proxyUrl)}&wafDelay=${wafDelay}&wafJitter=${wafJitter}&wafNullByte=${wafNullByte}&wafUEP=${wafUEP}&wafTLS=${wafTLS}&wafCaseAlt=${wafCaseAlt}&wafHPP=${wafHPP}`);
 
     scanEventSource.onmessage = (e) => {
-        const data = JSON.parse(e.data);
+        let data;
+        try {
+            data = JSON.parse(e.data);
+        } catch (err) {
+            console.error("Malformed SSE frame, skipped:", e.data, err);
+            return;
+        }
 
         if (data.Status === "STARTED") {
             if (data.ScanID) {
@@ -117,7 +123,7 @@ function startScan() {
         }
 
         if (data.Status === "ERROR") {
-            alert("Scan Error: " + data.Message);
+            showToast("Scan Error: " + data.Message, 'error', 8000);
             finishScanUI(); // Reset UI immediately on error
             if (sitemapPollInterval) {
                 clearInterval(sitemapPollInterval);
@@ -126,38 +132,18 @@ function startScan() {
             return;
         }
 
+        // Keep-alive / control frames (e.g. CRAWLING_DOM) are not findings.
+        if (!isFinding(data)) return;
+
+        const f = normalizeFinding(data);
         vulnCount++; scanResults.push(data);
 
-        const badgeClass = "sev-" + escapeHtml(data.Severity.toUpperCase());
-        const host = data.Target.IP;
+        document.getElementById('tableBody').insertAdjacentHTML('beforeend',
+            buildVulnRowHTML(f, `row-${vulnCount}`, `detail-${vulnCount}`, `toggleDetail(${vulnCount})`));
 
-        let engineLabel = 'Plugin';
-        if (data.Name.includes("Exploit")) engineLabel = 'EDB';
-        else if (data.Name.includes("Spider")) engineLabel = 'Spider';
-
-        const html = `
-            <tr class="vuln-row" data-severity="${escapeHtml(data.Severity.toUpperCase())}" data-target="${escapeHtml(host)}" id="row-${vulnCount}" onclick="toggleDetail(${vulnCount})">
-                <td><span class="badge ${badgeClass}">${escapeHtml(data.Severity)}</span></td>
-                <td style="font-weight:bold; color:#fff;">${data.CVSS.toFixed(1)}</td>
-                <td style="color:#fff;">${escapeHtml(data.Name)}</td>
-                <td style="color:var(--text-dim); font-size:0.9em;">${engineLabel}</td>
-                <td>${escapeHtml(data.Target.IP)}:${data.Target.Port}</td>
-                <td class="arrow"><i class="fas fa-chevron-down"></i></td>
-            </tr>
-            <tr class="detail-row" data-severity="${escapeHtml(data.Severity.toUpperCase())}" data-target="${escapeHtml(host)}" id="detail-${vulnCount}">
-                <td colspan="6" style="padding:0; border:none;">
-                    <div class="detail-content">
-                        <strong style="color:var(--accent)">ANALYSIS:</strong><br>${escapeHtml(data.Description).replace(/\n/g, '<br>')}<br><br>
-                        <strong style="color:var(--success)">SOLUTION:</strong><br>${escapeHtml(data.Solution || "Apply patches.")}<br><br>
-                        <em style="font-size:0.8em">Ref: ${escapeHtml(data.Reference)}</em>
-                    </div>
-                </td>
-            </tr>`;
-
-        document.getElementById('tableBody').insertAdjacentHTML('beforeend', html);
-
-        liveTargetCounts[host] = (liveTargetCounts[host] || 0) + 1;
-        renderTargetTabs('targetTabs', liveTargetCounts, liveTargetFilter, selectLiveTarget);
+        liveTargetCounts[f.host] = (liveTargetCounts[f.host] || 0) + 1;
+        queueRedraw('live-target-tabs', () =>
+            renderTargetTabs('targetTabs', liveTargetCounts, liveTargetFilter, selectLiveTarget));
         // Only fold the freshly-inserted row into the current filter — a
         // full applyResultFilters() pass would collapse any detail panel
         // the user already has open while the scan is still streaming.
@@ -166,20 +152,38 @@ function startScan() {
             newRow.style.display = 'none';
         }
 
-        const idx = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'].indexOf(data.Severity.toUpperCase());
-        if (idx !== -1) { vulnChart.data.datasets[0].data[idx]++; vulnChart.update(); }
+        if (f.severityIndex !== -1) {
+            vulnChart.data.datasets[0].data[f.severityIndex]++;
+            queueRedraw('live-chart', () => vulnChart.update());
+        }
     };
 
     scanEventSource.onerror = (err) => {
         console.error("SSE Connection Error:", err);
-        // Do not call stopScan() here, because EventSource auto-reconnects on temporary network drops.
-        // Calling stopScan() was aborting the entire scan incorrectly.
+        // /scan is a GET that STARTS a scan, so the browser's automatic
+        // EventSource reconnect is never a resume: the reconnect is a brand-new
+        // /scan request, and the server cancels the scan that is still running
+        // (handleScan -> activeScanCancel) and starts over — duplicated results,
+        // a half-finished "Stopped" history record. So any error is final here:
+        // close the stream ourselves (CLOSED = the browser already gave up;
+        // CONNECTING = it was about to reconnect) and reset the UI. The server
+        // keeps scanning to the end on its own context; results land in History.
+        if (scanEventSource) {
+            showToast("Lost connection to the scanner. The scan may still be finishing on the server — check Scan History.", 'error', 10000);
+            finishScanUI();
+        }
     };
 }
 
 // NEW: STOP SCAN FUNCTION
 async function stopScan() {
-    await fetch('/stop'); // Send signal to backend
+    try {
+        await apiFetch('/stop'); // Send signal to backend
+    } catch (e) {
+        // Still tear the UI down below — a dead backend must not leave the
+        // button stuck on STOP — but tell the user the stop may not have landed.
+        showToast("Could not confirm the scan was stopped: " + errMsg(e), 'warn', 8000);
+    }
 
     if (scanEventSource) {
         scanEventSource.close(); // Cut the connection

@@ -18,8 +18,7 @@ async function loadHistory() {
     const tbody = document.getElementById('historyBody');
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:#3B82F6;">Loading history...</td></tr>';
     try {
-        const resp = await fetch('/api/history');
-        const records = await resp.json();
+        const records = await apiJSON('/api/history');
         window.allScanRecords = records || [];
         tbody.innerHTML = '';
         if (!records || records.length === 0) {
@@ -29,6 +28,7 @@ async function loadHistory() {
         records.forEach(rec => {
             const date = new Date(rec.start_time).toLocaleString();
             const duration = formatScanDuration(rec);
+            const stats = rec.severity_stats || {};
             const statusClass = rec.status === 'Completed' ? 'status-completed'
                 : rec.status === 'Running' ? 'status-running'
                 : 'status-stopped';
@@ -36,12 +36,12 @@ async function loadHistory() {
                 <tr>
                     <td class="${statusClass}">${escapeHtml(rec.status)}</td>
                     <td style="color:#fff; font-weight:bold;">${escapeHtml(rec.target)}</td>
-                    <td style="color:var(--text-dim); font-size:0.9em;">${date}</td>
-                    <td style="font-family:'Consolas'">${duration}</td>
+                    <td style="color:var(--text-dim); font-size:0.9em;">${escapeHtml(date)}</td>
+                    <td style="font-family:'Consolas'">${escapeHtml(duration)}</td>
                     <td>
-                        <span style="color:#EF4444; font-weight:bold;">${rec.severity_stats['CRITICAL'] || 0}</span> /
-                        <span style="color:#F97316; font-weight:bold;">${rec.severity_stats['HIGH'] || 0}</span>
-                        <span style="color:var(--text-dim); font-size:0.8em; margin-left:5px;">(Total: ${rec.total_vulns})</span>
+                        <span style="color:#EF4444; font-weight:bold;">${Number(stats['CRITICAL']) || 0}</span> /
+                        <span style="color:#F97316; font-weight:bold;">${Number(stats['HIGH']) || 0}</span>
+                        <span style="color:var(--text-dim); font-size:0.8em; margin-left:5px;">(Total: ${Number(rec.total_vulns) || 0})</span>
                     </td>
                     <td>
                         <div style="display: flex; justify-content: flex-end; gap: 8px;">
@@ -53,27 +53,27 @@ async function loadHistory() {
             tbody.insertAdjacentHTML('beforeend', html);
         });
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="6" style="color:red">Error loading history: ${e}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="color:red">Error loading history: ${escapeHtml(errMsg(e))}</td></tr>`;
     }
 }
 
 async function deleteScan(id) {
     if (!confirm("Are you sure you want to delete this scan record?")) return;
-    await fetch('/api/history/delete?id=' + id, { method: 'POST' });
+    try {
+        await apiFetch('/api/history/delete?id=' + encodeURIComponent(id), { method: 'POST' });
+    } catch (e) {
+        showToast("Failed to delete scan: " + errMsg(e), 'error');
+    }
     loadHistory();
 }
 
 async function deleteAllHistory() {
     if (!confirm("CRITICAL ACTION: Are you sure you want to PERMANENTLY DELETE all scan history? This cannot be undone.")) return;
     try {
-        const resp = await fetch('/api/history/delete_all', { method: 'POST' });
-        if (resp.ok) {
-            loadHistory();
-        } else {
-            alert("Failed to delete history: " + await resp.text());
-        }
+        await apiFetch('/api/history/delete_all', { method: 'POST' });
+        loadHistory();
     } catch (e) {
-        alert("Error: " + e);
+        showToast("Failed to delete history: " + errMsg(e), 'error');
     }
 }
 
@@ -104,35 +104,15 @@ function viewScan(id) {
         rec.vulnerabilities.forEach(data => {
             detailVulnCount++;
             detailResults.push(data);
-            const badgeClass = "sev-" + escapeHtml(data.Severity.toUpperCase());
-            const host = data.Target.IP;
-            let engineLabel = 'Plugin';
-            if (data.Name.includes("Exploit")) engineLabel = 'EDB';
-            else if (data.Name.includes("Spider")) engineLabel = 'Spider';
+            const f = normalizeFinding(data);
+            const host = f.host;
 
-            const html = `
-                <tr class="vuln-row" data-severity="${escapeHtml(data.Severity.toUpperCase())}" data-target="${escapeHtml(host)}" id="detail-row-${detailVulnCount}" onclick="toggleDetail('detail-detail-${detailVulnCount}', 'detail-row-${detailVulnCount}')">
-                    <td><span class="badge ${badgeClass}">${escapeHtml(data.Severity)}</span></td>
-                    <td style="font-weight:bold; color:#fff;">${data.CVSS.toFixed(1)}</td>
-                    <td style="color:#fff;">${escapeHtml(data.Name)}</td>
-                    <td style="color:var(--text-dim); font-size:0.9em;">${engineLabel}</td>
-                    <td>${escapeHtml(data.Target.IP)}:${data.Target.Port}</td>
-                    <td class="arrow"><i class="fas fa-chevron-down"></i></td>
-                </tr>
-                <tr class="detail-row" data-severity="${escapeHtml(data.Severity.toUpperCase())}" data-target="${escapeHtml(host)}" id="detail-detail-${detailVulnCount}">
-                    <td colspan="6" style="padding:0; border:none;">
-                        <div class="detail-content">
-                            <strong style="color:var(--accent)">ANALYSIS:</strong><br>${escapeHtml(data.Description).replace(/\n/g, '<br>')}<br><br>
-                            <strong style="color:var(--success)">SOLUTION:</strong><br>${escapeHtml(data.Solution || "Apply patches.")}<br><br>
-                            <em style="font-size:0.8em">Ref: ${escapeHtml(data.Reference)}</em>
-                        </div>
-                    </td>
-                </tr>`;
-            document.getElementById('detailTableBody').insertAdjacentHTML('beforeend', html);
+            document.getElementById('detailTableBody').insertAdjacentHTML('beforeend',
+                buildVulnRowHTML(f, `detail-row-${detailVulnCount}`, `detail-detail-${detailVulnCount}`,
+                    `toggleDetail('detail-detail-${detailVulnCount}', 'detail-row-${detailVulnCount}')`));
             detailTargetCounts[host] = (detailTargetCounts[host] || 0) + 1;
 
-            const idx = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO'].indexOf(data.Severity.toUpperCase());
-            if (idx !== -1) { detailVulnChart.data.datasets[0].data[idx]++; }
+            if (f.severityIndex !== -1) { detailVulnChart.data.datasets[0].data[f.severityIndex]++; }
         });
     }
 

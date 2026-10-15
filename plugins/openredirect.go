@@ -16,9 +16,18 @@ func (p *OpenRedirectPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	client := models.GetClient()
-	client.Timeout = 4 * time.Second
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
+	// models.GetClient() returns the scan's single shared *http.Client. Writing
+	// Timeout/CheckRedirect onto it (as this used to) is a data race between
+	// concurrent runs and silently changes every other plugin's requests for
+	// the rest of the scan (no redirect following, 4s timeout). Use a private
+	// copy that keeps the shared Transport (proxy, auth, UA) and cookie Jar.
+	base := models.GetClient()
+	client := &http.Client{
+		Transport:     base.Transport,
+		Jar:           base.Jar,
+		Timeout:       4 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
+	}
 
 	resp, err := client.Get(getURL(target, "/?url=http://example.com"))
 	if err != nil {

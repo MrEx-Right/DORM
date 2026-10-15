@@ -2,6 +2,50 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.28.1] - 2026-10-15
+### 🩹 Dashboard JS Hardening & Speed Pass, Scan Stream Write Serialization
+
+A pass over `web/js/` (error handling, XSS-shaped inline handlers, quadratic DOM rewrites) plus a fix on the server side of the `/scan` event stream.
+
+---
+
+#### 🩹 `/scan` Event Stream — Serialized Writes, Target De-duplication (`handlers.go`)
+- **Root cause:** `handleScan` wrote to the SSE response from several goroutines at once — `engine.OnFind` (engine workers and the proxy analyzer) and the keep-alive/`DONE`/`ERROR` frames on the handler goroutine — with no lock around the `Fprintf` + `Flush` pair (the existing `muVulns` only guarded the findings slice). An `http.ResponseWriter` is not safe for concurrent use. A multi-target scan against a lab VM hit `net::ERR_INVALID_CHUNKED_ENCODING`; the browser's `EventSource` then reconnected, and the reconnect's own `/scan` request cancelled the still-running scan (`activeScanCancel`) and started a new one — a `Stopped` history record plus a second `Completed` one, and a results table mixing both runs. The unlocked write has been in the code since v1.6.0.
+- All writes in `handleScan` now go through one mutex-guarded `sendSSE`. Writes arriving after the handler has returned (e.g. a late analyzer finding) are dropped instead of touching a finished writer.
+- Targets are now de-duplicated after sanitization. `host`, `http://host:8000` and `https://host:9200` all reduce to the same host; they used to be scanned three times (3x port probes, 3x findings, 3x load, and a history record titled `host, host, host`).
+- `go build ./...` and `go vet .` are clean.
+- Verified with Go's race detector (`go build -race`) against a lab target (88 plugins, same two-target input): the previous build produced 41 `DATA RACE` reports on the `handlers.go` `OnFind` write and the stream died after the first finding (`ERR_INVALID_CHUNKED_ENCODING`); the new build produced none from `handlers.go`, and the same scan streamed all 80 findings to `DONE` on a single connection with no reconnect.
+
+#### 🩹 Open Redirect Plugin No Longer Mutates the Shared HTTP Client (`plugins/openredirect.go`)
+- **Root cause:** `OpenRedirectPlugin.Run` wrote `Timeout = 4s` and a no-follow `CheckRedirect` directly onto the scan's single shared `*http.Client` (`models.GetClient()` returns the same pointer to all ~90 plugins). Concurrent runs raced on those fields (7 `DATA RACE` reports in one lab scan), and after the plugin ran, every other plugin's requests for the rest of that scan stopped following redirects and timed out at 4 s instead of 10 s.
+- The plugin now builds a private client from the shared one — same `Transport` (proxy, auth header, User-Agent layer) and cookie `Jar`, own `Timeout`/`CheckRedirect` — and leaves the shared client untouched.
+- Verified with a temporary test harness against the real plugin code (removed afterwards): the shared client keeps `Timeout=10s`, no `CheckRedirect`, and still follows a 302 after the plugin runs (the old code left it at 4 s and returning the raw 302); 16 concurrent runs are clean under `go test -race` (the old code fails the same test with `DATA RACE` at `openredirect.go:20-23`); a redirect to `example.com` is still reported, a plain 200 and a redirect to another host are still not; requests still go through the shared transport.
+
+#### 🩹 Scan Stream Errors Are Now Final in the UI (`web/js/scanner.js`, `web/js/template-builder.js`)
+- `/scan` is a GET that *starts* a scan, so `EventSource`'s automatic reconnect is never a resume — it is a new `/scan` that cancels the running one. The old comment ("EventSource auto-reconnects on temporary drops, don't stop") assumed otherwise. Any stream error now closes the stream, resets the button, and shows "Lost connection to the scanner. The scan may still be finishing on the server — check Scan History." (the server scan runs on its own context and still records its results).
+- Control frames (`CRAWLING_DOM` keep-alives and any future status type) are skipped explicitly by a new `isFinding()` check (a finding always carries `Name`/`Severity`). Previously they fell through to code that threw a `TypeError` inside the message handler, which the browser swallowed — no visible symptom, but it relied on an accidental crash.
+- A malformed SSE frame is logged and skipped instead of throwing out of the handler.
+- A finding with a missing `Severity`, `CVSS` or `Target` now renders with defaults (`INFO`, `0.0`, `unknown`) instead of throwing and being dropped.
+- `/scan` answering HTTP 500 no longer leaves the button stuck on `STOP SCAN`; `/stop` failing (HTTP error or network down) no longer skips the UI reset and now warns that the stop could not be confirmed.
+
+#### 🔒 Inline Handler IDs No Longer Break Out of the JS String (`web/js/cve-center.js`, `web/js/template-builder.js`)
+- **Root cause:** ids were interpolated into inline handlers as JS string literals, e.g. `onclick="viewCVEDetail('${escapeHtml(id)}')"`. `escapeHtml` turns `'` into `&#039;`, which the HTML parser decodes back to `'` *before* the JS runs, so an id containing `');…;//` ended the string and executed. CVE Explorer rows/buttons and KEV cards now carry the id in a `data-id` attribute and read it via `this.dataset.id`; the template list's Edit/Delete use the same pattern, and its checkbox `value` is now escaped.
+- Verified in the browser: with a hostile id (`CVE-1');window.__xss=1;//`) the script executed on v1.28.0's code and does not on this one; the real CVE detail modal still opens from a table row, the Details button, and a KEV card.
+- Error messages rendered with `${e}` into `innerHTML` (history, CVE Explorer) are now escaped; exported HTML reports now escape `Severity` and the title and declare `charset`.
+
+#### ⚡ Dashboard Performance (`web/js/helpers.js`, `init.js`, `cve-center.js`, `sitemap.js`, `scanner.js`)
+- `innerHTML +=` inside loops re-parsed the whole container on every iteration (quadratic). The plugin grid, CVE Explorer rows and sitemap host list are now built once and assigned once.
+- During a live scan, `chart.update()` and the host-tab rebuild ran once per finding; they are now coalesced to at most one per ~60 ms (timer-based, not `requestAnimationFrame`, so a scan finishing in a background tab still redraws).
+- The summary/detail row markup that `scanner.js` and `history.js` each carried a copy of is now one shared builder (`buildVulnRowHTML`).
+- Measured against a mock API with synthetic data: plugin grid (300 plugins) 2,138 ms → 11 ms; live scan of 2,000 findings over 20 hosts 8,982 ms → 450 ms, with `chart.update()` calls 2,001 → 2; CVE Explorer render (300 rows) 1,313 ms → 40 ms; sitemap host list (500 hosts) 728 ms → 24 ms. The archived-scan view (2,000 findings) is unchanged at ~345 ms.
+- A live scan against a lab target rendered 313 findings in the dashboard with 0 JavaScript errors or rejected promises.
+
+#### 🩹 Smaller Dashboard Fixes (`web/js/`)
+- **Sidebar highlight:** `switchView()` used the implicit global `event.currentTarget`, so calling it from an in-page button ("Back" in scan detail, "View Sitemap") marked that button `active` and left the sidebar with nothing highlighted. It now highlights the sidebar entry for the requested view.
+- **Null-safety:** a scan-history record with `severity_stats: null` used to replace the whole history table with an error; a CVE with `cvss: null` threw in `toFixed`; the same guard was added for KEV `epssScore`/`cvssScore`, PDF export rows, and SCI `cve_count`.
+- **Silent failures surfaced:** deleting a scan or a template when the server answered non-2xx used to look like a success. New shared helpers `apiFetch`/`apiJSON` (turn non-2xx into an error carrying the server's `error` text) are used for the plugin list, history, CVE Center, KEV, sitemap list and templates; `showToast` (non-blocking) replaces `alert()` in the scanner, history, templates, reports, sitemap and startup paths. `confirm()` dialogs are unchanged.
+- `window.onload =` replaced with `addEventListener('load', …)`; `scan_id`/history ids are URL-encoded in requests; `toggleDetail` no longer throws on a missing row.
+
 ## [v1.28.0] - 2026-10-02
 ### ✨ New: Scan Templates, Plus a WAF Bypass Module Overhaul
 

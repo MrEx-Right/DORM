@@ -32,7 +32,10 @@ function buildReportHTML(results, title, targetDisplay, date) {
 
     const tableFor = (items) => {
         let t = `<table><thead><tr><th>Sev</th><th>Vuln</th><th>Details</th></tr></thead><tbody>`;
-        items.forEach(r => t += `<tr><td class="${r.Severity}">${r.Severity}</td><td>${escapeHtml(r.Name)}</td><td>${escapeHtml(r.Description)}</td></tr>`);
+        items.forEach(r => {
+            const sev = escapeHtml(String(r.Severity || 'INFO').toUpperCase());
+            t += `<tr><td class="${sev}">${sev}</td><td>${escapeHtml(r.Name)}</td><td>${escapeHtml(r.Description)}</td></tr>`;
+        });
         t += `</tbody></table>`;
         return t;
     };
@@ -47,14 +50,14 @@ function buildReportHTML(results, title, targetDisplay, date) {
         sections = tableFor(results);
     }
 
-    return `<html><head><title>${title}</title><style>body{font-family:sans-serif;padding:30px;color:#333}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ddd;padding:12px;text-align:left}th{background:#f4f4f4}.CRITICAL{color:#d32f2f;font-weight:bold}.HIGH{color:#f57c00;font-weight:bold}</style></head><body>`
-        + `<h1>${title}</h1><p>Target(s): ${escapeHtml(targetDisplay)}<br>Date: ${escapeHtml(date)}</p>`
+    return `<html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{font-family:sans-serif;padding:30px;color:#333}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ddd;padding:12px;text-align:left}th{background:#f4f4f4}.CRITICAL{color:#d32f2f;font-weight:bold}.HIGH{color:#f57c00;font-weight:bold}</style></head><body>`
+        + `<h1>${escapeHtml(title)}</h1><p>Target(s): ${escapeHtml(targetDisplay)}<br>Date: ${escapeHtml(date)}</p>`
         + sections
         + `</body></html>`;
 }
 
 function downloadReport() {
-    if (scanResults.length === 0) return alert("No results to export!");
+    if (scanResults.length === 0) return showToast("No results to export!", 'warn');
     const html = buildReportHTML(scanResults, 'DORM Security Report', getTargetDisplayString(), new Date().toLocaleString());
 
     const link = document.createElement("a");
@@ -64,7 +67,7 @@ function downloadReport() {
 }
 
 function downloadDetailReport() {
-    if (detailResults.length === 0) return alert("No results to export!");
+    if (detailResults.length === 0) return showToast("No results to export!", 'warn');
     const targetDisplay = document.getElementById('detailTarget').innerText;
     const date = document.getElementById('detailDate').innerText;
     const html = buildReportHTML(detailResults, 'DORM Security Report (Archived)', targetDisplay, date);
@@ -92,8 +95,8 @@ function drawPDFCoverHeader(doc, targetDisplay, date, archived) {
 
 function renderVulnTable(doc, items, startY) {
     const tableRows = items.map(vuln => [
-        vuln.Severity, vuln.CVSS.toFixed(1), vuln.Name,
-        vuln.Description.replace(/<br>/g, "\n").substring(0, 200) + (vuln.Description.length > 200 ? "..." : "")
+        String(vuln.Severity || 'INFO'), (Number(vuln.CVSS) || 0).toFixed(1), String(vuln.Name || ''),
+        String(vuln.Description || '').replace(/<br>/g, "\n").substring(0, 200) + (String(vuln.Description || '').length > 200 ? "..." : "")
     ]);
 
     doc.autoTable({
@@ -153,13 +156,13 @@ function buildVulnPDF(results, targetDisplay, date, archived) {
 }
 
 function downloadPDF() {
-    if (scanResults.length === 0) return alert("No results to export!");
+    if (scanResults.length === 0) return showToast("No results to export!", 'warn');
     const doc = buildVulnPDF(scanResults, getTargetDisplayString(), new Date().toLocaleString(), false);
     doc.save(`DORM_Report_${Date.now()}.pdf`);
 }
 
 function downloadDetailPDF() {
-    if (detailResults.length === 0) return alert("No results to export!");
+    if (detailResults.length === 0) return showToast("No results to export!", 'warn');
     const targetDisplay = document.getElementById('detailTarget').innerText;
     const date = document.getElementById('detailDate').innerText;
     const doc = buildVulnPDF(detailResults, targetDisplay, date, true);

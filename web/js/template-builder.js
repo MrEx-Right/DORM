@@ -15,8 +15,7 @@ let selectedTemplateIds = new Set();
 async function initTemplatesView() {
     if (!cachedTemplateOptions) {
         try {
-            const resp = await fetch('/api/templates/options');
-            cachedTemplateOptions = await resp.json();
+            cachedTemplateOptions = await apiJSON('/api/templates/options');
         } catch (e) {
             console.error('Failed to load template builder options:', e);
             cachedTemplateOptions = { methods: ['GET', 'POST'], severities: ['MEDIUM'], matcherTypes: ['word'], matcherParts: ['body'], conditions: ['OR'] };
@@ -28,10 +27,10 @@ async function initTemplatesView() {
 async function loadTemplateList() {
     const empty = document.getElementById('templateListEmpty');
     try {
-        const resp = await fetch('/api/templates');
-        cachedTemplateList = await resp.json() || [];
+        cachedTemplateList = await apiJSON('/api/templates') || [];
     } catch (e) {
         console.error('Failed to load templates:', e);
+        showToast('Failed to load templates: ' + errMsg(e), 'error');
         cachedTemplateList = [];
     }
 
@@ -62,7 +61,7 @@ function renderTemplateList(list) {
         const checked = selectedTemplateIds.has(t.id);
         return `
             <div class="tpl-list-item${checked ? ' selected' : ''}" style="display:flex; align-items:flex-start; gap:10px; padding:11px; border:1px solid var(--panel-border); border-radius:8px; background:rgba(0,0,0,0.18);">
-                <input type="checkbox" class="tpl-select-check custom-checkbox" value="${t.id}" ${checked ? 'checked' : ''} onchange="onTemplateSelectionChange()" style="margin-top:3px; flex-shrink:0;">
+                <input type="checkbox" class="tpl-select-check custom-checkbox" value="${escapeHtml(t.id)}" ${checked ? 'checked' : ''} onchange="onTemplateSelectionChange()" style="margin-top:3px; flex-shrink:0;">
                 <div style="flex:1; min-width:0;">
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
                         <span style="font-weight:600; color:#fff; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.name)}</span>
@@ -70,8 +69,8 @@ function renderTemplateList(list) {
                     </div>
                     <div style="font-size:11px; color:var(--text-dim); margin-top:5px; font-family:'Consolas',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.request?.method || 'GET')} ${escapeHtml(t.request?.path || '/')}</div>
                     <div style="display:flex; gap:14px; margin-top:9px;">
-                        <span onclick="openTemplateEditor('${t.id}')" style="font-size:11px; color:var(--accent); cursor:pointer;"><i class="fas fa-pen"></i> Edit</span>
-                        <span onclick="deleteTemplate('${t.id}')" style="font-size:11px; color:var(--danger); cursor:pointer;"><i class="fas fa-trash"></i> Delete</span>
+                        <span data-id="${escapeHtml(t.id)}" onclick="openTemplateEditor(this.dataset.id)" style="font-size:11px; color:var(--accent); cursor:pointer;"><i class="fas fa-pen"></i> Edit</span>
+                        <span data-id="${escapeHtml(t.id)}" onclick="deleteTemplate(this.dataset.id)" style="font-size:11px; color:var(--danger); cursor:pointer;"><i class="fas fa-trash"></i> Delete</span>
                     </div>
                 </div>
             </div>
@@ -205,7 +204,7 @@ async function openTemplateEditor(id) {
             document.getElementById('tplMatcherNegate').checked = !!m.negate;
             onMatcherTypeChange();
         } catch (e) {
-            alert('Failed to load template: ' + e);
+            showToast('Failed to load template: ' + errMsg(e), 'error');
             return;
         }
     }
@@ -248,11 +247,11 @@ function collectTemplateFormToObject() {
 async function saveTemplate() {
     const tpl = collectTemplateFormToObject();
     if (!tpl.name) {
-        alert('Please give this template a name.');
+        showToast('Please give this template a name.', 'warn');
         return;
     }
     if (!tpl.request.path) {
-        alert('Please set a request path.');
+        showToast('Please set a request path.', 'warn');
         return;
     }
 
@@ -269,17 +268,17 @@ async function saveTemplate() {
         closeTemplateEditor();
         await loadTemplateList();
     } catch (e) {
-        alert('Failed to save template: ' + e.message);
+        showToast('Failed to save template: ' + errMsg(e), 'error');
     }
 }
 
 async function deleteTemplate(id) {
     if (!confirm('Delete this template? This cannot be undone.')) return;
     try {
-        await fetch('/api/templates/delete?id=' + encodeURIComponent(id), { method: 'POST' });
+        await apiFetch('/api/templates/delete?id=' + encodeURIComponent(id), { method: 'POST' });
         await loadTemplateList();
     } catch (e) {
-        alert('Failed to delete template: ' + e);
+        showToast('Failed to delete template: ' + errMsg(e), 'error');
     }
 }
 
@@ -306,14 +305,14 @@ function startTemplateScan() {
 
     const ids = getSelectedTemplateIds();
     if (ids.length === 0) {
-        alert('Select at least one template first.');
+        showToast('Select at least one template first.', 'warn');
         return;
     }
 
     const rawTarget = document.getElementById('tplTargetInput').value;
     const targetsArray = rawTarget.split(',').map(t => t.trim()).filter(t => t !== '');
     if (targetsArray.length === 0) {
-        alert('Enter a target first.');
+        showToast('Enter a target first.', 'warn');
         return;
     }
     const targetString = targetsArray.join(',');
@@ -340,7 +339,13 @@ function startTemplateScan() {
     tplScanEventSource = new EventSource(url);
 
     tplScanEventSource.onmessage = (e) => {
-        const data = JSON.parse(e.data);
+        let data;
+        try {
+            data = JSON.parse(e.data);
+        } catch (err) {
+            console.error('Malformed SSE frame, skipped:', e.data, err);
+            return;
+        }
 
         if (data.Status === 'STARTED' || data.Status === 'CRAWLING_DOM') return;
 
@@ -355,11 +360,19 @@ function startTemplateScan() {
             return;
         }
 
+        if (!isFinding(data)) return; // keep-alive / unknown control frame
+
         renderTemplateConsoleEntry(data);
     };
 
     tplScanEventSource.onerror = () => {
-        // EventSource auto-reconnects on transient drops — not a hard failure.
+        // Same reasoning as scanner.js: /scan starts a scan, so EventSource's
+        // auto-reconnect would cancel the running one and restart it. Treat any
+        // error as final: close the stream and reset the RUN button.
+        if (tplScanEventSource) {
+            consoleLog('<span style="color:#EF4444;">ERROR</span> Lost connection to the scanner. The scan may still be finishing on the server — check Scan History.');
+            finishTemplateScanUI();
+        }
     };
 }
 
@@ -372,14 +385,16 @@ function consoleLog(html) {
 function renderTemplateConsoleEntry(data) {
     tplRunCount++;
     const color = severityColor(data.Severity);
-    const host = data.Target.IP;
+    const target = data.Target || {};
+    const host = target.IP || 'unknown';
+    const port = target.Port != null ? target.Port : '';
     const entryId = 'tpl-console-' + tplRunCount;
 
     const html = `
         <div style="margin-top:10px; padding-bottom:10px; border-bottom:1px dashed rgba(255,255,255,0.06); cursor:pointer;" onclick="toggleTplConsoleDetail('${entryId}')">
             <span style="color:${color}; font-weight:700;">[${escapeHtml((data.Severity || 'INFO').toUpperCase())}]</span>
             <span style="color:#E6EDF3;">${escapeHtml(data.Name)}</span>
-            <span style="color:#6B7280;"> → ${escapeHtml(host)}:${data.Target.Port}</span>
+            <span style="color:#6B7280;"> → ${escapeHtml(host)}:${escapeHtml(port)}</span>
             <i class="fas fa-chevron-down" style="font-size:9px; margin-left:6px; color:#6B7280;"></i>
             <div id="${entryId}" style="display:none; margin-top:8px; padding:10px 14px; background:rgba(255,255,255,0.03); border-left:2px solid ${color}; color:#9CA3AF; font-size:12px; line-height:1.7;">
                 <div><span style="color:#F59E0B; font-weight:700;">ANALYSIS</span> ${escapeHtml(data.Description || 'No description provided.').replace(/\n/g, '<br>')}</div>
@@ -394,8 +409,10 @@ function renderTemplateConsoleEntry(data) {
     document.getElementById('tplConsoleFeed').insertAdjacentHTML('beforeend', html);
 }
 
-function stopTemplateScan() {
-    fetch('/stop');
+async function stopTemplateScan() {
+    // Close the stream and reset the UI first so the button responds
+    // immediately; the /stop request is fire-and-report, not a gate.
+    apiFetch('/stop').catch(e => showToast('Could not confirm the scan was stopped: ' + errMsg(e), 'warn', 8000));
     if (tplScanEventSource) {
         tplScanEventSource.close();
         tplScanEventSource = null;

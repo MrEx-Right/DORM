@@ -11,14 +11,11 @@ function viewSitemapForScan() {
 async function initSitemapView() {
     // Populate host dropdown from DB based on current scan
     try {
-        const url = window.currentSitemapScanID ? `/api/sitemap/list?scan_id=${window.currentSitemapScanID}` : `/api/sitemap/list`;
-        const resp = await fetch(url);
-        const hosts = await resp.json();
+        const url = window.currentSitemapScanID ? `/api/sitemap/list?scan_id=${encodeURIComponent(window.currentSitemapScanID)}` : `/api/sitemap/list`;
+        const hosts = await apiJSON(url);
         const select = document.getElementById('sitemapHostSelect');
-        select.innerHTML = '<option value="">— Select Target —</option>';
-        (hosts || []).forEach(h => {
-            select.innerHTML += `<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`;
-        });
+        select.innerHTML = '<option value="">— Select Target —</option>' +
+            (hosts || []).map(h => `<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`).join('');
 
         const content = document.getElementById('sitemapContent');
         if (hosts && hosts.length === 1) {
@@ -31,6 +28,7 @@ async function initSitemapView() {
         }
     } catch(e) {
         console.error('Sitemap list error:', e);
+        showToast('Could not load sitemap targets: ' + errMsg(e), 'error');
     }
 }
 
@@ -41,7 +39,7 @@ async function loadSitemap(host) {
     try {
         let url = `/api/sitemap?target=${encodeURIComponent(host)}`;
         if (window.currentSitemapScanID) {
-            url += `&scan_id=${window.currentSitemapScanID}`;
+            url += `&scan_id=${encodeURIComponent(window.currentSitemapScanID)}`;
         }
         const resp = await fetch(url);
         if (!resp.ok) {
@@ -68,7 +66,7 @@ async function refreshSitemapSilently() {
     try {
         let url = `/api/sitemap?target=${encodeURIComponent(host)}`;
         if (window.currentSitemapScanID) {
-            url += `&scan_id=${window.currentSitemapScanID}`;
+            url += `&scan_id=${encodeURIComponent(window.currentSitemapScanID)}`;
         }
         const resp = await fetch(url);
         if (resp.ok) {

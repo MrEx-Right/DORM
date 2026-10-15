@@ -201,6 +201,32 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	flusher.Flush() // Tell the browser "I'm here, don't drop the connection!"
 
+	// ONE serialized writer for the whole SSE response. engine.OnFind runs on
+	// the engine's worker goroutines (and the proxy analyzer's), while the
+	// keep-alive loop and DONE/ERROR frames run on this goroutine — an
+	// http.ResponseWriter is not safe for concurrent use, and unsynchronized
+	// Fprintf+Flush pairs interleave chunks under load. The browser then fails
+	// the stream with ERR_INVALID_CHUNKED_ENCODING, EventSource auto-reconnects,
+	// and the reconnect's own /scan cancels the running scan and restarts it.
+	// `sseClosed` drops late writes (e.g. a straggling analyzer finding) that
+	// arrive after this handler has returned and the writer is no longer valid.
+	var sseMu sync.Mutex
+	sseClosed := false
+	sendSSE := func(payload string) {
+		sseMu.Lock()
+		defer sseMu.Unlock()
+		if sseClosed {
+			return
+		}
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", payload)
+		flusher.Flush()
+	}
+	defer func() {
+		sseMu.Lock()
+		sseClosed = true
+		sseMu.Unlock()
+	}()
+
 	targetsParam := r.URL.Query().Get("targets") // Look for the new multi-target param
 	if targetsParam == "" {
 		targetsParam = r.URL.Query().Get("target") // Fallback: If old app.js is running, grab this!
@@ -256,6 +282,10 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	// ==========================================
 	rawTargets := strings.Split(targetsParam, ",")
 	var sanitizedTargets []string
+	// "host", "http://host:8000" and "https://host:9200" all reduce to the same
+	// host below; without de-duplication every plugin ran once per spelling
+	// (3 targets -> 3x the port probes, 3x the findings, 3x the load).
+	seenTargets := make(map[string]struct{})
 
 	for _, t := range rawTargets {
 		t = strings.TrimSpace(t)
@@ -279,6 +309,11 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		t = strings.TrimRight(t, "/")
 
 		if t != "" {
+			key := strings.ToLower(t)
+			if _, dup := seenTargets[key]; dup {
+				continue
+			}
+			seenTargets[key] = struct{}{}
 			sanitizedTargets = append(sanitizedTargets, t)
 		}
 	}
@@ -303,8 +338,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	activeScanMu.Unlock()
 
 	// Stream the generated ScanID back to the frontend immediately so live updates work!
-	_, _ = fmt.Fprintf(w, "data: {\"Status\": \"STARTED\", \"ScanID\": \"%s\"}\n\n", record.ID)
-	flusher.Flush()
+	sendSSE(fmt.Sprintf(`{"Status": "STARTED", "ScanID": "%s"}`, record.ID))
 
 	var foundVulns []*models.Vulnerability
 	var muVulns sync.Mutex
@@ -498,8 +532,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 		for _, port := range commonPorts {
 			select {
 			case <-ctx.Done():
-				_, _ = fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
-				flusher.Flush()
+				sendSSE(`{"Status": "DONE"}`)
 				return
 			default:
 			}
@@ -540,13 +573,11 @@ WaitLoop:
 		case <-prescanDone:
 			break WaitLoop
 		case <-ctx.Done():
-			_, _ = fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
-			flusher.Flush()
+			sendSSE(`{"Status": "DONE"}`)
 			return
 		case <-time.After(3 * time.Second):
 			// Keep SSE connection alive while DOM crawler does its heavy lifting
-			_, _ = fmt.Fprintf(w, "data: {\"Status\": \"CRAWLING_DOM\"}\n\n")
-			flusher.Flush()
+			sendSSE(`{"Status": "CRAWLING_DOM"}`)
 		}
 	}
 	
@@ -708,9 +739,8 @@ WaitLoop:
 
 	if len(activeTargets) == 0 {
 		// Send explicit error to frontend so it doesn't just silently stop
-		_, _ = fmt.Fprintf(w, "data: {\"Status\": \"ERROR\", \"Message\": \"No reachable ports found for the provided target(s). Check your input or network.\"}\n\n")
-		_, _ = fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
-		flusher.Flush()
+		sendSSE(`{"Status": "ERROR", "Message": "No reachable ports found for the provided target(s). Check your input or network."}`)
+		sendSSE(`{"Status": "DONE"}`)
 		record.Status = "Failed"
 		return // deferred finalize persists Status/EndTime
 	}
@@ -724,8 +754,7 @@ WaitLoop:
 	engine.OnFind = func(v *models.Vulnerability) {
 		// 1. Send to Frontend via SSE
 		data, _ := json.Marshal(v)
-		_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
-		flusher.Flush()
+		sendSSE(string(data))
 
 		// 2. Capture for Database Storage
 		muVulns.Lock()
@@ -739,8 +768,7 @@ WaitLoop:
 	engine.Start()
 	// Deferred finalize (registered above) persists EndTime/Status/Vulnerabilities.
 
-	_, _ = fmt.Fprintf(w, "data: {\"Status\": \"DONE\"}\n\n")
-	flusher.Flush()
+	sendSSE(`{"Status": "DONE"}`)
 }
 
 // handleSiteMap returns the site map for a given host.

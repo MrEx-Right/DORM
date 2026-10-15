@@ -34,13 +34,15 @@ async function analyzeSCI() {
         </div>`;
 
     try {
+        // Raw fetch on purpose: a non-2xx here still carries a JSON `{error}`
+        // body that is shown inline in the results area, not as a toast.
         const resp = await fetch('/api/sci?target=' + encodeURIComponent(target));
-        const data = await resp.json();
-        if (data.error) {
+        const data = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }));
+        if (data.error || !resp.ok) {
             resultsArea.innerHTML = `
                 <div class="sci-empty">
                     <i class="fas fa-exclamation-triangle" style="font-size:40px; color:#F87171; display:block; margin-bottom:16px;"></i>
-                    <p style="color:#F87171; font-weight:700; font-size:15px; margin:0 0 8px;">${escapeHtml(data.error)}</p>
+                    <p style="color:#F87171; font-weight:700; font-size:15px; margin:0 0 8px;">${escapeHtml(data.error || 'HTTP ' + resp.status)}</p>
                     <p style="font-size:13px; margin:0;">Check the target URL and try again.</p>
                 </div>`;
             return;
@@ -128,7 +130,7 @@ function renderSCIResults(data) {
                 <div class="sci-card-footer">
                     <div class="sci-cve-toggle" onclick="toggleSCICVEs('${cardId}-cves')">
                         <i class="fas fa-chevron-right" id="${cardId}-chevron" style="font-size:10px; transition:transform 0.2s;"></i>
-                        <span style="color:${badgeColor}; font-weight:800;">${comp.cve_count} CVE${comp.cve_count>1?'s':''}</span>
+                        <span style="color:${badgeColor}; font-weight:800;">${Number(comp.cve_count) || 0} CVE${comp.cve_count>1?'s':''}</span>
                         <span style="color:var(--text-dim);">— CVSS max: <strong style="color:#fff;">${(comp.highest_cvss||0).toFixed(1)}</strong></span>
                         <span style="margin-left:auto; font-size:10px; color:rgba(148,163,184,0.4);">click to expand</span>
                     </div>
