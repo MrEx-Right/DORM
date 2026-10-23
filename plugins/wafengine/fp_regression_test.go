@@ -43,7 +43,7 @@ func cdnSite(extra map[string]string) http.HandlerFunc {
 			w.Header().Set(k, v)
 		}
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, "<html><body>Same marketing page for every request, long enough to look real.</body></html>")
+		_, _ = fmt.Fprint(w, "<html><body>Same marketing page for every request, long enough to look real.</body></html>")
 	}
 }
 

@@ -52,7 +52,7 @@ func TestPromptInjection_SearchPageEchoingQueryIsNotAFinding(t *testing.T) {
 	// The boardgamegeek/airtable/bluescape shape: an HTML page printing the query.
 	target, client := mockOn(t, "/chat", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, "<html><body><h1>Search results for: %s</h1><p>No results.</p></body></html>",
+		_, _ = fmt.Fprintf(w, "<html><body><h1>Search results for: %s</h1><p>No results.</p></body></html>",
 			html.EscapeString(r.URL.Query().Get("q")))
 	})
 	if v := RunDirectInjection(client, target, BundledPayloads); v != nil {
@@ -93,7 +93,7 @@ func TestPromptInjection_ChatThatEchoesTranscriptButObeysIsHigh(t *testing.T) {
 	target, client := mockOn(t, "/assistant", func(w http.ResponseWriter, r *http.Request) {
 		msg := r.URL.Query().Get("message")
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, "<div class=user>%s</div><div class=bot>%s</div>",
+		_, _ = fmt.Fprintf(w, "<div class=user>%s</div><div class=bot>%s</div>",
 			html.EscapeString(msg), html.EscapeString(fakeLLM(msg, true)))
 	})
 	v := RunDirectInjection(client, target, BundledPayloads)

@@ -20,7 +20,7 @@ func atTokenStart(body string, i int) bool {
 		return true
 	}
 	c := body[i-1]
-	return !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_')
+	return (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' && c != '_'
 }
 
 // mixesCharClasses reports whether s mixes at least two of upper/lower/digit

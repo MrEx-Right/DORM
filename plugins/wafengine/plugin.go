@@ -91,7 +91,7 @@ func (p *WAFDetectorPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 
 	// Also check via DeepScan (legacy fallback)
 	profile := models.DeepScanTarget(baseURL)
-	if profile != nil && profile.WAF != "" && !(isCDNOnly && profile.WAF == cdnName) {
+	if profile != nil && profile.WAF != "" && (!isCDNOnly || profile.WAF != cdnName) {
 		models.SharedData.Store(fmt.Sprintf("waf_type_%s", target.IP), profile.WAF)
 		bypassHints := GetBypassAdvisory(profile.WAF)
 		models.SharedData.Store(fmt.Sprintf("waf_bypass_%s", target.IP), bypassHints)
