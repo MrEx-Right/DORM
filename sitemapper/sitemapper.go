@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
-	"crypto/tls"
+	"DORM/models"
 )
 
 // Config controls the behavior of the Sitemapper engine.
@@ -52,16 +51,13 @@ func QuickConfig() Config {
 	}
 }
 
-// newHTTPClient creates a reusable TLS-bypassing HTTP client for sitemapper.
+// newHTTPClient creates the sitemapper's HTTP client. It rides the scan
+// transport (models.GetScanTransport) so the crawl takes the configured route
+// and wears the Traffic Morph persona instead of announcing itself.
 func newHTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			TLSClientConfig:     &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
-			MaxIdleConns:        50,
-			MaxIdleConnsPerHost: 10,
-			IdleConnTimeout:     60 * time.Second,
-		},
+		Timeout:   timeout,
+		Transport: models.GetScanTransport(),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 5 {
 				return fmt.Errorf("too many redirects")
@@ -108,11 +104,10 @@ func Run(ctx context.Context, targetURL string, cfg Config, scanID string) (*Sit
 	// ── PHASE 3: HTTP Crawl ───────────────────────────────────────────
 	crawler := NewCrawler(base, cfg, client, sm)
 
-	// Seed with sitemap URLs so crawler visits them too
+	// Seed with sitemap URLs so crawler visits them too (scope-checked by
+	// the crawler once it knows where the site root redirects).
 	for _, u := range sm.SitemapURLs {
-		if strings.Contains(u, base.Hostname()) {
-			crawler.visited.LoadOrStore(u, false) // mark as "to visit"
-		}
+		crawler.Seed(u)
 	}
 
 	jsURLs := crawler.Run()

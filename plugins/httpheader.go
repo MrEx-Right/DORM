@@ -10,28 +10,33 @@ type HTTPHeaderPlugin struct{}
 
 func (p *HTTPHeaderPlugin) Name() string { return "Security Headers Analysis" }
 
+// securityHeaders is ordered (a map's random order made the same finding
+// read differently on every scan).
+var securityHeaders = []struct{ name, desc string }{
+	{"Strict-Transport-Security", "HSTS missing, MITM attack possible."},
+	{"Content-Security-Policy", "CSP missing, no second line of defence against XSS."},
+	{"X-Content-Type-Options", "Sniffing protection (nosniff) missing."},
+	{"Referrer-Policy", "Referrer information might leak."},
+}
+
 func (p *HTTPHeaderPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
-	resp, err := models.GetClient().Get(getURL(target, ""))
-	if err != nil {
+	resp, ok := fetchRenderedPage(target)
+	if !ok {
 		return nil
 	}
-	defer func() { _ = resp.Body.Close() }()
+	overHTTPS := resp.Request.URL.Scheme == "https"
 
 	missing := []string{}
-
-	headers := map[string]string{
-		"Strict-Transport-Security": "HSTS missing, MITM attack possible.",
-		"Content-Security-Policy":   "CSP missing, vulnerable to XSS.",
-		"X-Content-Type-Options":    "Sniffing protection (nosniff) missing.",
-		"Referrer-Policy":           "Referrer information might leak.",
-	}
-
-	for h, desc := range headers {
-		if resp.Header.Get(h) == "" {
-			missing = append(missing, h+": "+desc)
+	for _, h := range securityHeaders {
+		// Browsers ignore HSTS received over plain HTTP (RFC 6797 §8.1).
+		if h.name == "Strict-Transport-Security" && !overHTTPS {
+			continue
+		}
+		if resp.Header.Get(h.name) == "" {
+			missing = append(missing, h.name+": "+h.desc)
 		}
 	}
 

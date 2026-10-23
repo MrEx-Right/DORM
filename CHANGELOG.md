@@ -2,6 +2,136 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.29.0] - 2026-10-22
+### ✨ New: Traffic Morph — Live OpSec / Identity Panel
+
+A new left-sidebar page, **Traffic Morph**, that shows how DORM looks from the target's side: which route the scan client leaves through, the TLS fingerprint it sends, the User-Agent persona it wears and the live request flow, plus a one-click **NEW IDENTITY**. The morphing itself has an on/off switch and starts **OFF** on every launch.
+
+This release also fixes the default proxy route, which broke every HTTPS request, and moves the sitemapper, the DOM crawler and every plugin onto the scan route, so they all send the same User-Agent as the scan client instead of their own `DORM-*` / `Go-http-client` ones.
+
+---
+
+#### ✨ Traffic Morph Page (`traffic_morph.go`, `client.go`, `web/dashboard.html`, `web/js/traffic-morph.js`, `bypassers/rotateagent.go`)
+- **Sidebar entry** with a route badge (`DIRECT` / `PROXY` / `SOCKS` / `TOR` / `ERROR`). The default route through the built-in analyzer shows no badge. The badge turns green only after an egress check on that route confirmed a Tor exit; a configured but unverified route is amber, and a failed check is red. The masks icon glows while scan traffic flows, and its two masks swap places each time the scan's User-Agent rotates.
+- **Egress Route:** the hop chain for the current Proxy Settings, what the target sees, and warnings: an unparsable proxy URL (e.g. no scheme) silently falls back to DIRECT; `socks4://` makes every request fail; `socks5://` resolves DNS locally (use `socks5h://`); a plain-HTTP hop to a remote proxy exposes plaintext requests and the auth header.
+- **Egress IP (on demand):** **CHECK EGRESS** sends one request through the configured route to `check.torproject.org` (IP + Tor exit yes/no) and `ip-api.com` (location, ISP/ASN, datacenter/proxy flags). Nothing is sent until the button is clicked. If HTTPS fails on the route, a plain-HTTP lookup (`api.ipify.org`) still shows where plaintext requests leave from, and the HTTPS error is shown.
+- **TLS Fingerprint (measured, not hard-coded):** JA3, JA3 hash and JA4 come from a real handshake of the scan transport against a throwaway loopback TLS listener, with SNI sent as for a real hostname.
+- **MORPH ON / OFF switch (off at launch):** User-Agent rotation used to be always on. It now lives behind this switch, which starts OFF every time DORM starts (the state is kept in memory only, never saved). Off, every request — the scan client, headless Chrome and the raw banner/TLS probes — sends one fixed `Mozilla/5.0 (compatible; DORM-Security-Scanner/1.29)`, ROTATE/STICKY and **NEW IDENTITY** are locked (`POST /api/identity/rotate` answers 409), and Persona Consistency shows `OFF`. Switching applies from the next request, mid-scan included; the identity, persona mode and sticky persona are kept across an off/on cycle. A request whose User-Agent is itself a test payload is sent as is either way. The rest of the panel (route, egress, TLS, traffic) keeps reporting while off.
+- **Persona:** the current User-Agent, the rotation pool and how often each one was used in this scan. A new **ROTATE / STICKY** switch: ROTATE (default) draws a User-Agent per request; STICKY keeps one User-Agent per identity.
+- **Live Traffic:** requests, req/s, proxied vs direct, hosts and delay/jitter for every request through the shared scan client.
+- **Persona Consistency:** flags what gives the scanner away: a browser User-Agent on a Go `crypto/tls` ClientHello, no `h2` in ALPN (HTTP/1.1 only), and in ROTATE mode a User-Agent that changes on every request over the same connection.
+- **NEW IDENTITY** reports exactly what it changed. It always drops pooled keep-alive connections. On a SOCKS5 route without its own credentials, it sends new isolation credentials (`dorm:<random>`), read per connection, so Tor's default `IsolateSOCKSAuth` builds a new circuit, mid-scan included. In STICKY mode it picks a new persona. Things it cannot change are reported as kept: the exit IP on direct/HTTP-proxy routes, and the TLS fingerprint (Go sends a fixed ClientHello).
+- New API: `GET /api/identity`, `POST /api/identity/rotate`, `POST /api/identity/persona?mode=rotate|sticky`, `POST /api/identity/enabled?on=true|false`, `POST /api/identity/egress`.
+
+#### 🩹 Jitter Delay Now Runs Before the Identity Is Picked (`client.go`)
+- `UARoundTripper` set the User-Agent and *then* slept for the WAF delay/jitter, so a request waiting out its delay still went out under the identity it had before the wait. The delay now runs first.
+
+#### ✨ DORM Logo (`web/dashboard.html`, `docs/images/dorm-logo.svg`)
+- DORM has a logo: a D with a pitched roof and a green slit pupil in its counter. It appears in the sidebar above the name, as the tab favicon, and on the loading screen, where it replaces the spinner and the pupil blinks (the blink is turned off under `prefers-reduced-motion`).
+- The SVG is inline in the dashboard and the favicon is a data URI, so no new static route is needed. The standalone file is in `docs/images/dorm-logo.svg`.
+
+#### ✨ DOM Crawler Sidebar Spider (`web/dashboard.html`, `web/js/dom-crawler.js`, `web/js/scanner.js`)
+- The pulsing dot next to **DOM Crawler** is replaced by an animated spider: the Font Awesome spider cut into a body and eight two-segment legs. It walks while the DOM crawler streams events and stops when the crawl or the scan ends. The animation is turned off under `prefers-reduced-motion`.
+
+#### 🧹 Removed: "TLS Fingerprint Spoofing" Toggle from Bypass (`web/dashboard.html`, `web/js/scanner.js`)
+- The Bypass page offered "Enable uTLS Stealth Client". Nothing on the server read the `wafTLS` parameter it sent, and DORM has no uTLS transport, so a scan sent the same Go `crypto/tls` ClientHello with the toggle on or off. The card and the `wafTLS` scan parameter are removed. The real TLS fingerprint is shown on the Traffic Morph page.
+
+#### 🩹 Analyzer Proxy Now Tunnels HTTPS (`analyzer/analyzer.go`, `client.go`)
+- Proxy routing is on by default and points at the built-in analyzer (`127.0.0.1:8081`). Go's transport sends `CONNECT host:443` to an HTTP proxy for every HTTPS URL, and the analyzer answered `405 Method Not Allowed`, so no plugin on the shared scan client ever reached an HTTPS target.
+- The analyzer now serves `CONNECT`: it dials the target, returns `200 Connection Established` and relays bytes both ways (client bytes already buffered after the CONNECT header are forwarded too). TLS stays end to end, so HTTPS is tunnelled without passive analysis; plain HTTP is still analysed as before. A dial failure returns `502`, and a CONNECT without a port returns `400`.
+- When the target closes, the tunnel closes both sides, so a keep-alive client cannot hold a goroutine open. When the client stops sending, the target side is half-closed so the response can still drain.
+- The default proxy URL for an empty setting was `http://127.0.0.1:8080` in `scanProxyFunc` and `classifyRoute`. That is the dashboard, not a proxy. Both now use the analyzer (`:8081`), the same default as the dashboard.
+
+#### 🔒 One Scan Route for Every Component (`client.go`, `models/models.go`, `main.go`)
+- New `models.GetScanTransport()` returns the scan route as an `http.RoundTripper`: the configured proxy (including Traffic Morph's Tor isolation credentials), the User-Agent persona and the WAF delay, without the scan's auth header. It resolves the current scan client **on every request**, so package-level clients created during init (`mcpSSEClient`, `sciClient`) follow the route of whichever scan runs later.
+- New `models.GetScanProxyURL()` / `models.GetScanUserAgent()` give the route and persona to clients that are not Go (headless Chrome, raw sockets).
+- New `models.KeepUserAgent(req)` marks a request whose User-Agent **is** the test payload; the transport then sends it as is instead of swapping in the persona.
+- Before any scan has run, `getClient()` used to fall back to a bare `http.Client` (`Go-http-client/1.1`). It now falls back to a direct client that still wears the persona.
+
+#### 🔒 Components Moved Onto the Route
+- **Sitemapper** (`sitemapper/`): uses the scan transport; the `DORM-Sitemapper/1.19.0` User-Agent is gone from the crawler, JS crawler, robots.txt and sitemap fetches.
+- **DOM crawler and DOM XSS plugin** (`dom/route.go`, `dom/session.go`, `dom/config.go`, `plugins/domscanner.go`): Chrome now gets the persona User-Agent and `--proxy-server` when a proxy is set. `socks5h://` is mapped to Chrome's `socks5://`, which always resolves at the proxy, and SOCKS routes add `--host-resolver-rules` so no local DNS lookup can happen. `<-loopback>` removes Chrome's implicit proxy bypass for loopback hosts, so Chrome takes the same route as Go's transport. A proxy scheme Chrome cannot use makes Chrome fail rather than go direct. `DORM-DOMCrawler/1.0 (chromedp; SPA scanner)` is gone; `DOMConfig.UserAgent` is now only an override. Chrome cannot send proxy credentials, so on Tor it uses Tor's default circuit, not the NEW IDENTITY one.
+- **Tech-profile probe** (`engine.go`): uses the scan transport instead of a bare transport with `DORM-Enterprise-Scanner/1.5.0`.
+- **Plugins with their own client:** `webcachedeception` (anonymous client), `cloudstorage`, `jwtengine/jwks`, `mcpexposure` (SSE client), `aivectordb` (Ollama generate check) and `sci` now wrap the scan transport. None of them send the scan auth header, as before.
+- **Plugins with a branded User-Agent:** removed from `bflaengine`, `corscheck`, `fileupload`, `ip_spoof`, `racecondition`, `sqliengine/post_auth_bypass` and `unnecessaryports` (`DORM-BFLA-Probe`, `DORM-CORS-Tester`, `DORM-IPSpoof-Probe`, `DORM-Race-Tester`, `DORM-Scan-Agent`, …). The raw-socket banner grabs (`bannergrab`, `edb`, `fingerprint`) sent `HEAD /` with no User-Agent at all, and `tlscheck` sent `DORM-Scanner`; all four now send the persona.
+
+#### 🩹 User-Agent Injection Tests Actually Send Their Payloads (`plugins/sqliengine/header_injection.go`, `plugins/wafengine/behavior_probe.go`)
+- `UARoundTripper` overwrote every User-Agent with the persona, so tests whose payload *is* the User-Agent never sent it. `sqliengine` header injection also overwrote its own payload with `DORM-Scanner/Enterprise` one line later. SQLi via User-Agent was never tested, and the WAF behaviour probe's "UA SQLi Probe" measured a normal request.
+- Both now mark the request with `models.KeepUserAgent`. The other header-injection rows (X-Forwarded-For, Referer, …) wear the persona.
+
+#### 🩹 Sitemapper & DOM Crawler: Follow the Site's Redirect, Crawl sitemap.xml URLs (`sitemapper/crawler.go`, `sitemapper/sitemapper.go`, `sitemapper/dombridge.go`, `dom/domcrawler.go`)
+- **Scope:** both crawlers start at `http://host` and only accepted links on that exact host, so on sites whose root redirects (`example.com` → `www.example.com`, `brand.com` → `tr.brand.com`) every real link was out of scope and the crawl ended at the first page; the DOM crawler also dropped every XHR from the redirected host. Now the host the site root redirects to joins the scope, but only the www twin or a subdomain of the target. A redirect to a foreign host (SSO, parking) does not widen it. The DOM crawler adopts that host as soon as Chrome loads the redirected page, so that page's own XHRs are captured.
+- **sitemap.xml URLs** were stored in the crawler's `visited` set, so a URL listed in sitemap.xml was skipped even when a page linked to it. They are now queued.
+- **Relative links** resolved against the crawl's base URL instead of the page they were on (`item1.html` on `/products/` became `/item1.html`). Links now resolve against the page's final URL.
+- **Root counted twice:** `http://host` and `http://host/` were crawled as two pages. The start page is now crawled once, as `/`.
+
+#### 🩹 DOM Crawler No Longer Stops at the First Page on Real Sites (`dom/domcrawler.go`)
+- One `PageTimeout` (12 s) covered navigation, the network-idle wait, the snapshot and the clicks. `chromedp.Navigate` waits for the `load` event, which real storefronts often don't fire in 12 s, so the page was thrown away with no HTML, links or clicks and the crawl ended.
+- **Navigation:** waits for `load` up to `PageTimeout`. If it doesn't come, the crawler keeps whatever has rendered instead of dropping the page. A real navigation failure (DNS, refused, blocked) is still an error.
+- **Page budget:** the snapshot, idle wait and clicks get their own 18 s on top of navigation.
+- **Client-rendered apps:** React/Vue apps serve an empty `<div id="root">` shell. The crawler now waits up to 6 s for the first link or button before taking the snapshot.
+- **Tab lifetime:** chromedp ties a tab to the context of the first `Run` on it. The tab is now opened on its own context, so ending the navigation step no longer closes it.
+- **Routes:** SPA routes found by clicks resolve against the page they came from, not the start host.
+- **Budget end is not an error:** a page cut off because the 90 s crawl budget ran out is no longer counted as an error.
+
+#### 🩹 Scans No Longer Keep Sending After DONE / STOP (`client.go`, `handlers.go`, `engine.go`, `models/models.go`, `sci/sci.go`)
+- `ScannerPlugin.Run` has no context, so a plugin that outlives `pluginTimeout` (150 s), or is still running at STOP, is abandoned by the engine and kept scanning the target after the scan was recorded as finished.
+- Each scan's client now carries a "closed" flag, set when the scan handler returns (DONE or STOP) and when a new scan replaces the client. From then on every request of that client (shared client, anonymous `GetScanTransport` route, clients captured at plugin start) fails immediately without being sent, so abandoned plugins fall through their loops and exit. The closed client stays the active one until the next scan, so a plugin calling `models.GetClient()` per request gets the refusing client, not a working fallback.
+- **Out-of-scan requests:** the SCI page runs outside a scan. It now marks its requests `models.WithBackground`, so they use the last scan's route without its lifetime and are not counted as scan traffic in Traffic Morph. `DeepScanTarget` and `sci.AnalyzeTarget` got `…Context` variants for this.
+- **Logging:** the engine now logs every plugin it abandons (`plugin "X" timed out on host:port after 150s — abandoned`).
+
+#### 🩹 False Positives on HTTPS Targets (`plugins/dangerousmethods.go`, `plugins/webdav.go`, `plugins/bflaengine/`, `plugins/secretharvester.go`, `plugins/apikey.go`, `plugins/secretfilter.go`, `models/probe.go`)
+- **Dangerous Method (TRACE):** reported whenever the OPTIONS `Allow` header listed TRACE (IIS lists it by default and answers an actual TRACE with `501`). The plugin now sends TRACE with a random `X-Dorm-Trace` header and reports only when the response is 200 and echoes it. PUT upload checks no longer follow redirects (Go turns PUT into GET on 301/302/303).
+- **WebDAV Methods:** reported from the `Allow` header alone. It now sends `PROPFIND` (Depth 0) and reports only a `207` with a DAV `multistatus` body.
+- **BFLA / BOLA:**
+  - Redirects are no longer followed (`models.NoRedirectClient`): `/api/admin` → `301` → home page used to count as an "admin endpoint answering 200".
+  - Admin data must be JSON; the keyword check (`users`, `system`, `"email"`) matched ordinary HTML.
+  - A 200 counts only when a random sibling path does not answer the same way (`models.ProbeSibling`): catch-all routes and SPA fallbacks are skipped.
+  - Method tampering also requires that the same PUT/DELETE/PATCH on a random sibling is refused.
+  - The Token-B test runs only when the anonymous request was refused (401/403).
+  - Spider-discovered admin URLs were concatenated onto the base URL in full (`http://host:80http://host/admin`) and never tested. They are now reduced to their path.
+- **Exposed Secrets in JS Bundle / Source Map:**
+  - Entropy-only tokens must now contain a digit, mix character classes, and not read as words, a path or a camelCase identifier (RequireJS module ids such as `Magento_Ui/js/lib/knockout/...` and names such as `enable32bitAppOnWin64True` used to count as secrets).
+  - Prefixed key rules must start a standalone token, with random-looking material after the prefix.
+  - `Generic Secret Assignment` checks the assigned value too, so `password: "password_confirmation_field"` no longer matches.
+  - Entropy-only results are `LOW` (were `HIGH`); a named key format is still `CRITICAL`, and an assignment `HIGH`.
+  - Named rules for OpenAI project keys, Anthropic, Hugging Face, Replicate, Groq and Perplexity were added.
+  - Each JS file is scanned by one port per scan: `:80` and `:443` used to report the same bundle twice.
+- **OpenAI API Key Leak (API Key in JS Files):** `sk-(proj-)?…` matched inside `plesk-ext-social-login-jwt-session`. The same token-start and random-material checks now apply to every prefixed pattern. Anthropic is checked before OpenAI, because `sk-ant-…` keys used to be labelled "OpenAI".
+
+#### 🩹 More False Positives Fixed (`plugins/promptinjectionengine/`, `plugins/hostheader.go`, `plugins/webcachedeception.go`, `plugins/wafengine/`, `plugins/clickjacking.go`, `plugins/httpheader.go`, `plugins/bannergrab.go`, `plugins/helpers.go`, `engine.go`)
+- **AI/LLM Prompt Injection:**
+  - The canary (`DORM_PWNED`, ...) is part of the payload, so any page that printed the query (a search page, an error page, an SPA shell) was reported as "confirmed".
+  - Each candidate endpoint now first gets a random harmless marker. If the marker comes back, the endpoint echoes its input, and a canary there proves nothing.
+  - A signal that is already on the endpoint's normal page does not count.
+  - **HIGH** now needs a computed answer: the payload's canary is replaced by "the word DORM, a hyphen and the sum of A and B" (A and B random), and the response must contain `DORM-<sum>`.
+  - A DORM canary from a non-echoing endpoint whose follow-up check failed is **MEDIUM (unconfirmed)**. A generic obedience phrase without confirmation is dropped.
+  - Echoing chat UIs are tested with the computed-answer probe alone (3 tries).
+- **AI/LLM System Prompt Leakage:** the same echo and normal-page rules apply. On an echoing endpoint, signal words that are in the payload itself no longer count.
+- **Host Header Injection:**
+  - The plugin used the shared client, which follows redirects: `http://site/` → `301 https://evil.com/` was followed to the real evil.com, whose page contains "evil.com", and that was reported.
+  - It now sends a random `dorm-<hex>.invalid` Host on a client that does not follow redirects.
+  - **MEDIUM** only when a 2xx page builds absolute URLs from the Host (`//host/...` in links, scripts, forms).
+  - A Host reflected in a redirect's `Location` is a separate **INFO** finding, "Host Header Reflected in Redirect".
+  - An error page that prints the host as text is not reported.
+- **Web Cache Deception:**
+  - The real path must return a 200 page to the authenticated client that differs from what an anonymous client gets on that same path; otherwise the path is skipped. Without a scan auth header the two requests were identical, so a public page served from a cache counted as a leak.
+  - Both clients no longer follow redirects.
+  - Cache evidence must show a hit (`Hit`, `Age > 0`, a two-id `X-Varnish`). The header merely being present used to count, so `X-Cache: Miss` counted.
+- **WAF Detection:**
+  - `Via: cloudfront`, `X-Cache` and `X-Amz-Cf-*` identify the CloudFront CDN, not AWS WAF. The legacy DeepScan fallback no longer turns `Via: cloudfront` into a WAF, and CloudFront is CDN-only in `cdn_detector.go`.
+  - The CloudFront WAF signature matches its generated error page only.
+  - The "AWS WAF" signature no longer counts `X-Amz-Cf-Id`/`-Pop` or the `AWSALB` load balancer cookie. `X-Amzn-Waf-Action` or the block page still detects it.
+  - A passive match whose only evidence is a CDN-only CDN's own headers is dropped, both in the passive phase and in the fallback. This also stops Fastly/Edgecast being reported as WAFs.
+- **Clickjacking Risk / Missing Security Headers:**
+  - Only a 2xx HTML page is evaluated, not a CDN bot challenge or an error page.
+  - A plain-HTTP port that redirects to HTTPS is skipped, because the HTTPS target reports that page.
+  - HSTS is not reported over plain HTTP, where browsers ignore it (RFC 6797 §8.1).
+  - Clickjacking now requires `frame-ancestors`: a CSP without it does not prevent framing.
+  - The missing-header list has a fixed order.
+- **Service Banner:** on 443/8443 the banner is read over TLS. Plain text got `400 Bad Request: plain HTTP request sent to HTTPS port`, which was reported as the banner.
+- **Same finding once per host:** a CDN serves the same site on 80/443/8080/8443, so a plugin reported the same finding once per port. The engine now drops a finding whose host, name and description it already reported. Port-specific findings ("Port 8080 is open.") differ in description and are kept.
+
 ## [v1.28.1] - 2026-10-15
 ### 🩹 Dashboard JS Hardening & Speed Pass, Scan Stream Write Serialization
 

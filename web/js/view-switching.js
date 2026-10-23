@@ -4,6 +4,7 @@ function switchView(viewName) {
         clearInterval(sitemapPollInterval);
         sitemapPollInterval = null;
     }
+    stopMorphPolling();
     document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
     // Highlight the sidebar item for `viewName` — not whatever element fired
     // the click. switchView() is also called from in-page buttons (history
@@ -20,4 +21,5 @@ function switchView(viewName) {
     if (viewName === 'sitemap') initSitemapView();
     if (viewName === 'sci') initSCIView();
     if (viewName === 'templates') initTemplatesView();
+    if (viewName === 'morph') initMorphView();
 }

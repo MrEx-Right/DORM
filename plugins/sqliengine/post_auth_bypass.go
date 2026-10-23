@@ -81,7 +81,6 @@ func getPostResponseLength(client *http.Client, urlStr, user, pass string) (int,
 		return 0, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", "DORM-Scanner/Enterprise")
 
 	resp, err := client.Do(req)
 	if err != nil {

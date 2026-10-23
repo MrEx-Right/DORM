@@ -17,6 +17,28 @@ type Any = interface{}
 // ==========================================
 // HELPER FUNCTIONS
 // ==========================================
+// fetchRenderedPage fetches the target's front page for response-header
+// checks (framing, CSP, ...). ok is false when there is no page a browser
+// would render here: a non-2xx answer (a CDN bot challenge, an error page)
+// or a non-HTML body. It is also false when a plain-HTTP target redirects to
+// HTTPS: that page belongs to the HTTPS target, which reports it itself, so
+// the HTTP port would only add a duplicate.
+func fetchRenderedPage(target models.ScanTarget) (resp *http.Response, ok bool) {
+	resp, err := models.GetClient().Get(getURL(target, ""))
+	if err != nil {
+		return nil, false
+	}
+	_ = readBody(resp, 4096) // drained and closed; only headers are needed
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 ||
+		!strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "text/html") {
+		return nil, false
+	}
+	if !strings.HasPrefix(getURL(target, ""), "https") && resp.Request.URL.Scheme == "https" {
+		return nil, false
+	}
+	return resp, true
+}
+
 func isWebPort(port int) bool {
 	return port == 80 || port == 443 || port == 8080 || port == 8443 || port == 3000 || port == 5000 || port == 9090 ||
 		port == 8000 || port == 8001 || port == 8081 || port == 8888 || port == 9000

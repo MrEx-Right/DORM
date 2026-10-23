@@ -13,7 +13,12 @@ import (
 
 func main() {
 	models.GetClient = getClient
+	models.ScanRoundTripper = scanRoundTripper
+	models.GetScanProxyURL = getScanProxyURL
+	models.GetScanUserAgent = morphUserAgent
 	models.DeepScanTarget = DeepScanTarget
+	models.DeepScanTargetContext = DeepScanTargetContext
+	models.BackgroundRoundTripper = backgroundRoundTripper
 	models.SearchLocalCVEs = func(product, version string) []models.LocalCVE {
 		return cve.Search(product, version)
 	}
@@ -83,6 +88,13 @@ func main() {
 	http.HandleFunc("/api/templates/delete", handleTemplateDelete) // POST ?id=
 	http.HandleFunc("/api/templates/options", handleTemplateOptions)
 
+	// Traffic Morph — live OpSec / identity panel
+	http.HandleFunc("/api/identity", handleIdentity)                // GET ?proxyEnabled=&proxyUrl=
+	http.HandleFunc("/api/identity/rotate", handleIdentityRotate)   // POST — NEW IDENTITY
+	http.HandleFunc("/api/identity/persona", handleIdentityPersona) // POST ?mode=rotate|sticky
+	http.HandleFunc("/api/identity/enabled", handleIdentityEnabled) // POST ?on=true|false (off at launch)
+	http.HandleFunc("/api/identity/egress", handleIdentityEgress)   // POST — on-demand egress IP check
+
 	// DOM-Crawler real-time event stream (SSE)
 	http.HandleFunc("/dom-events", handleDOMEvents)
 
@@ -95,7 +107,7 @@ func main() {
 ██║  ██║██║   ██║██████╔╝██╔████╔██║
 ██║  ██║██║   ██║██╔══██╗██║╚██╔╝██║
 ██████╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
-╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.28.1
+╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.29.0
 
        [ Security Engine • Active ]
 `

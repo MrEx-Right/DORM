@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -58,6 +59,72 @@ type ScannerPlugin interface {
 // default client instead of nil-panicking and crashing the whole process.
 var GetClient func() *http.Client = func() *http.Client { return &http.Client{} }
 
+// ScanRoundTripper is wired by main to the current scan route WITHOUT the
+// scan's auth header: the configured proxy (incl. Traffic Morph's Tor
+// isolation credentials), the User-Agent persona and the WAF delay.
+var ScanRoundTripper func() http.RoundTripper = func() http.RoundTripper { return http.DefaultTransport }
+
+// scanTransport defers to ScanRoundTripper on every request, so a client
+// built during package init (before main wires the hook) or before a scan
+// started still follows the current scan's route.
+type scanTransport struct{}
+
+func (scanTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if IsBackground(req.Context()) {
+		return BackgroundRoundTripper().RoundTrip(req)
+	}
+	return ScanRoundTripper().RoundTrip(req)
+}
+
+// BackgroundRoundTripper is wired by main to the last scan's route (or the
+// direct persona fallback) WITHOUT the scan's lifetime: it keeps working after
+// the scan ends and is not counted as scan traffic. It serves requests that
+// belong to a page the user opened, not to a scan (the SCI page).
+var BackgroundRoundTripper func() http.RoundTripper = func() http.RoundTripper { return http.DefaultTransport }
+
+type backgroundKey struct{}
+
+// WithBackground marks requests made with ctx as background (see
+// BackgroundRoundTripper). Requests of a finished scan are refused; these are not.
+func WithBackground(ctx context.Context) context.Context {
+	return context.WithValue(ctx, backgroundKey{}, true)
+}
+
+// IsBackground reports whether WithBackground marked ctx.
+func IsBackground(ctx context.Context) bool {
+	bg, _ := ctx.Value(backgroundKey{}).(bool)
+	return bg
+}
+
+// GetScanTransport returns the scan route as a RoundTripper. Components that
+// need their own http.Client (own timeout, redirect policy, anonymous
+// requests) wrap this instead of building a bare http.Transport, which would
+// leave directly from this machine with a Go-http-client User-Agent.
+func GetScanTransport() http.RoundTripper { return scanTransport{} }
+
+// GetScanProxyURL returns the scan route's proxy for clients that are not Go
+// (headless Chrome's --proxy-server), or "" for a direct route.
+var GetScanProxyURL func() string = func() string { return "" }
+
+// GetScanUserAgent returns the current Traffic Morph User-Agent persona for
+// clients outside the Go transport (headless Chrome).
+var GetScanUserAgent func() string = func() string { return "" }
+
+type keepUAKey struct{}
+
+// KeepUserAgent marks a request whose User-Agent header is itself a test
+// payload (e.g. SQLi via User-Agent), so the scan transport sends it as is
+// instead of replacing it with the persona.
+func KeepUserAgent(req *http.Request) *http.Request {
+	return req.WithContext(context.WithValue(req.Context(), keepUAKey{}, true))
+}
+
+// UserAgentKept reports whether KeepUserAgent marked req.
+func UserAgentKept(req *http.Request) bool {
+	keep, _ := req.Context().Value(keepUAKey{}).(bool)
+	return keep
+}
+
 
 type TechNode struct {
     Product string
@@ -84,6 +151,7 @@ type LocalCVE struct {
 // GetClient above if ever called before main() wires them — each is given a
 // safe no-result default for the same reason.
 var DeepScanTarget func(targetURL string) *TechProfile = func(string) *TechProfile { return &TechProfile{} }
+var DeepScanTargetContext func(ctx context.Context, targetURL string) *TechProfile = func(context.Context, string) *TechProfile { return &TechProfile{} }
 var SearchLocalCVEs func(product, version string) []LocalCVE = func(string, string) []LocalCVE { return nil }
 var GetCVEByID func(id string) *LocalCVE = func(string) *LocalCVE { return nil }
 var SearchExploitDB func(query string) []string = func(string) []string { return nil }

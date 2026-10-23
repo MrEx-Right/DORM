@@ -2,7 +2,6 @@ package sitemapper
 
 import (
 	"net/url"
-	"strings"
 	"time"
 )
 
@@ -63,6 +62,12 @@ func (b *DOMBridge) ExtractAll() (links []string, forms []Form, endpoints []Endp
 		},
 	}
 
+	// The page may live on the host the site root redirected to (puma.com →
+	// tr.puma.com): its own links are in scope then.
+	if cu, err := url.Parse(b.currentURL); err == nil {
+		c.adoptRedirectHost(cu.Hostname())
+	}
+
 	fakePage := &Page{
 		URL:          b.currentURL,
 		DiscoveredAt: time.Now(),
@@ -75,8 +80,7 @@ func (b *DOMBridge) ExtractAll() (links []string, forms []Form, endpoints []Endp
 
 	// Filter links to same-host only
 	for _, link := range result.links {
-		if u, err := url.Parse(link); err == nil &&
-			strings.EqualFold(u.Hostname(), b.baseURL.Hostname()) {
+		if c.inScope(link) {
 			links = append(links, link)
 		}
 	}

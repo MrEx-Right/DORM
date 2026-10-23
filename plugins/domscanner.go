@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"DORM/dom"
 	"DORM/models"
 	"context"
 	"strings"
@@ -24,6 +25,7 @@ func (p *DOMScannerPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		chromedp.Flag("disable-gpu", true),
 		chromedp.Flag("no-sandbox", true),
 	)
+	opts = append(opts, dom.RouteOptions()...) // scan route + persona UA, not a direct HeadlessChrome
 
 	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
 	defer cancel()

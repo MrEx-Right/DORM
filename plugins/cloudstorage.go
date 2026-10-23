@@ -4,7 +4,6 @@ import (
 	"DORM/models"
 	"DORM/sitemapper"
 	"crypto/rand"
-	"crypto/tls"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -77,10 +76,12 @@ func discoverCloudCandidates(body string) []bucketCandidate {
 	return out
 }
 
+// anonHTTPClient sends no scan auth header but still takes the scan route
+// and persona: bucket endpoints log the source IP and User-Agent too.
 func anonHTTPClient() *http.Client {
 	return &http.Client{
 		Timeout:   10 * time.Second,
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+		Transport: models.GetScanTransport(),
 	}
 }
 

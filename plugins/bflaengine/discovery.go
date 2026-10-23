@@ -3,6 +3,7 @@ package bflaengine
 import (
 	"DORM/models"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -21,9 +22,16 @@ func DiscoverAdminEndpoints(client *http.Client, baseURL string, target models.S
 			if strings.Contains(lower, "/admin") ||
 				strings.Contains(lower, "/management") ||
 				strings.Contains(lower, "/internal") {
-				if !seen[ep.URL] {
-					seen[ep.URL] = true
-					found = append(found, ep.URL)
+				// Callers prefix baseURL, so keep only the path: appending the
+				// full spider URL produced "http://host:80http://host/admin",
+				// which never parsed, so spider endpoints were never tested.
+				path := ep.URL
+				if u, err := url.Parse(ep.URL); err == nil && u.Path != "" {
+					path = u.RequestURI()
+				}
+				if !seen[baseURL+path] {
+					seen[baseURL+path] = true
+					found = append(found, path)
 				}
 			}
 		}
@@ -39,14 +47,19 @@ func DiscoverAdminEndpoints(client *http.Client, baseURL string, target models.S
 		if err != nil {
 			continue
 		}
-		req.Header.Set("User-Agent", "DORM-BFLA-Probe/1.0")
 		resp, err := client.Do(req)
 		if err != nil {
 			continue
 		}
-		_ = resp.Body.Close()
+		size := len(models.ReadBody(resp, 65536))
 		// 401/403 → endpoint exists but access is restricted (record for testing)
-		// 200/204 → already accessible (record for method tampering tests)
+		// 200/204 → already accessible (record for method tampering tests),
+		// unless a random sibling path answers the same way (catch-all route)
+		if resp.StatusCode == 200 || resp.StatusCode == 204 {
+			if models.ProbeSibling(client, fullURL, "GET", "", "").SameAs(resp.StatusCode, size) {
+				continue
+			}
+		}
 		if resp.StatusCode == 401 || resp.StatusCode == 403 ||
 			resp.StatusCode == 200 || resp.StatusCode == 204 {
 			seen[fullURL] = true

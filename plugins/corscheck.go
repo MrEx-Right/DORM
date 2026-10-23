@@ -36,7 +36,6 @@ func (p *CORSCheckPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 		req, _ := http.NewRequest("GET", baseURL, nil)
 		req.Header.Set("Origin", origin)
-		req.Header.Set("User-Agent", "DORM-CORS-Tester/1.3.5")
 
 		resp, err := client.Do(req)
 		if err != nil {

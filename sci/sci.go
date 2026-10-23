@@ -6,7 +6,7 @@ package sci
 
 import (
 	"DORM/models"
-	"crypto/tls"
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -90,14 +90,11 @@ func init() {
 
 // ─── HTTP Client ──────────────────────────────────────────────────────────────
 
+// sciClient rides the scan route and Traffic Morph persona (which also sets
+// the User-Agent), so SCI lookups leave the same way scan traffic does.
 var sciClient = &http.Client{
-	Timeout: 15 * time.Second,
-	Transport: &http.Transport{
-		TLSClientConfig:     &tls.Config{InsecureSkipVerify: true},
-		MaxIdleConns:        10,
-		IdleConnTimeout:     30 * time.Second,
-		DisableKeepAlives:   false,
-	},
+	Timeout:   15 * time.Second,
+	Transport: models.GetScanTransport(),
 	CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 3 {
 			return http.ErrUseLastResponse
@@ -112,6 +109,13 @@ var sciClient = &http.Client{
 // It uses models.DeepScanTarget for the core tech profile and augments with
 // direct HTTP analysis (headers, body, JS files).
 func AnalyzeTarget(targetURL string) SupplyChainResult {
+	return AnalyzeTargetContext(context.Background(), targetURL)
+}
+
+// AnalyzeTargetContext is AnalyzeTarget with the context every request is
+// made with. The SCI page passes models.WithBackground: it runs outside a
+// scan, and a finished scan's route refuses requests.
+func AnalyzeTargetContext(ctx context.Context, targetURL string) SupplyChainResult {
 	start := time.Now()
 
 	// Normalize URL
@@ -122,11 +126,11 @@ func AnalyzeTarget(targetURL string) SupplyChainResult {
 	result := SupplyChainResult{Target: targetURL}
 
 	// ── Step 1: Fetch main page ────────────────────────────────────────────
-	body, headers, err := fetchPage(targetURL)
+	body, headers, err := fetchPage(ctx, targetURL)
 	if err != nil {
 		// Try HTTP fallback
 		httpURL := strings.Replace(targetURL, "https://", "http://", 1)
-		body, headers, err = fetchPage(httpURL)
+		body, headers, err = fetchPage(ctx, httpURL)
 		if err != nil {
 			result.Error = fmt.Sprintf("Could not reach target: %v", err)
 			result.ScanDuration = time.Since(start).Round(time.Millisecond).String()
@@ -138,8 +142,8 @@ func AnalyzeTarget(targetURL string) SupplyChainResult {
 	detected := runSignatureDetection(body, headers)
 
 	// ── Step 3: Augment with models.DeepScanTarget (mevcut tech profiler) ─
-	if models.DeepScanTarget != nil {
-		profile := models.DeepScanTarget(targetURL)
+	if models.DeepScanTargetContext != nil {
+		profile := models.DeepScanTargetContext(ctx, targetURL)
 		if profile != nil {
 			for _, tech := range profile.Techs {
 				if tech.Product == "" {
@@ -169,7 +173,7 @@ func AnalyzeTarget(targetURL string) SupplyChainResult {
 	}
 
 	// ── Step 3.5: Manifest Extraction (package.json, composer.json) ────────
-	manifestComps := fetchManifests(targetURL)
+	manifestComps := fetchManifests(ctx, targetURL)
 	for _, mc := range manifestComps {
 		found := false
 		for i := range detected {
@@ -255,7 +259,7 @@ func cleanVersion(v string) string {
 	return v
 }
 
-func fetchManifests(targetURL string) []SCIComponent {
+func fetchManifests(ctx context.Context, targetURL string) []SCIComponent {
 	var comps []SCIComponent
 
 	u, err := url.Parse(targetURL)
@@ -266,9 +270,8 @@ func fetchManifests(targetURL string) []SCIComponent {
 
 	// 1. Fetch package.json
 	pkgURL := baseURL + "/package.json"
-	req, err := http.NewRequest("GET", pkgURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", pkgURL, nil)
 	if err == nil {
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
 		if resp, err := sciClient.Do(req); err == nil {
 			if resp.StatusCode == 200 && strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "json") {
 				var pkg struct {
@@ -300,9 +303,8 @@ func fetchManifests(targetURL string) []SCIComponent {
 
 	// 2. Fetch composer.json
 	compURL := baseURL + "/composer.json"
-	req2, err2 := http.NewRequest("GET", compURL, nil)
+	req2, err2 := http.NewRequestWithContext(ctx, "GET", compURL, nil)
 	if err2 == nil {
-		req2.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
 		if resp2, err2 := sciClient.Do(req2); err2 == nil {
 			if resp2.StatusCode == 200 && strings.Contains(strings.ToLower(resp2.Header.Get("Content-Type")), "json") {
 				var comp struct {
@@ -333,12 +335,11 @@ func fetchManifests(targetURL string) []SCIComponent {
 
 // ─── HTTP Fetch ────────────────────────────────────────────────────────────────
 
-func fetchPage(targetURL string) (string, http.Header, error) {
-	req, err := http.NewRequest("GET", targetURL, nil)
+func fetchPage(ctx context.Context, targetURL string) (string, http.Header, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", targetURL, nil)
 	if err != nil {
 		return "", nil, err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
 

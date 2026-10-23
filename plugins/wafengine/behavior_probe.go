@@ -1,6 +1,7 @@
 package wafengine
 
 import (
+	"DORM/models"
 	"fmt"
 	"io"
 	"net/http"
@@ -66,7 +67,7 @@ func BehaviorProbe(client *http.Client, baseURL string) (wafName, confidence, de
 				continue
 			}
 			req.Header.Set("User-Agent", probe.Payload)
-			resp, err = client.Do(req)
+			resp, err = client.Do(models.KeepUserAgent(req)) // the payload IS the User-Agent
 		}
 
 		if err != nil {

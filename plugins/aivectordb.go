@@ -195,7 +195,7 @@ func checkOllama(target models.ScanTarget) *models.Vulnerability {
 	genReq, _ := http.NewRequest("POST", getURL(target, "/api/generate"), genPayload)
 	if genReq != nil {
 		genReq.Header.Set("Content-Type", "application/json")
-		genClient := &http.Client{Timeout: 5 * time.Second}
+		genClient := &http.Client{Timeout: 5 * time.Second, Transport: models.GetScanTransport()} // unauthenticated, on the scan route
 		if genResp, genErr := genClient.Do(genReq); genErr == nil {
 			genBody := readBody(genResp, 4096)
 			if strings.Contains(genBody, `"response"`) {

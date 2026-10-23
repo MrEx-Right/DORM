@@ -19,21 +19,28 @@ func (p *DangerousMethodsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 		return nil
 	}
 
-	reqOptions, _ := http.NewRequest("OPTIONS", getURL(target, "/"), nil)
-	respOptions, err := models.GetClient().Do(reqOptions)
-	if err == nil {
-		defer func() { _ = respOptions.Body.Close() }()
-		allowHeader := respOptions.Header.Get("Allow")
+	// Redirects are not followed: a redirected TRACE/PUT is not the method
+	// being accepted here (Go turns PUT into GET on 301/302/303).
+	client := models.NoRedirectClient()
 
-		if strings.Contains(allowHeader, "TRACE") {
-			return &models.Vulnerability{
-				Target:      target,
-				Name:        "Dangerous Method (TRACE)",
-				Severity:    "MEDIUM",
-				CVSS:        5.0,
-				Description: "The server supports the TRACE method, which can lead to Cross-Site Tracing (XST) attacks.",
-				Solution:    "Disable the TRACE method in web server configuration.",
-				Reference:   "OWASP XST",
+	// TRACE: only a server that actually echoes the request is vulnerable to
+	// XST. The OPTIONS "Allow" header is not evidence — IIS lists TRACE in
+	// Allow/Public by default and still answers TRACE with 501.
+	marker := "dorm-trace-" + models.RandomToken()
+	if reqTrace, err := http.NewRequest("TRACE", getURL(target, "/"), nil); err == nil {
+		reqTrace.Header.Set("X-Dorm-Trace", marker)
+		if respTrace, err := client.Do(reqTrace); err == nil {
+			body := readBody(respTrace, 65536)
+			if respTrace.StatusCode == 200 && strings.Contains(body, marker) {
+				return &models.Vulnerability{
+					Target:      target,
+					Name:        "Dangerous Method (TRACE)",
+					Severity:    "MEDIUM",
+					CVSS:        5.0,
+					Description: "The server answers TRACE and echoes the request back (a custom X-Dorm-Trace header was reflected in the response body), which can lead to Cross-Site Tracing (XST) attacks.",
+					Solution:    "Disable the TRACE method in web server configuration.",
+					Reference:   "OWASP XST",
+				}
 			}
 		}
 	}
@@ -45,7 +52,7 @@ func (p *DangerousMethodsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 	reqPut, _ := http.NewRequest("PUT", getURL(target, testFileName), strings.NewReader(testContent))
 	reqPut.Header.Set("Content-Type", "text/plain")
 
-	respPut, err := models.GetClient().Do(reqPut)
+	respPut, err := client.Do(reqPut)
 	if err != nil {
 		return nil
 	}
@@ -54,18 +61,18 @@ func (p *DangerousMethodsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 	if respPut.StatusCode == 201 || respPut.StatusCode == 200 {
 
 		reqGet, _ := http.NewRequest("GET", getURL(target, testFileName), nil)
-		respGet, err := models.GetClient().Do(reqGet)
+		respGet, err := client.Do(reqGet)
 
 		if err == nil {
 			defer func() { _ = respGet.Body.Close() }()
 
-			bodyBytes, _ := io.ReadAll(respGet.Body)
+			bodyBytes, _ := io.ReadAll(io.LimitReader(respGet.Body, 65536))
 			uploadedContent := string(bodyBytes)
 
-			if strings.Contains(uploadedContent, testContent) {
+			if respGet.StatusCode == 200 && strings.Contains(uploadedContent, testContent) {
 
 				reqDel, _ := http.NewRequest("DELETE", getURL(target, testFileName), nil)
-				if respDel, errDel := models.GetClient().Do(reqDel); errDel == nil {
+				if respDel, errDel := client.Do(reqDel); errDel == nil {
 					_ = respDel.Body.Close()
 				}
 

@@ -169,7 +169,6 @@ func passiveRateLimitDetect(client *http.Client, baseURL string, target models.S
 		if err != nil {
 			continue
 		}
-		req.Header.Set("User-Agent", "DORM-IPSpoof-Probe/1.0")
 		resp, err := client.Do(req)
 		if err != nil {
 			continue
@@ -203,7 +202,6 @@ func passiveRateLimitDetect(client *http.Client, baseURL string, target models.S
 		if err != nil {
 			return nil
 		}
-		req.Header.Set("User-Agent", "DORM-IPSpoof-Probe/1.0")
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil
@@ -246,7 +244,6 @@ func minimalActiveProbe(client *http.Client, baseURL string, target models.ScanT
 			if err != nil {
 				return nil
 			}
-			req.Header.Set("User-Agent", "DORM-IPSpoof-Probe/1.0")
 
 			resp, err := client.Do(req)
 			if err != nil {
@@ -306,7 +303,6 @@ func probeStillBlocked(client *http.Client, fullURL string) bool {
 	if err != nil {
 		return true // can't confirm either way — don't risk crediting a false bypass
 	}
-	req.Header.Set("User-Agent", "DORM-IPSpoof-Probe/1.0")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -344,7 +340,6 @@ func testHeaderSpoofBypass(client *http.Client, baseURL string, target models.Sc
 		if err != nil {
 			continue
 		}
-		req.Header.Set("User-Agent", "DORM-IPSpoof-Probe/1.0")
 		req.Header.Set(sh.Name, sh.Value)
 
 		// RULE 4: Ban sentinel — connection error means stop
@@ -419,7 +414,6 @@ func testCompoundHeaderAttack(client *http.Client, baseURL string, target models
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("User-Agent", "DORM-IPSpoof-Probe/1.0")
 
 	// Attach all spoof headers simultaneously
 	for _, sh := range spoofHeaders {

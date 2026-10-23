@@ -47,6 +47,11 @@ function setDOMStatus(text, color, bg, border) {
     badge.style.borderColor = border;
 }
 
+function setDOMCrawling(on) {
+    const nav = document.getElementById('nav-dom');
+    if (nav) nav.classList.toggle('dom-crawling', on);
+}
+
 function appendDOMEvent(ev) {
     const feed = document.getElementById('domFeed');
     if (!feed) return;
@@ -58,9 +63,8 @@ function appendDOMEvent(ev) {
     // Update status badge
     setDOMStatus('CRAWLING', '#10B981', 'rgba(16,185,129,0.15)', 'rgba(16,185,129,0.3)');
 
-    // Show pulse on nav item
-    const pulse = document.getElementById('dom-nav-pulse');
-    if (pulse) pulse.style.display = 'inline-block';
+    // Spider in the sidebar walks while events stream in
+    setDOMCrawling(ev.kind !== 'done');
 
     // Update counters
     domEventCount++;
@@ -75,7 +79,6 @@ function appendDOMEvent(ev) {
 
     if (ev.kind === 'done') {
         setDOMStatus('DONE', '#10B981', 'rgba(16,185,129,0.15)', 'rgba(16,185,129,0.3)');
-        if (pulse) setTimeout(() => { pulse.style.display = 'none'; }, 2000);
     }
 
     const meta = domIconMap[ev.kind] || domIconMap['navigate'];

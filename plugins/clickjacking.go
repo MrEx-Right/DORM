@@ -1,6 +1,9 @@
 package plugins
 
-import "DORM/models"
+import (
+	"DORM/models"
+	"strings"
+)
 
 // 31. CLICKJACKING (X-Frame-Options)
 type ClickjackingPlugin struct{}
@@ -12,16 +15,18 @@ func (p *ClickjackingPlugin) Run(target models.ScanTarget) *models.Vulnerability
 		return nil
 	}
 
-	resp, err := models.GetClient().Get(getURL(target, ""))
-	if err != nil {
+	resp, ok := fetchRenderedPage(target)
+	if !ok {
 		return nil
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.Header.Get("X-Frame-Options") == "" && resp.Header.Get("Content-Security-Policy") == "" {
+	// Only CSP's frame-ancestors directive restricts framing; a CSP without
+	// it (script-src only, say) leaves the page frameable.
+	csp := strings.ToLower(resp.Header.Get("Content-Security-Policy"))
+	if resp.Header.Get("X-Frame-Options") == "" && !strings.Contains(csp, "frame-ancestors") {
 		return &models.Vulnerability{
 			Target: target, Name: "Clickjacking Risk", Severity: "INFO", CVSS: 0.0,
-			Description: "X-Frame-Options header is missing.",
-			Solution:    "Add DENY or SAMEORIGIN directives.",
+			Description: "Neither X-Frame-Options nor a Content-Security-Policy frame-ancestors directive is set on " + resp.Request.URL.String() + ".",
+			Solution:    "Add X-Frame-Options: DENY/SAMEORIGIN or CSP frame-ancestors 'none'/'self'.",
 			Reference:   "OWASP Clickjacking",
 		}
 	}

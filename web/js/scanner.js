@@ -40,7 +40,6 @@ function startScan() {
     const wafJitter = document.getElementById('wafJitterInput') ? document.getElementById('wafJitterInput').value : "0";
     const wafNullByte = document.getElementById('wafNullByteToggle') ? document.getElementById('wafNullByteToggle').checked : false;
     const wafUEP = document.getElementById('wafUEPToggle') ? document.getElementById('wafUEPToggle').checked : false;
-    const wafTLS = document.getElementById('wafTLSToggle') ? document.getElementById('wafTLSToggle').checked : false;
     const wafCaseAlt = document.getElementById('wafCaseAltToggle') ? document.getElementById('wafCaseAltToggle').checked : false;
     const wafHPP = document.getElementById('wafHPPToggle') ? document.getElementById('wafHPPToggle').checked : false;
 
@@ -90,7 +89,7 @@ function startScan() {
     const cveRadar = false; // Toggle was removed from UI
 
     // Assign to global variable (Notice: query param is now "targets")
-    scanEventSource = new EventSource(`/scan?targets=${encodeURIComponent(targetString)}&plugins=${encodeURIComponent(selected.join(","))}&auth=${encodeURIComponent(authHeader)}&proxyEnabled=${proxyEnabled}&proxyUrl=${encodeURIComponent(proxyUrl)}&wafDelay=${wafDelay}&wafJitter=${wafJitter}&wafNullByte=${wafNullByte}&wafUEP=${wafUEP}&wafTLS=${wafTLS}&wafCaseAlt=${wafCaseAlt}&wafHPP=${wafHPP}`);
+    scanEventSource = new EventSource(`/scan?targets=${encodeURIComponent(targetString)}&plugins=${encodeURIComponent(selected.join(","))}&auth=${encodeURIComponent(authHeader)}&proxyEnabled=${proxyEnabled}&proxyUrl=${encodeURIComponent(proxyUrl)}&wafDelay=${wafDelay}&wafJitter=${wafJitter}&wafNullByte=${wafNullByte}&wafUEP=${wafUEP}&wafCaseAlt=${wafCaseAlt}&wafHPP=${wafHPP}`);
 
     scanEventSource.onmessage = (e) => {
         let data;
@@ -207,9 +206,8 @@ function finishScanUI() {
         scanEventSource = null;
     }
 
-    // Ensure DOM crawler pulse is turned off
-    const pulse = document.getElementById('dom-nav-pulse');
-    if (pulse) pulse.style.display = 'none';
+    // Ensure the DOM crawler spider stops walking
+    setDOMCrawling(false);
     setDOMStatus('IDLE', '#94A3B8', 'rgba(148,163,184,0.1)', 'rgba(148,163,184,0.2)');
 
     // Hide CVE Banner if visible

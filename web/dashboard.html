@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <title>DORM SCANNER</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='331 297 611 611'%3E%3Crect x='331' y='297' width='611' height='611' rx='120' fill='%230A0C10'/%3E%3Cpath fill-rule='evenodd' fill='%23F2F2F2' d='M386 420L513 352V388H655A232 232 0 0 1 655 852H386Z M485 467H655A155.5 155.5 0 0 1 655 778H525V712L386 808V770L485 700Z'/%3E%3Cpath fill='%234ADE80' d='M648 520Q712 622 648 724Q584 622 648 520Z'/%3E%3C/svg%3E">
     <!-- Modern Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -28,6 +29,7 @@
             --accent-subtle-bg: rgba(59, 130, 246, 0.10);
             --accent-border: rgba(59, 130, 246, 0.35);
             --accent-glow: rgba(59, 130, 246, 0.18);
+            --brand-eye: #4ADE80;
             --success: #10B981;
             --success-subtle-bg: rgba(16, 185, 129, 0.10);
             --danger: #EF4444;
@@ -95,9 +97,19 @@
             position: relative;
         }
 
-        .brand img {
-            display: none;
-            /* Logo removed per user request */
+        .brand-logo {
+            display: block;
+            width: 44px;
+            height: 44px;
+            margin: 0 auto 12px;
+        }
+
+        .logo-d {
+            fill: var(--text-main);
+        }
+
+        .logo-eye {
+            fill: var(--brand-eye);
         }
 
         .brand h1 {
@@ -832,18 +844,29 @@
             position: relative;
         }
 
-        .loader-spinner {
-            width: 34px;
-            height: 34px;
-            border: 3px solid var(--panel-border);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
+        .loader-logo {
+            width: 84px;
+            height: 84px;
         }
 
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
+        .loader-logo .logo-eye {
+            transform-box: fill-box;
+            transform-origin: center;
+            animation: eye-blink 3.2s ease-in-out infinite;
+        }
+
+        @keyframes eye-blink {
+            0%, 86%, 100% {
+                transform: scaleY(1);
+            }
+            91% {
+                transform: scaleY(0.08);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .loader-logo .logo-eye {
+                animation: none;
             }
         }
 
@@ -1246,6 +1269,58 @@
             background: rgba(16, 185, 129, 0.15);
             color: #6EE7B7;
             border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        /* Sidebar spider: the Font Awesome 6 fa-spider glyph, cut into a body and
+           eight two-segment legs so the legs can walk while the body stays put.
+           Alternating tetrapod gait (L1 R2 L3 R4 vs R1 L2 R3 L4, half a cycle apart,
+           slight back-to-front wave). Each leg spends ~60% of the cycle in stance —
+           sweeping slowly backward from --fw to --bk — then lifts and swings
+           forward: the lifted leg foreshortens (scale) and the knee folds (--fx).
+           Right legs reuse the left geometry inside a mirrored <g>, so the same
+           angles mirror automatically. Pivots are hip/knee points in viewBox units. */
+        .nav-item i.dom-spider {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .dom-spider svg {
+            width: 15.75px;
+            height: 14px;
+            overflow: visible;
+            fill: currentColor;
+        }
+
+        .dom-spider .leg,
+        .dom-spider .tibia {
+            transform-box: view-box;
+        }
+
+        .nav-item.dom-crawling i.dom-spider {
+            color: #10B981;
+            filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.5));
+        }
+
+        .nav-item.dom-crawling .dom-spider .leg { animation: spiderHip 0.56s var(--d) infinite; }
+        .nav-item.dom-crawling .dom-spider .tibia { animation: spiderKnee 0.56s var(--d) infinite; }
+
+        @keyframes spiderHip {
+            0%   { transform: rotate(var(--fw)) scale(1); animation-timing-function: linear; }
+            60%  { transform: rotate(var(--bk)) scale(1); animation-timing-function: ease-out; }
+            80%  { transform: rotate(calc((var(--fw) + var(--bk)) / 2)) scale(0.88); animation-timing-function: ease-in; }
+            100% { transform: rotate(var(--fw)) scale(1); }
+        }
+
+        @keyframes spiderKnee {
+            0%, 60% { transform: rotate(0deg); animation-timing-function: ease-out; }
+            80%     { transform: rotate(var(--fx)); animation-timing-function: ease-in; }
+            100%    { transform: rotate(0deg); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .nav-item.dom-crawling .dom-spider .leg,
+            .nav-item.dom-crawling .dom-spider .tibia { animation: none; }
         }
 
         /* ============================================================
@@ -1885,6 +1960,301 @@
             box-shadow: 0 0 8px #10B981;
             animation: domPulse 1.2s ease-in-out infinite;
         }
+        /* ==========================================
+           TRAFFIC MORPH — live OpSec / identity panel
+           ========================================== */
+        .tm-nav-badge {
+            margin-left: auto;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid var(--border-default);
+            color: var(--text-dim);
+            background: var(--surface-2);
+        }
+
+        .tm-nav-badge.tm-good { color: #34D399; border-color: rgba(16, 185, 129, 0.35); background: var(--success-subtle-bg); }
+        .tm-nav-badge.tm-warn { color: #FBBF24; border-color: rgba(245, 158, 11, 0.35); background: var(--warning-subtle-bg); }
+        .tm-nav-badge.tm-bad { color: #F87171; border-color: rgba(239, 68, 68, 0.35); background: var(--danger-subtle-bg); }
+
+        /* Traffic Morph nav icon: the FA6 fa-masks-theater glyph split into its two
+           masks. Each time the scan's User-Agent rotates, traffic-morph.js flips
+           `.swapped` and plays one swap: each mask slides across on a small arc
+           (front mask over, back mask under) and turns around (scaleX) with a
+           snappy overshoot. --m1/--m2 stagger the turn — the front mask turns in
+           the first half of the move, the back mask in the second — so the two
+           are never edge-on at the same moment. The swapped pose is the exact
+           mirror of the glyph — each mask rests at translateX(640 - 2*cx)
+           scaleX(-1) about its own centre — so both rest poses look like the
+           real icon. */
+        .nav-item i.tm-masks {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .tm-masks svg {
+            width: 17.5px;
+            height: 14px;
+            overflow: visible;
+            fill: currentColor;
+        }
+
+        .tm-masks .tm-mask {
+            transform-box: view-box;
+        }
+
+        .tm-masks.swapped .tm-mask {
+            transform: translate(var(--dx), 0) scaleX(-1);
+        }
+
+        .tm-masks.tm-swap-in .tm-mask { animation: tmSwapIn 0.55s both; }
+        .tm-masks.tm-swap-out .tm-mask { animation: tmSwapOut 0.55s both; }
+
+        .nav-item.tm-live i.tm-masks {
+            color: #A78BFA;
+            filter: drop-shadow(0 0 4px rgba(167, 139, 250, 0.5));
+        }
+
+        @keyframes tmSwapIn {
+            0%   { transform: translate(0, 0) scaleX(1); animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45); }
+            40%  { transform: translate(calc(var(--dx) * 0.5), var(--dy)) scaleX(var(--m1)); animation-timing-function: cubic-bezier(0, 0.55, 0.45, 1); }
+            80%  { transform: translate(var(--dx), 0) scaleX(-1.12); animation-timing-function: ease-in-out; }
+            100% { transform: translate(var(--dx), 0) scaleX(-1); }
+        }
+
+        @keyframes tmSwapOut {
+            0%   { transform: translate(var(--dx), 0) scaleX(-1); animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45); }
+            40%  { transform: translate(calc(var(--dx) * 0.5), var(--dy)) scaleX(var(--m2)); animation-timing-function: cubic-bezier(0, 0.55, 0.45, 1); }
+            80%  { transform: translate(0, 0) scaleX(1.12); animation-timing-function: ease-in-out; }
+            100% { transform: translate(0, 0) scaleX(1); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .tm-masks.tm-swap-in .tm-mask,
+            .tm-masks.tm-swap-out .tm-mask { animation: none; }
+        }
+
+        .tm-head {
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .tm-head h2 { margin: 0; font-size: 20px; font-weight: 700; color: #fff; }
+        .tm-head p { margin: 6px 0 0 0; color: var(--text-dim); font-size: 13px; }
+        .tm-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+        .tm-seg {
+            display: inline-flex;
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+        }
+
+        .tm-seg button {
+            background: transparent;
+            border: none;
+            box-shadow: none;
+            color: var(--text-dim);
+            padding: 9px 14px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            border-radius: 0;
+        }
+
+        .tm-seg button.active { background: var(--accent-subtle-bg); color: #fff; }
+
+        .tm-btn-ghost {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--panel-border);
+            color: #fff;
+            box-shadow: none;
+            padding: 10px 16px;
+        }
+
+        .tm-btn-identity {
+            background: linear-gradient(135deg, #7C3AED, #3B82F6);
+            border: none;
+            color: #fff;
+            padding: 10px 18px;
+            font-weight: 800;
+            letter-spacing: 1px;
+        }
+
+        .tm-btn-identity:disabled, .tm-btn-ghost:disabled { opacity: 0.55; cursor: progress; }
+        .tm-seg button:disabled, .tm-btn-identity.tm-locked { opacity: 0.4; cursor: not-allowed; }
+
+        /* Traffic Morph on/off switch (off at every launch) */
+        .tm-switch {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            user-select: none;
+            padding: 7px 12px;
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-md);
+        }
+
+        .tm-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+        .tm-switch-track {
+            position: relative;
+            width: 34px;
+            height: 18px;
+            border-radius: 9px;
+            background: var(--surface-2);
+            border: 1px solid var(--border-default);
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .tm-switch-knob {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--text-dim);
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        .tm-switch input:checked + .tm-switch-track { background: rgba(124, 58, 237, 0.35); border-color: #7C3AED; }
+        .tm-switch input:checked + .tm-switch-track .tm-switch-knob { transform: translateX(16px); background: #fff; }
+        .tm-switch input:focus-visible + .tm-switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+        .tm-switch input:disabled + .tm-switch-track { opacity: 0.55; cursor: progress; }
+
+        .tm-switch-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--text-dim); }
+        .tm-switch input:checked ~ .tm-switch-label { color: #fff; }
+
+        .nav-item.tm-off i.tm-masks { opacity: 0.45; }
+
+        .tm-status {
+            display: flex;
+            gap: 18px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin: 16px 0;
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .tm-status b { color: var(--text-main); font-weight: 600; }
+
+        .tm-live-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-tertiary);
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        .tm-live-dot.on { background: #10B981; box-shadow: 0 0 8px #10B981; animation: domPulse 1s ease-in-out infinite; }
+
+        .tm-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .tm-card .sm-panel-header { justify-content: space-between; }
+        .tm-card-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+        .tm-full { grid-column: 1 / -1; }
+
+        .tm-chain { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+
+        .tm-hop {
+            background: var(--surface-2);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-sm);
+            padding: 5px 10px;
+            font-size: 12px;
+            font-family: 'Consolas', monospace;
+            color: var(--text-main);
+        }
+
+        .tm-hop.tm-hop-self { border-color: var(--accent-border); color: #93C5FD; }
+        .tm-chain .fa-chevron-right { color: var(--text-tertiary); font-size: 10px; }
+
+        .tm-kv { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; font-size: 13px; }
+        .tm-kv > div:nth-child(odd) { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; padding-top: 2px; }
+        .tm-kv > div:nth-child(even) { color: var(--text-main); min-width: 0; overflow-wrap: anywhere; }
+
+        .tm-mono { font-family: 'Consolas', monospace; font-size: 12px; overflow-wrap: anywhere; }
+        .tm-ip { font-family: 'Consolas', monospace; font-size: 26px; font-weight: 700; color: #fff; overflow-wrap: anywhere; }
+
+        .tm-tag {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            margin-right: 6px;
+            border: 1px solid var(--border-default);
+            color: var(--text-dim);
+            vertical-align: middle;
+            text-transform: uppercase;
+        }
+
+        .tm-tag.tm-good { color: #34D399; border-color: rgba(16, 185, 129, 0.35); background: var(--success-subtle-bg); }
+        .tm-tag.tm-warn { color: #FBBF24; border-color: rgba(245, 158, 11, 0.35); background: var(--warning-subtle-bg); }
+        .tm-tag.tm-bad { color: #F87171; border-color: rgba(239, 68, 68, 0.35); background: var(--danger-subtle-bg); }
+
+        .tm-note {
+            font-size: 12px;
+            line-height: 1.5;
+            padding: 9px 12px;
+            border-radius: var(--radius-md);
+            border-left: 3px solid var(--warning);
+            background: var(--warning-subtle-bg);
+            color: #FDE68A;
+        }
+
+        .tm-note.tm-bad { border-left-color: var(--danger); background: var(--danger-subtle-bg); color: #FECACA; }
+        .tm-note.tm-info { border-left-color: var(--accent); background: var(--accent-subtle-bg); color: #BFDBFE; }
+        .tm-note.tm-good { border-left-color: var(--success); background: var(--success-subtle-bg); color: #A7F3D0; }
+
+        .tm-copy {
+            background: transparent;
+            border: 1px solid var(--panel-border);
+            color: var(--text-dim);
+            box-shadow: none;
+            padding: 2px 8px;
+            font-size: 10px;
+            margin-left: 6px;
+        }
+
+        .tm-bar-row { display: grid; grid-template-columns: 150px 1fr 48px; gap: 10px; align-items: center; font-size: 12px; }
+        .tm-bar-row.current .tm-bar-label { color: #C4B5FD; font-weight: 700; }
+        .tm-bar-track { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+        .tm-bar-fill { height: 100%; background: linear-gradient(90deg, #7C3AED, #3B82F6); width: 0; transition: width 0.4s ease; }
+        .tm-bar-count { text-align: right; color: var(--text-dim); font-family: 'Consolas', monospace; }
+
+        .tm-stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+        .tm-stat { background: var(--surface-2); border-radius: var(--radius-md); padding: 12px; text-align: center; }
+        .tm-stat-num { font-size: 22px; font-weight: 700; color: #fff; font-family: 'Consolas', monospace; }
+        .tm-stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-dim); margin-top: 4px; font-weight: 600; }
+
+        .tm-actions-list { display: flex; flex-direction: column; gap: 8px; }
+        .tm-action-row { display: grid; grid-template-columns: 80px 170px 1fr; gap: 10px; font-size: 12.5px; align-items: baseline; }
+
+        @media (max-width: 1100px) {
+            .tm-grid { grid-template-columns: 1fr; }
+            .tm-stats { grid-template-columns: repeat(3, 1fr); }
+            .tm-action-row { grid-template-columns: 70px 1fr; }
+            .tm-action-row > :last-child { grid-column: 1 / -1; }
+        }
     </style>
 </head>
 
@@ -1900,7 +2270,10 @@
     <!-- LOADING SCREEN -->
     <div id="dorm-loader">
         <div class="loader-content">
-            <div class="loader-spinner"></div>
+            <svg class="loader-logo" viewBox="381 347 511 511" aria-hidden="true">
+                <path class="logo-d" fill-rule="evenodd" d="M386 420L513 352V388H655A232 232 0 0 1 655 852H386Z M485 467H655A155.5 155.5 0 0 1 655 778H525V712L386 808V770L485 700Z" />
+                <path class="logo-eye" d="M648 520Q712 622 648 724Q584 622 648 520Z" />
+            </svg>
             <h1 class="loader-brand">DORM<span>COMMUNITY EDITION</span></h1>
             <p class="loader-text">INITIALIZING...</p>
         </div>
@@ -1908,6 +2281,10 @@
 
     <div class="sidebar">
         <div class="brand">
+            <svg class="brand-logo" viewBox="381 347 511 511" aria-hidden="true">
+                <path class="logo-d" fill-rule="evenodd" d="M386 420L513 352V388H655A232 232 0 0 1 655 852H386Z M485 467H655A155.5 155.5 0 0 1 655 778H525V712L386 808V770L485 700Z" />
+                <path class="logo-eye" d="M648 520Q712 622 648 724Q584 622 648 520Z" />
+            </svg>
             <h1>DORM</h1>
             <span>Community Edition</span>
         </div>
@@ -1923,9 +2300,21 @@
                 <i class="fas fa-shield-virus"></i> Bypass
             </div>
             <div class="nav-item" onclick="switchView('dom')" id="nav-dom">
-                <i class="fas fa-spider"></i> DOM Crawler
-                <span id="dom-nav-pulse"
-                    style="display:none; width:8px; height:8px; border-radius:50%; background:#10B981; margin-left:auto; box-shadow:0 0 8px #10B981; animation:domPulse 1s ease-in-out infinite;"></span>
+                <i class="dom-spider"><svg viewBox="0 0 576 512" aria-hidden="true">
+                        <g>
+                            <g class="leg" style="--fw:17deg;--bk:-13deg;--fx:20deg;--d:0s;transform-origin:185.1px 195.6px"><path d="M162.6 206.7L109.1 143.6C104 137.7 102.1 129.7 104 122.2L153.8 121.8L207.7 184.4L219.6 215.8Z"/><circle cx="129" cy="126" r="23"/><path class="tibia" style="transform-origin:129px 126px" d="M109.1 143.6C104 137.7 102.1 129.7 104 122.2L132.2 12.1C134.4 3.5 143.1 -1.7 151.7 0.5L167.3 4.3C175.9 6.5 181.1 15.2 178.1 23.8L153.8 121.8Z"/></g>
+                            <g class="leg" style="--fw:21deg;--bk:-17deg;--fx:20deg;--d:-0.295s;transform-origin:160.7px 231.4px"><path d="M158.9 256L54.2 214.3C47.4 211.6 42.3 205.1 40.1 199.1L82.8 174.9L162.6 206.7L200 239Z"/><circle cx="63" cy="191" r="23"/><path class="tibia" style="transform-origin:63px 191px" d="M54.2 214.3C47.4 211.6 42.3 205.1 40.1 199.1L12.7 110.4C10.1 102 14.9 93 23.3 91.3L38.7 86.6C47.2 84 56.2 88.7 58.8 97.2L82.8 174.9Z"/></g>
+                            <g class="leg" style="--fw:17deg;--bk:-21deg;--fx:-20deg;--d:-0.03s;transform-origin:160.7px 281.1px"><path d="M162.5 306.2L82.7 338L40.1 313.8C42.2 306.9 47.4 301.3 54.2 298.6L158.9 256L200 273.4Z"/><circle cx="62" cy="320" r="23"/><path class="tibia" style="transform-origin:62px 320px" d="M82.7 338L58.7 415.7C56.1 424.2 47.1 428.9 38.7 426.3L23.3 421.6C14.8 419 10.1 410.1 12.7 402.5L40.1 313.8C42.2 306.9 47.4 301.3 54.2 298.6Z"/></g>
+                            <g class="leg" style="--fw:13deg;--bk:-18deg;--fx:-20deg;--d:-0.325s;transform-origin:177.4px 325.8px"><path d="M192.3 345.5L153.8 390.2L104 389.8C102.1 382.2 104 374.2 109.1 368.3L162.5 306.2L211.2 304.5Z"/><circle cx="130" cy="381" r="23"/><path class="tibia" style="transform-origin:130px 381px" d="M153.8 390.2L179 488.2C181.1 496.8 175.9 505.5 167.3 507.6L151.7 511.5C143.1 513.7 134.4 508.4 132.2 499.9L104 389.8C102.1 382.2 104 374.2 109.1 368.3Z"/></g>
+                        </g>
+                        <g transform="matrix(-1 0 0 1 576 0)">
+                            <g class="leg" style="--fw:17deg;--bk:-13deg;--fx:20deg;--d:-0.28s;transform-origin:185.1px 195.6px"><path d="M162.6 206.7L109.1 143.6C104 137.7 102.1 129.7 104 122.2L153.8 121.8L207.7 184.4L219.6 215.8Z"/><circle cx="129" cy="126" r="23"/><path class="tibia" style="transform-origin:129px 126px" d="M109.1 143.6C104 137.7 102.1 129.7 104 122.2L132.2 12.1C134.4 3.5 143.1 -1.7 151.7 0.5L167.3 4.3C175.9 6.5 181.1 15.2 178.1 23.8L153.8 121.8Z"/></g>
+                            <g class="leg" style="--fw:21deg;--bk:-17deg;--fx:20deg;--d:-0.015s;transform-origin:160.7px 231.4px"><path d="M158.9 256L54.2 214.3C47.4 211.6 42.3 205.1 40.1 199.1L82.8 174.9L162.6 206.7L200 239Z"/><circle cx="63" cy="191" r="23"/><path class="tibia" style="transform-origin:63px 191px" d="M54.2 214.3C47.4 211.6 42.3 205.1 40.1 199.1L12.7 110.4C10.1 102 14.9 93 23.3 91.3L38.7 86.6C47.2 84 56.2 88.7 58.8 97.2L82.8 174.9Z"/></g>
+                            <g class="leg" style="--fw:17deg;--bk:-21deg;--fx:-20deg;--d:-0.31s;transform-origin:160.7px 281.1px"><path d="M162.5 306.2L82.7 338L40.1 313.8C42.2 306.9 47.4 301.3 54.2 298.6L158.9 256L200 273.4Z"/><circle cx="62" cy="320" r="23"/><path class="tibia" style="transform-origin:62px 320px" d="M82.7 338L58.7 415.7C56.1 424.2 47.1 428.9 38.7 426.3L23.3 421.6C14.8 419 10.1 410.1 12.7 402.5L40.1 313.8C42.2 306.9 47.4 301.3 54.2 298.6Z"/></g>
+                            <g class="leg" style="--fw:13deg;--bk:-18deg;--fx:-20deg;--d:-0.045s;transform-origin:177.4px 325.8px"><path d="M192.3 345.5L153.8 390.2L104 389.8C102.1 382.2 104 374.2 109.1 368.3L162.5 306.2L211.2 304.5Z"/><circle cx="130" cy="381" r="23"/><path class="tibia" style="transform-origin:130px 381px" d="M153.8 390.2L179 488.2C181.1 496.8 175.9 505.5 167.3 507.6L151.7 511.5C143.1 513.7 134.4 508.4 132.2 499.9L104 389.8C102.1 382.2 104 374.2 109.1 368.3Z"/></g>
+                        </g>
+                        <path d="M207.7 184.4L207.9 160C206.1 123.4 228.9 91.8 261.4 80.4C266.5 78.6 271.9 82.6 271.9 88.1L271.9 112L304 112L304 88.1C304 82.6 309.4 78.6 314.6 80.4C345.9 91.4 368.3 121 368.3 155.9C368.3 157.3 368.1 158.6 368.1 160L368.3 184.4L413.4 205.8L417.1 256L413.4 306.2L383.7 345.5C383.8 347.7 384.3 349.8 384.3 352C384.3 405 341.2 448 288 448S191.6 405 191.6 352C191.6 349.8 192.1 347.7 192.3 345.5L162.5 306.2L158.9 256L162.6 206.7Z"/>
+                    </svg></i> DOM Crawler
             </div>
             <div class="nav-item" onclick="switchView('cvecenter')">
                 <i class="fas fa-radiation"></i> CVE Center
@@ -1944,13 +2333,20 @@
             <div class="nav-item" onclick="switchView('proxy')">
                 <i class="fas fa-server"></i> Proxy Settings
             </div>
+            <div class="nav-item" id="nav-morph" onclick="switchView('morph')">
+                <i class="tm-masks"><svg viewBox="0 0 640 512" aria-hidden="true">
+                        <path class="tm-mask back" style="--dx:273px;--dy:45px;--m1:0.6;--m2:-0.6;transform-origin:183.5px 224px" d="M206.9 245.1C171 255.6 146.8 286.4 149.3 319.3C160.7 306.5 178.1 295.5 199.3 288.4L206.9 245.1zM95.78 294.9L64.11 115.5C63.74 113.9 64.37 112.9 64.37 112.9c57.75-32.13 123.1-48.99 189-48.99c1.625 0 3.113 .0745 4.738 .0745c13.1-13.5 31.75-22.75 51.62-26c18.87-3 38.12-4.5 57.25-5.25c-9.999-14-24.47-24.27-41.84-27.02c-23.87-3.875-47.9-5.732-71.77-5.732c-76.74 0-152.4 19.45-220.1 57.07C9.021 70.57-3.853 98.5 1.021 126.6L32.77 306c14.25 80.5 136.3 142 204.5 142c3.625 0 6.777-.2979 10.03-.6729c-13.5-17.13-28.1-40.5-39.5-67.63C160.1 366.8 101.7 328 95.78 294.9zM193.4 157.6C192.6 153.4 191.1 149.7 189.3 146.2c-8.249 8.875-20.62 15.75-35.25 18.37c-14.62 2.5-28.75 .376-39.5-5.249c-.5 4-.6249 7.998 .125 12.12c3.75 21.75 24.5 36.24 46.25 32.37C182.6 200.1 197.3 179.3 193.4 157.6z"/>
+                        <path class="tm-mask front" style="--dx:-227.6px;--dy:-60px;--m1:-0.6;--m2:0.6;transform-origin:433.8px 287.9px" d="M606.8 121c-88.87-49.38-191.4-67.38-291.9-51.38C287.5 73.1 265.8 95.85 260.8 123.1L229 303.5c-15.37 87.13 95.33 196.3 158.3 207.3c62.1 11.13 204.5-53.68 219.9-140.8l31.75-179.5C643.9 162.3 631 134.4 606.8 121zM333.5 217.8c3.875-21.75 24.62-36.25 46.37-32.37c21.75 3.75 36.25 24.49 32.5 46.12c-.7499 4.125-2.25 7.873-4.125 11.5c-8.249-9-20.62-15.75-35.25-18.37c-14.75-2.625-28.75-.3759-39.5 5.124C332.1 225.9 332.9 221.9 333.5 217.8zM403.1 416.5c-55.62-9.875-93.49-59.23-88.99-112.1c20.62 25.63 56.25 46.24 99.49 53.87c43.25 7.625 83.74 .3781 111.9-16.62C512.2 392.7 459.7 426.3 403.1 416.5zM534.4 265.2c-8.249-8.875-20.75-15.75-35.37-18.37c-14.62-2.5-28.62-.3759-39.5 5.249c-.5-4-.625-7.998 .125-12.12c3.875-21.75 24.62-36.25 46.37-32.37c21.75 3.875 36.25 24.49 32.37 46.24C537.6 257.9 536.1 261.7 534.4 265.2z"/>
+                    </svg></i> Traffic Morph
+                <span id="morph-nav-badge" class="tm-nav-badge" title="Egress route of the scan client">···</span>
+            </div>
             <div class="nav-item" onclick="switchView('history')">
                 <i class="fas fa-history"></i> Scan History
             </div>
         </div>
 
         <div style="margin-top:auto; font-size:12px; color:rgba(255,255,255,0.3); text-align:center; font-weight: 600;">
-            v1.28.1
+            v1.29.0
         </div>
     </div>
 
@@ -2131,20 +2527,6 @@
                             </label>
                         </div>
 
-                        <!-- Stealth Mode (uTLS Placeholder) -->
-                        <div
-                            style="background: rgba(0,0,0,0.2); padding: 15px; border: 1px solid var(--panel-border); border-radius: 8px;">
-                            <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #fff;"><i class="fas fa-user-secret"
-                                    style="color:#F87171; margin-right:6px;"></i> TLS Fingerprint Spoofing</h3>
-                            <p style="font-size: 11px; color: var(--text-dim); margin-bottom: 15px;">Mimic modern
-                                browsers (Chrome/Firefox) at the TLS handshake level (JA3) to bypass bot protection.</p>
-                            <label class="toggle-label"
-                                style="display: inline-flex; border: 1px solid rgba(248, 113, 113, 0.3); background: rgba(248, 113, 113, 0.1);">
-                                <input type="checkbox" id="wafTLSToggle" class="custom-checkbox">
-                                <span style="color:#E2E8F0; margin-left: 8px;">Enable uTLS Stealth Client</span>
-                            </label>
-                        </div>
-
                         <!-- Case Alternation -->
                         <div
                             style="background: rgba(0,0,0,0.2); padding: 15px; border: 1px solid var(--panel-border); border-radius: 8px;">
@@ -2199,6 +2581,66 @@
                         <input type="text" id="proxyUrlInput" value="http://127.0.0.1:8081"
                             style="flex-grow: 1; background-color: rgba(0, 0, 0, 0.2); color: var(--text-main); border: 1px solid var(--panel-border); border-radius: 6px; padding: 16px; font-family: 'Consolas', monospace; font-size: 15px; outline: none;"
                             placeholder="http://127.0.0.1:8081">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-morph" class="view-section">
+            <div class="container">
+                <div class="control-panel tm-head">
+                    <div>
+                        <h2><i class="fas fa-masks-theater" style="color:#A78BFA; margin-right:10px;"></i>Traffic Morph</h2>
+                        <p>How DORM looks from the target's side: egress route, TLS fingerprint, User-Agent persona and the live request flow of the scan client.</p>
+                    </div>
+                    <div class="tm-actions">
+                        <label class="tm-switch" title="Traffic Morph on: User-Agent persona rotation and NEW IDENTITY. Off: every request sends one fixed DORM User-Agent. Off at every launch.">
+                            <input type="checkbox" id="tmEnabledToggle" onchange="setMorphEnabled(this.checked)">
+                            <span class="tm-switch-track"><span class="tm-switch-knob"></span></span>
+                            <span class="tm-switch-label" id="tmEnabledLabel">MORPH OFF</span>
+                        </label>
+                        <div class="tm-seg" title="User-Agent persona: ROTATE draws a new User-Agent per request, STICKY keeps one per identity">
+                            <button id="tmModeRotate" onclick="setMorphPersonaMode('rotate')">ROTATE</button>
+                            <button id="tmModeSticky" onclick="setMorphPersonaMode('sticky')">STICKY</button>
+                        </div>
+                        <button id="tmEgressBtn" class="tm-btn-ghost" onclick="checkMorphEgress()"
+                            title="Asks check.torproject.org (and ip-api.com for location), through the configured route, which IP the request arrived from">
+                            <i class="fas fa-globe"></i> CHECK EGRESS
+                        </button>
+                        <button id="tmIdentityBtn" class="tm-btn-identity" onclick="rotateMorphIdentity()">
+                            <i class="fas fa-user-secret"></i> NEW IDENTITY
+                        </button>
+                    </div>
+                </div>
+
+                <div class="tm-status" id="tmStatus">Loading identity…</div>
+
+                <div id="tmRotateResult" style="display:none; margin-bottom:16px;"></div>
+
+                <div class="tm-grid">
+                    <div class="sm-panel tm-card">
+                        <div class="sm-panel-header"><span><i class="fas fa-route"></i> Egress Route</span><span id="tmRouteTag"></span></div>
+                        <div class="tm-card-body" id="tmRoute"></div>
+                    </div>
+                    <div class="sm-panel tm-card">
+                        <div class="sm-panel-header"><span><i class="fas fa-globe"></i> Egress IP</span><span id="tmEgressTag"></span></div>
+                        <div class="tm-card-body" id="tmEgress"></div>
+                    </div>
+                    <div class="sm-panel tm-card">
+                        <div class="sm-panel-header"><span><i class="fas fa-fingerprint"></i> TLS Fingerprint</span><span class="tm-tag">measured</span></div>
+                        <div class="tm-card-body" id="tmTLS"></div>
+                    </div>
+                    <div class="sm-panel tm-card">
+                        <div class="sm-panel-header"><span><i class="fas fa-id-badge"></i> Persona</span><span id="tmPersonaTag"></span></div>
+                        <div class="tm-card-body" id="tmPersona"></div>
+                    </div>
+                    <div class="sm-panel tm-card tm-full">
+                        <div class="sm-panel-header"><span><i class="fas fa-wave-square"></i> Live Traffic &middot; shared scan client</span><span id="tmTrafficTag"></span></div>
+                        <div class="tm-card-body" id="tmTraffic"></div>
+                    </div>
+                    <div class="sm-panel tm-card tm-full">
+                        <div class="sm-panel-header"><span><i class="fas fa-scale-unbalanced"></i> Persona Consistency</span><span id="tmConsistencyTag"></span></div>
+                        <div class="tm-card-body" id="tmConsistency"></div>
                     </div>
                 </div>
             </div>
@@ -2826,6 +3268,7 @@
         <script src="js/cve-center.js"></script>
         <script src="js/template-builder.js"></script>
         <script src="js/supply-chain.js"></script>
+        <script src="js/traffic-morph.js"></script>
         <script src="js/legacy.js"></script>
         <script src="js/init.js"></script>
 

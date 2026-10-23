@@ -14,7 +14,6 @@ func NewBFLARequest(method, url, token string, body io.Reader) (*http.Request, e
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "DORM-BFLA-Probe/1.0")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	if token != "" {

@@ -2,9 +2,10 @@ package plugins
 
 import (
 	"DORM/models"
-	"crypto/tls"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -32,39 +33,71 @@ var wcdSuffixes = []func(string) string{
 	func(p string) string { return p + "/nonexistent.css" },
 }
 
+// cacheHitEvidence returns the response header that shows it was served from
+// a cache. The header merely being present is not enough: "X-Cache: Miss from
+// cloudfront" or "Age: 0" says the opposite.
+func cacheHitEvidence(h http.Header) string {
+	for _, name := range []string{"X-Cache", "CF-Cache-Status", "X-Cache-Status", "X-Proxy-Cache"} {
+		if v := h.Get(name); strings.Contains(strings.ToLower(v), "hit") {
+			return name + ": " + v
+		}
+	}
+	if age, err := strconv.Atoi(strings.TrimSpace(h.Get("Age"))); err == nil && age > 0 {
+		return fmt.Sprintf("Age: %d", age)
+	}
+	if v := h.Get("X-Varnish"); len(strings.Fields(v)) >= 2 { // "<this req> <cached req>"
+		return "X-Varnish: " + v
+	}
+	return ""
+}
+
+// Run needs content that differs per user. The scan's auth header makes the
+// "victim" request; a client without it is the attacker. If the attacker
+// already sees the same page on the real path, nothing private can leak
+// through the cache — that was the 2026-10-22 dynatrace.com FP: a public
+// page, no auth configured, and "authed" and "anonymous" were the same request.
 func (p *WCDPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
 	}
 
 	baseURL := getURL(target, "")
-	authedClient := models.GetClient()
-	anonClient := &http.Client{
-		Timeout:   10 * time.Second,
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}},
+	// Neither client follows redirects: a dynamic path that sends the
+	// anonymous user to /login must not be compared as the login page.
+	authedClient := models.NoRedirectClient()
+	anonClient := &http.Client{ // no scan auth header, same route and persona
+		Timeout:       10 * time.Second,
+		Transport:     models.GetScanTransport(),
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+
+	get := func(c *http.Client, u string) (int, http.Header, string, bool) {
+		resp, err := c.Get(u)
+		if err != nil {
+			return 0, nil, "", false
+		}
+		return resp.StatusCode, resp.Header, readBody(resp, 32768), true
 	}
 
 	for _, basePath := range wcdBasePaths {
-		// Baseline: what does the real dynamic path actually return?
-		baselineResp, err := authedClient.Get(baseURL + basePath)
-		if err != nil {
+		// Baseline: what does the real dynamic path return to the victim?
+		status, _, baselineBody, ok := get(authedClient, baseURL+basePath)
+		if !ok || status != http.StatusOK || len(baselineBody) < 20 {
 			continue
 		}
-		baselineBody := readBody(baselineResp, 32768)
-		if len(baselineBody) < 20 {
-			continue // too small/empty to be a meaningful fingerprint
+
+		// The attacker must not already see it on the real path.
+		if _, _, anonBody, ok := get(anonClient, baseURL+basePath); !ok || anonBody == baselineBody {
+			continue
 		}
 
 		// Negative control: if a guaranteed-nonexistent path returns the
 		// exact same content as our "dynamic" basePath, this server has no
 		// real per-path differentiation (e.g. everything falls through to a
-		// catch-all router/page) — basePath isn't a meaningful WCD candidate,
-		// so skip it rather than risk a false positive.
+		// catch-all router/page) — basePath isn't a meaningful WCD candidate.
 		bogusPath := fmt.Sprintf("/dorm-nonexistent-%d-xyz", time.Now().UnixNano())
-		if controlResp, err := authedClient.Get(baseURL + bogusPath); err == nil {
-			if readBody(controlResp, 32768) == baselineBody {
-				continue
-			}
+		if _, _, controlBody, ok := get(authedClient, baseURL+bogusPath); ok && controlBody == baselineBody {
+			continue
 		}
 
 		for _, suffixFn := range wcdSuffixes {
@@ -72,51 +105,28 @@ func (p *WCDPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 			cacheBuster := fmt.Sprintf("?dormcb=%d", time.Now().UnixNano())
 			fullURL := baseURL + crafted + cacheBuster
 
-			// Request A: "victim" visits the deceptive, cacheable-looking URL.
-			reqA, _ := http.NewRequest("GET", fullURL, nil)
-			respA, err := authedClient.Do(reqA)
-			if err != nil {
-				continue
-			}
-			bodyA := readBody(respA, 32768)
-			if bodyA != baselineBody {
+			// Request A: the victim visits the deceptive, cacheable-looking URL.
+			statusA, _, bodyA, ok := get(authedClient, fullURL)
+			if !ok || statusA != http.StatusOK || bodyA != baselineBody {
 				continue // backend did NOT collapse the fake extension onto the real route
 			}
 
-			// Request B: same cache-busted URL, but a bare anonymous client —
-			// no auth header, no cookies.
-			reqB, _ := http.NewRequest("GET", fullURL, nil)
-			respB, err := anonClient.Do(reqB)
-			if err != nil {
-				continue
-			}
-			bodyB := readBody(respB, 32768)
-			if bodyB != baselineBody {
-				continue // anonymous request did not receive the same dynamic content
+			// Request B: the attacker requests the same cache-busted URL.
+			statusB, headersB, bodyB, ok := get(anonClient, fullURL)
+			if !ok || statusB != http.StatusOK || bodyB != baselineBody {
+				continue // the victim's page was not served to the attacker
 			}
 
-			isCached := false
-			cacheEvidence := ""
-			for _, ch := range []string{"X-Cache", "CF-Cache-Status", "X-Varnish", "Age"} {
-				if val := respB.Header.Get(ch); val != "" {
-					isCached = true
-					cacheEvidence = fmt.Sprintf("%s: %s", ch, val)
-					break
-				}
-			}
-
-			severity := "HIGH"
-			cvss := 8.1
+			severity, cvss := "HIGH", 8.1
 			desc := fmt.Sprintf(
-				"Web Cache Deception confirmed.\nDynamic path: %s\nDeceptive URL: %s\n\nThe backend routed the fake-static-extension URL to the exact same content as the real dynamic path, and an anonymous request (no auth/cookie header) to that same URL received identical content.",
+				"Web Cache Deception confirmed.\nDynamic path: %s\nDeceptive URL: %s\n\nThe authenticated page differs from what an unauthenticated client gets on the real path, yet after the authenticated request to the deceptive URL, an unauthenticated request to that same URL received the authenticated page.",
 				basePath, crafted,
 			)
-			if isCached {
-				desc += fmt.Sprintf("\n\nConfirmation: explicit cache header found on the anonymous response -> %s", cacheEvidence)
-				severity = "CRITICAL"
-				cvss = 9.2
+			if evidence := cacheHitEvidence(headersB); evidence != "" {
+				desc += "\n\nCache hit on the unauthenticated response -> " + evidence
+				severity, cvss = "CRITICAL", 9.2
 			} else {
-				desc += "\n\nNote: no explicit CDN cache header found on this response, but the routing-collision behavior itself was confirmed via a 3-way baseline/authenticated/anonymous comparison."
+				desc += "\n\nNo cache-hit header on the unauthenticated response; the leak itself was observed."
 			}
 
 			return &models.Vulnerability{

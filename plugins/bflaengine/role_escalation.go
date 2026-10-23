@@ -9,6 +9,11 @@ import (
 
 // TestRoleEscalation is Phase 2 (BFLA): attempts access to admin endpoints
 // using a low-privilege token (B) or unauthenticated requests.
+//
+// client must not follow redirects (see Run). A 200 only counts when a random
+// sibling path does not answer the same way: sites with a catch-all route
+// (SPA fallback, "every unknown URL redirects/serves the home page") answer
+// /api/admin with 200 too.
 func TestRoleEscalation(client *http.Client, baseURL string, target models.ScanTarget, endpoints []string, tokenA, tokenB string) *models.Vulnerability {
 	for _, ep := range endpoints {
 		fullURL := baseURL + ep
@@ -18,7 +23,6 @@ func TestRoleEscalation(client *http.Client, baseURL string, target models.ScanT
 		if err != nil {
 			continue
 		}
-		reqBase.Header.Set("User-Agent", "DORM-BFLA-Probe/1.0")
 		respBase, err := client.Do(reqBase)
 		if err != nil {
 			continue
@@ -31,8 +35,9 @@ func TestRoleEscalation(client *http.Client, baseURL string, target models.ScanT
 			continue
 		}
 
-		// Test 1: Access with low-privilege Token B
-		if tokenB != "" {
+		// Test 1: Access with low-privilege Token B. Only meaningful when the
+		// anonymous request was refused — that refusal is what Token B gets past.
+		if tokenB != "" && (baseStatus == 401 || baseStatus == 403) {
 			reqB, err := NewBFLARequest("GET", fullURL, tokenB, nil)
 			if err == nil {
 				respB, err := client.Do(reqB)
@@ -66,31 +71,38 @@ func TestRoleEscalation(client *http.Client, baseURL string, target models.ScanT
 		if err != nil {
 			continue
 		}
-		reqAnon.Header.Set("User-Agent", "Mozilla/5.0")
 		respAnon, err := client.Do(reqAnon)
 		if err != nil {
 			continue
 		}
 		bodyAnon := models.ReadBody(respAnon, 32768)
-		if respAnon.StatusCode == 200 && len(bodyAnon) > 50 &&
-			!ContainsSoftError(bodyAnon) && ContainsSensitiveAdminData(bodyAnon) {
-			return &models.Vulnerability{
-				Target:   target,
-				Name:     "HIGH BFLA — Admin Endpoint Publicly Accessible",
-				Severity: "HIGH",
-				CVSS:     8.6,
-				Description: fmt.Sprintf(
-					"🟠 HIGH: An admin endpoint is accessible without any authentication.\n\n"+
-						"Endpoint: %s\n"+
-						"HTTP Status: %d\n"+
-						"Response Size: %d bytes\n"+
-						"Sensitive admin data keywords detected in response body.\n\n"+
-						"This endpoint should be restricted exclusively to authenticated administrators.",
-					fullURL, respAnon.StatusCode, len(bodyAnon),
-				),
-				Solution:  "Place admin endpoints behind mandatory authentication and authorization middleware. Return HTTP 401 for unauthenticated requests and HTTP 403 for authenticated but unauthorized users.",
-				Reference: "https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/",
-			}
+		if respAnon.StatusCode != 200 || len(bodyAnon) <= 50 || ContainsSoftError(bodyAnon) {
+			continue
+		}
+		// Admin data means API data: keyword hits on an HTML page ("users",
+		// "system") say nothing about authorization.
+		if !models.LooksJSON(respAnon, bodyAnon) || !ContainsSensitiveAdminData(bodyAnon) {
+			continue
+		}
+		if models.ProbeSibling(client, fullURL, "GET", "", "").SameAs(respAnon.StatusCode, len(bodyAnon)) {
+			continue
+		}
+		return &models.Vulnerability{
+			Target:   target,
+			Name:     "HIGH BFLA — Admin Endpoint Publicly Accessible",
+			Severity: "HIGH",
+			CVSS:     8.6,
+			Description: fmt.Sprintf(
+				"🟠 HIGH: An admin endpoint is accessible without any authentication.\n\n"+
+					"Endpoint: %s\n"+
+					"HTTP Status: %d\n"+
+					"Response Size: %d bytes\n"+
+					"Sensitive admin data keywords detected in the JSON response, and a random sibling path does not answer the same way.\n\n"+
+					"This endpoint should be restricted exclusively to authenticated administrators.",
+				fullURL, respAnon.StatusCode, len(bodyAnon),
+			),
+			Solution:  "Place admin endpoints behind mandatory authentication and authorization middleware. Return HTTP 401 for unauthenticated requests and HTTP 403 for authenticated but unauthorized users.",
+			Reference: "https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/",
 		}
 	}
 

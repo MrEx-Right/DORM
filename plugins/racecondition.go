@@ -61,7 +61,6 @@ func (p *RaceConditionPlugin) Run(target models.ScanTarget) *models.Vulnerabilit
 				defer wg.Done()
 
 				req, _ := http.NewRequest("POST", targetURL, strings.NewReader(`{"id": 1, "action": "test", "amount": 1}`))
-				req.Header.Set("User-Agent", "DORM-Race-Tester/2.0")
 				req.Header.Set("Content-Type", "application/json")
 				req.Header.Set("Cache-Control", "no-cache")
 

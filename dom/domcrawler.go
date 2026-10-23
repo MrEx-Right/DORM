@@ -85,6 +85,9 @@ type DOMCrawler struct {
 	visited sync.Map // map[string]bool — visited URLs/routes
 	result  *DOMResult
 
+	scopeMu    sync.RWMutex
+	extraHosts map[string]bool // hosts the site root redirected to
+
 }
 
 // queueItem is a BFS work unit.
@@ -166,6 +169,12 @@ func Crawl(ctx context.Context, targetURL string, cfg DOMConfig) (*DOMResult, er
 
 		// Crawl the page and collect new links
 		newLinks, err := c.visitPage(crawlCtx, item.rawURL, item.depth)
+		if err != nil && crawlCtx.Err() != nil {
+			// The crawl budget ran out mid-page: that's the end of the crawl,
+			// not an error on the page.
+			fmt.Printf("[DOM-Crawler] Budget reached — stopping\n")
+			break
+		}
 		if err != nil {
 			c.emit(EventError, item.rawURL, "", "", err.Error(), item.depth)
 			result.logError(fmt.Sprintf("[DOM-Crawler] %s: %v", item.rawURL, err))
@@ -187,11 +196,39 @@ func Crawl(ctx context.Context, targetURL string, cfg DOMConfig) (*DOMResult, er
 	return result, nil
 }
 
+// spaRenderWait caps how long a loaded page may take to render its first
+// link or button (client-rendered apps).
+const spaRenderWait = 6 * time.Second
+
+// waitForEval polls a boolean JS expression until it is true or ctx ends.
+func waitForEval(expr string) chromedp.Action {
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		for {
+			var ok bool
+			if err := chromedp.Evaluate(expr, &ok).Do(ctx); err == nil && ok {
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(250 * time.Millisecond):
+			}
+		}
+	})
+}
+
+// pageWorkBudget is the time a page gets after navigation for the network-idle
+// wait, the DOM snapshot and up to MaxClicksPerPage clicks (~0.5-0.8s each).
+const pageWorkBudget = 18 * time.Second // incl. spaRenderWait
+
 // visitPage navigates to a single URL, injects monitoring scripts, waits for
 // the SPA to render, clicks interactive elements, and extracts all discovered data.
 // Returns a deduplicated list of new in-scope URLs to enqueue.
 func (c *DOMCrawler) visitPage(ctx context.Context, rawURL string, depth int) ([]string, error) {
-	pageCtx, pageCancel := context.WithTimeout(c.session.AllocContext(), c.cfg.PageTimeout)
+	// PageTimeout bounds the navigation; the snapshot, network-idle wait and
+	// clicks get their own budget on top. Sharing one 12s deadline meant a page
+	// slow to load left nothing for the rest.
+	pageCtx, pageCancel := context.WithTimeout(c.session.AllocContext(), c.cfg.PageTimeout+pageWorkBudget)
 	defer pageCancel()
 
 	tabCtx, tabCancel := c.session.NewTab(pageCtx)
@@ -202,6 +239,14 @@ func (c *DOMCrawler) visitPage(ctx context.Context, rawURL string, depth int) ([
 	chromedp.ListenTarget(tabCtx, func(ev interface{}) {
 		if req, ok := ev.(*network.EventRequestWillBeSent); ok {
 			reqURL := req.Request.URL
+			// The start page's document request after a redirect shows where
+			// the site lives (puma.com → tr.puma.com): adopt it now, before
+			// that page's own XHRs arrive and get judged out of scope.
+			if depth == 0 && req.Type == network.ResourceTypeDocument {
+				if u, err := url.Parse(reqURL); err == nil {
+					c.adoptRedirectHost(u.Hostname())
+				}
+			}
 			if c.isCapturableRequest(reqURL) {
 				// Parse payload parameters if it's a POST/PUT
 				var params []string
@@ -227,19 +272,52 @@ func (c *DOMCrawler) visitPage(ctx context.Context, rawURL string, depth int) ([
 
 	// ── Navigate ────────────────────────────────────────────────────────────
 	c.emit(EventNavigate, rawURL, "", "", fmt.Sprintf("depth=%d", depth), depth)
-	actions := chromedp.Tasks{
+	// Wait for the load event, but only up to PageTimeout: chromedp.Navigate
+	// waits for it unbounded within the page deadline, and real storefronts
+	// (third-party tags, long-polling) often never fire it in time — the page
+	// was then dropped with no HTML, no links and no clicks, ending the crawl
+	// at the first page. On timeout, use whatever has rendered so far.
+	// chromedp ties a tab to the context of the first Run on it: open it on
+	// tabCtx, or cancelling the navigation context below closes the tab.
+	if err := chromedp.Run(tabCtx); err != nil {
+		return nil, fmt.Errorf("open tab for %s: %w", rawURL, err)
+	}
+	var navErrText string
+	navCtx, navCancel := context.WithTimeout(tabCtx, c.cfg.PageTimeout)
+	navErr := chromedp.Run(navCtx,
 		network.Enable(),
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			_, err := page.AddScriptToEvaluateOnNewDocument(spaRouteInjectScript).Do(ctx)
 			return err
 		}),
-		chromedp.Navigate(rawURL),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			_, _, errText, _, err := page.Navigate(rawURL).Do(ctx)
+			navErrText = errText
+			return err
+		}),
 		chromedp.WaitReady("body", chromedp.ByQuery),
+		waitForEval(`document.readyState === "complete"`),
+	)
+	navCancel()
+	if navErrText != "" { // DNS failure, connection refused, blocked...
+		return nil, fmt.Errorf("navigate %s: %s", rawURL, navErrText)
+	}
+	if navErr != nil {
+		var hasBody bool
+		probeCtx, probeCancel := context.WithTimeout(tabCtx, 3*time.Second)
+		probeErr := chromedp.Run(probeCtx, chromedp.Evaluate(`!!document.body && document.body.children.length > 0`, &hasBody))
+		probeCancel()
+		if probeErr != nil || !hasBody {
+			return nil, fmt.Errorf("navigate %s: %w", rawURL, navErr)
+		}
+		c.emit(EventNavigate, rawURL, "", "", "slow page: continuing with partially loaded DOM", depth)
 	}
 
-	if err := chromedp.Run(tabCtx, actions); err != nil {
-		return nil, fmt.Errorf("navigate %s: %w", rawURL, err)
-	}
+	// Client-rendered apps (React/Vue <div id="root">) serve an empty shell:
+	// give them a moment to draw something clickable before the snapshot.
+	renderCtx, renderCancel := context.WithTimeout(tabCtx, spaRenderWait)
+	_ = chromedp.Run(renderCtx, waitForEval(`document.querySelectorAll("a[href],button,[role='button']").length > 0`))
+	renderCancel()
 
 	// Wait for network to settle (SPA data fetches)
 	if c.cfg.WaitForNetworkIdle {
@@ -278,7 +356,7 @@ func (c *DOMCrawler) visitPage(ctx context.Context, rawURL string, depth int) ([
 		var routes []string
 		if err := json.Unmarshal([]byte(routesJSON), &routes); err == nil {
 			for _, r := range routes {
-				if abs := c.resolveURL(r); abs != "" {
+				if abs := c.resolveFrom(currentURL, r); abs != "" {
 					c.result.addJSRoute(r)
 					c.emit(EventSPARoute, abs, "", r, "history.pushState", depth)
 				}
@@ -428,7 +506,7 @@ func (c *DOMCrawler) clickAndCollect(tabCtx context.Context, pageURL string) []s
 				discovered = append(discovered, urlAfter)
 			}
 			for _, r := range newRoutes {
-				if abs := c.resolveURL(r); abs != "" && c.inScope(abs) {
+				if abs := c.resolveFrom(urlAfter, r); abs != "" && c.inScope(abs) {
 					discovered = append(discovered, abs)
 					c.result.addJSRoute(r)
 					c.emit(EventSPARoute, abs, "", r, "click-triggered route", 0)
@@ -448,8 +526,8 @@ func (c *DOMCrawler) isCapturableRequest(rawURL string) bool {
 		return false
 	}
 
-	// Must be same host
-	if !strings.EqualFold(u.Hostname(), c.baseURL.Hostname()) {
+	// Must be same host (or the host the site root redirected to)
+	if !c.hostInScope(u.Hostname()) {
 		return false
 	}
 
@@ -470,13 +548,37 @@ func (c *DOMCrawler) isCapturableRequest(rawURL string) bool {
 	return true
 }
 
-// inScope returns true if the URL belongs to the same hostname as the base URL.
+// inScope returns true if the URL belongs to the same hostname as the base URL,
+// or to a host the site root redirected to.
 func (c *DOMCrawler) inScope(rawURL string) bool {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return false
 	}
-	return strings.EqualFold(u.Hostname(), c.baseURL.Hostname())
+	return c.hostInScope(u.Hostname())
+}
+
+func (c *DOMCrawler) hostInScope(host string) bool {
+	if strings.EqualFold(host, c.baseURL.Hostname()) {
+		return true
+	}
+	c.scopeMu.RLock()
+	defer c.scopeMu.RUnlock()
+	return c.extraHosts[strings.ToLower(host)]
+}
+
+// adoptRedirectHost widens the scope to the host the start page redirected
+// to, when it is the same site (sitemapper.RelatedHost) — never a foreign one.
+func (c *DOMCrawler) adoptRedirectHost(host string) {
+	if strings.EqualFold(host, c.baseURL.Hostname()) || !sitemapper.RelatedHost(c.baseURL.Hostname(), host) {
+		return
+	}
+	c.scopeMu.Lock()
+	if c.extraHosts == nil {
+		c.extraHosts = map[string]bool{}
+	}
+	c.extraHosts[strings.ToLower(host)] = true
+	c.scopeMu.Unlock()
 }
 
 // resolveURL resolves href/route strings against the base URL.
@@ -491,6 +593,24 @@ func (c *DOMCrawler) resolveURL(href string) string {
 		return ""
 	}
 	return c.baseURL.ResolveReference(u).String()
+}
+
+// resolveFrom resolves a route/href against the page it came from (after a
+// redirect that is another host than baseURL), falling back to baseURL.
+func (c *DOMCrawler) resolveFrom(pageURL, href string) string {
+	abs := c.resolveURL(href)
+	if abs == "" {
+		return ""
+	}
+	base, err := url.Parse(pageURL)
+	if err != nil || base.Host == "" {
+		return abs
+	}
+	u, err := url.Parse(strings.TrimSpace(href))
+	if err != nil {
+		return abs
+	}
+	return base.ResolveReference(u).String()
 }
 
 // normalizeURL strips query params and fragments for visited deduplication.

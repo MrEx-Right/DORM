@@ -17,3 +17,8 @@ var userAgents = []string{
 func GetRandomUserAgent() string {
 	return userAgents[rand.Intn(len(userAgents))]
 }
+
+// UserAgents returns a copy of the rotation pool (Traffic Morph panel).
+func UserAgents() []string {
+	return append([]string(nil), userAgents...)
+}

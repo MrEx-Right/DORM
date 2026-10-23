@@ -94,7 +94,6 @@ func FetchAndAnalyzeJS(client *http.Client, jsURL string, baseURL *url.URL) JSFi
 	if err != nil {
 		return jsFile
 	}
-	req.Header.Set("User-Agent", "DORM-Sitemapper/1.19.0")
 
 	resp, err := client.Do(req)
 	if err != nil {

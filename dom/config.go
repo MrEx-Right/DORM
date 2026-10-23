@@ -39,7 +39,9 @@ type DOMConfig struct {
 	// to prevent infinite loops on deeply interactive UIs.
 	MaxClicksPerPage int
 
-	// UserAgent overrides the browser's default user-agent string.
+	// UserAgent overrides the scan's Traffic Morph persona. Leave it empty:
+	// a fixed string here makes the crawler stand out from the rest of the
+	// scan traffic.
 	UserAgent string
 
 	// ExtraHeaders are injected into every browser request (e.g. auth tokens).
@@ -58,7 +60,6 @@ func DefaultDOMConfig() DOMConfig {
 		ClickInteractiveElements: true,
 		WaitForNetworkIdle:       true,
 		MaxClicksPerPage:         20,
-		UserAgent:                "DORM-DOMCrawler/1.0 (chromedp; SPA scanner)",
 		ExtraHeaders:             map[string]string{},
 	}
 }
@@ -76,7 +77,6 @@ func FastDOMConfig() DOMConfig {
 		ClickInteractiveElements: true,
 		WaitForNetworkIdle:       true,
 		MaxClicksPerPage:         12,
-		UserAgent:                "DORM-DOMCrawler/1.0 (chromedp; SPA scanner)",
 		ExtraHeaders:             map[string]string{},
 	}
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"DORM/models"
 	"context"
-	"crypto/tls"
 	"log"
 	"net/http"
 	"regexp"
@@ -27,6 +26,23 @@ type Engine struct {
 	OnFind         func(v *models.Vulnerability)
 	AllowedPlugins map[string]bool
 	Ctx            context.Context
+	seen           map[string]bool // host + name + description of reported findings
+}
+
+// firstSighting reports whether v is new for this scan. A CDN answers on
+// 80/443/8080/8443 with the same site, so a plugin returns the identical
+// finding once per port (four Prompt Injection rows for one endpoint in the
+// 2026-10-22 scan). Same host, name and description is the same finding;
+// port-specific ones ("Port 8080 is open") differ in description and stay.
+func (e *Engine) firstSighting(v *models.Vulnerability) bool {
+	key := strings.ToLower(v.Target.IP) + "\x00" + v.Name + "\x00" + v.Description
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.seen[key] {
+		return false
+	}
+	e.seen[key] = true
+	return true
 }
 
 func NewEngine(concurrency int) *Engine {
@@ -35,6 +51,7 @@ func NewEngine(concurrency int) *Engine {
 		Plugins:        []models.ScannerPlugin{},
 		Results:        []models.Vulnerability{},
 		AllowedPlugins: make(map[string]bool),
+		seen:           make(map[string]bool),
 	}
 }
 
@@ -133,7 +150,7 @@ func (e *Engine) Start() {
 
 					select {
 					case vuln := <-resultCh:
-						if vuln != nil {
+						if vuln != nil && e.firstSighting(vuln) {
 							e.mu.Lock()
 							e.Results = append(e.Results, *vuln)
 							e.mu.Unlock()
@@ -142,6 +159,9 @@ func (e *Engine) Start() {
 							}
 						}
 					case <-time.After(pluginTimeout):
+						// Abandoned: it keeps running until it returns, but once the
+						// scan ends its requests are refused (see SetActiveClient).
+						log.Printf("[!] plugin %q timed out on %s:%d after %s — abandoned", job.Plugin.Name(), job.Target.IP, job.Target.Port, pluginTimeout)
 					case <-e.Ctx.Done():
 						return
 					}
@@ -183,6 +203,12 @@ func (e *Engine) Start() {
 var scanCache sync.Map
 
 func DeepScanTarget(targetURL string) *models.TechProfile {
+	return DeepScanTargetContext(context.Background(), targetURL)
+}
+
+// DeepScanTargetContext is DeepScanTarget with the request context, so a
+// caller outside a scan (the SCI page) can mark it models.WithBackground.
+func DeepScanTargetContext(ctx context.Context, targetURL string) *models.TechProfile {
 
 	if cached, ok := scanCache.Load(targetURL); ok {
 		return cached.(*models.TechProfile)
@@ -191,20 +217,17 @@ func DeepScanTarget(targetURL string) *models.TechProfile {
 	profile := &models.TechProfile{}
 
 	client := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
+		Timeout:   5 * time.Second,
+		Transport: models.GetScanTransport(), // scan route + persona, not a bare direct transport
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
 
-	req, err := http.NewRequest("HEAD", targetURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "HEAD", targetURL, nil)
 	if err != nil {
 		return profile
 	}
-	req.Header.Set("User-Agent", "DORM-Enterprise-Scanner/1.5.0")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -282,16 +305,16 @@ func DeepScanTarget(targetURL string) *models.TechProfile {
 	}
 
 	serverHeader := strings.ToLower(resp.Header.Get("Server"))
-	viaHeader := strings.ToLower(resp.Header.Get("Via"))
 
+	// "Via: ... cloudfront" only says the site is behind the CloudFront CDN;
+	// AWS WAF is a separate, optional product (wafengine looks for its block
+	// page and X-Amzn-Waf-Action), so it is not reported as a WAF here.
 	if strings.Contains(serverHeader, "cloudflare") || resp.Header.Get("CF-RAY") != "" {
 		profile.WAF = "Cloudflare"
 	} else if strings.Contains(serverHeader, "f5") {
 		profile.WAF = "F5 BIG-IP"
 	} else if strings.Contains(serverHeader, "akamai") {
 		profile.WAF = "Akamai"
-	} else if strings.Contains(viaHeader, "cloudfront") {
-		profile.WAF = "AWS CloudFront"
 	}
 
 	scanCache.Store(targetURL, profile)

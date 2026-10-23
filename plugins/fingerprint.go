@@ -27,7 +27,7 @@ func (p *FingerprintPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 	defer func() { _ = conn.Close() }()
 
 	if target.Port == 80 || target.Port == 443 || target.Port == 8080 {
-		_, _ = fmt.Fprintf(conn, "HEAD / HTTP/1.0\r\n\r\n")
+		_, _ = fmt.Fprintf(conn, "HEAD / HTTP/1.0\r\nUser-Agent: %s\r\n\r\n", models.GetScanUserAgent())
 	}
 
 	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))

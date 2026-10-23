@@ -1,8 +1,8 @@
 package jwtengine
 
 import (
+	"DORM/models"
 	"crypto/rsa"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -30,10 +30,8 @@ var JWKSEndpoints = []string{
 // back to an x5c PEM certificate) used to forge an algorithm-confusion token.
 func FetchRSAPublicKey(baseURL string) *rsa.PublicKey {
 	httpClient := &http.Client{
-		Timeout: 6 * time.Second,
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		},
+		Timeout:   6 * time.Second,
+		Transport: models.GetScanTransport(),
 	}
 
 	for _, ep := range JWKSEndpoints {

@@ -38,7 +38,7 @@ func (p *TLSCheckPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		if ver != "" {
 			// Verify connection is truly established by sending an HTTP request and reading application data
 			_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
-			req := fmt.Sprintf("GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\nUser-Agent: DORM-Scanner\r\n\r\n", target.IP)
+			req := fmt.Sprintf("GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\nUser-Agent: %s\r\n\r\n", target.IP, models.GetScanUserAgent())
 			_, writeErr := conn.Write([]byte(req))
 			if writeErr == nil {
 				buf := make([]byte, 1)

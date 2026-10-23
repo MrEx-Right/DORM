@@ -246,7 +246,10 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	proxyEnabled := r.URL.Query().Get("proxyEnabled") == "true"
 	proxyUrl := r.URL.Query().Get("proxyUrl")
 
-	SetActiveClient(authHeader, proxyEnabled, proxyUrl)
+	// Closing the scan client when this handler returns (DONE or STOP) stops
+	// plugins the engine abandoned at pluginTimeout from scanning on.
+	endScan := SetActiveClient(authHeader, proxyEnabled, proxyUrl)
+	defer endScan()
 
 	// --- WAF BYPASS SETTINGS ---
 	bypassers.GlobalDelayConfig.BaseDelayMs = 0
@@ -1031,6 +1034,8 @@ func handleSCI(w http.ResponseWriter, r *http.Request) {
 		target = "https://" + target
 	}
 
-	result := sci.AnalyzeTarget(target)
+	// The SCI page runs outside a scan: background route, not counted as scan
+	// traffic, and still allowed after a scan has ended.
+	result := sci.AnalyzeTargetContext(models.WithBackground(r.Context()), target)
 	_ = json.NewEncoder(w).Encode(result)
 }

@@ -209,8 +209,8 @@ func checkMCPStreamableHTTP(client *http.Client, target models.ScanTarget) *mode
 
 // mcpSSEClient is a short, local timeout client — separate from the shared
 // target client — because an SSE stream can stay open indefinitely and must
-// never block the overall scan.
-var mcpSSEClient = &http.Client{Timeout: 3 * time.Second}
+// never block the overall scan. It still rides the scan route and persona.
+var mcpSSEClient = &http.Client{Timeout: 3 * time.Second, Transport: models.GetScanTransport()}
 
 // checkMCPSSETransport probes the legacy HTTP+SSE MCP transport: a GET to
 // /sse should emit an "event: endpoint" / "data: <url>" handshake pointing

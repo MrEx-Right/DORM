@@ -34,7 +34,6 @@ func FetchRobotsTxt(client *http.Client, baseURL *url.URL) RobotsResult {
 	if err != nil {
 		return result
 	}
-	req.Header.Set("User-Agent", "DORM-Sitemapper/1.19.0")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -131,7 +130,6 @@ func ParseSitemapXML(client *http.Client, sitemapURL string, depth int) []string
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("User-Agent", "DORM-Sitemapper/1.19.0")
 
 	resp, err := client.Do(req)
 	if err != nil {

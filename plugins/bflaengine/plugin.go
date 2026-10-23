@@ -23,7 +23,9 @@ func (p *BFLABOLAPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		return nil
 	}
 
-	client := models.GetClient()
+	// No redirect following: a redirect means "not this endpoint". Followed,
+	// /api/admin → 301 → the home page answered 200, and PUT/DELETE became GET.
+	client := models.NoRedirectClient()
 	baseURL := models.GetURL(target, "")
 
 	// Shared with the IDOR engine — a future auth-setup step that seeds

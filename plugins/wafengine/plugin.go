@@ -33,6 +33,11 @@ func (p *WAFDetectorPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 	// PHASE 2: CDN vs WAF Differentiation
 	// ================================================================
 	cdnName, isCDNOnly := DetectCDN(client, baseURL)
+	if isCDNOnly && wafName == cdnName && !strings.Contains(details, "Body contains") {
+		// The passive match is the CDN's own headers (Via/X-Cache/X-Amz-Cf-Pop
+		// for CloudFront), not a block page: a CDN, not a WAF.
+		wafName, confidence, details = "", "", ""
+	}
 	if isCDNOnly && wafName == "" {
 		// It's a CDN without WAF capabilities — store but don't alert
 		models.SharedData.Store(fmt.Sprintf("cdn_type_%s", target.IP), cdnName)
@@ -86,7 +91,7 @@ func (p *WAFDetectorPlugin) Run(target models.ScanTarget) *models.Vulnerability 
 
 	// Also check via DeepScan (legacy fallback)
 	profile := models.DeepScanTarget(baseURL)
-	if profile != nil && profile.WAF != "" {
+	if profile != nil && profile.WAF != "" && !(isCDNOnly && profile.WAF == cdnName) {
 		models.SharedData.Store(fmt.Sprintf("waf_type_%s", target.IP), profile.WAF)
 		bypassHints := GetBypassAdvisory(profile.WAF)
 		models.SharedData.Store(fmt.Sprintf("waf_bypass_%s", target.IP), bypassHints)

@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 )
 
 type UnnecessaryPortsPlugin struct{}
@@ -139,11 +138,6 @@ func (p *UnnecessaryPortsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 
 	if altWebPorts[port] {
 		client := models.GetClient()
-		if client == nil {
-			client = &http.Client{
-				Timeout: 3 * time.Second,
-			}
-		}
 
 		scheme := "http"
 		if port == 443 || port == 8443 || port == 8081 {
@@ -155,7 +149,6 @@ func (p *UnnecessaryPortsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 		if err != nil {
 			return nil
 		}
-		req.Header.Set("User-Agent", "DORM-Scan-Agent/1.11.0")
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 
 		resp, err := client.Do(req)
@@ -163,7 +156,6 @@ func (p *UnnecessaryPortsPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 			if scheme == "https" {
 				targetURL = fmt.Sprintf("http://%s:%d/", target.IP, port)
 				req, _ = http.NewRequest("GET", targetURL, nil)
-				req.Header.Set("User-Agent", "DORM-Scan-Agent/1.11.0")
 				resp, err = client.Do(req)
 				if err != nil {
 					return nil

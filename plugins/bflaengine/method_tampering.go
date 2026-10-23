@@ -28,9 +28,6 @@ func TestMethodTampering(client *http.Client, baseURL string, target models.Scan
 				getReq, err = NewBFLARequest("GET", fullURL, tokenA, nil)
 			} else {
 				getReq, err = http.NewRequest("GET", fullURL, nil)
-				if getReq != nil {
-					getReq.Header.Set("User-Agent", "DORM-BFLA-Probe/1.0")
-				}
 			}
 			if err != nil {
 				continue
@@ -45,6 +42,11 @@ func TestMethodTampering(client *http.Client, baseURL string, target models.Scan
 
 			// Only attempt method tampering on endpoints that return 200 via GET
 			if getStatus != 200 || len(getBody) < 10 {
+				continue
+			}
+			// ...and that are a real object, not a catch-all answering any path
+			// (SPA fallback / soft 404 serving the same page for /api/users/1).
+			if models.ProbeSibling(client, fullURL, "GET", "", "").SameAs(getStatus, len(getBody)) {
 				continue
 			}
 
@@ -63,7 +65,6 @@ func TestMethodTampering(client *http.Client, baseURL string, target models.Scan
 				} else {
 					methodReq, err = http.NewRequest(method, fullURL, bodyReader)
 					if methodReq != nil {
-						methodReq.Header.Set("User-Agent", "DORM-BFLA-Probe/1.0")
 						methodReq.Header.Set("Content-Type", "application/json")
 					}
 				}
@@ -81,8 +82,12 @@ func TestMethodTampering(client *http.Client, baseURL string, target models.Scan
 				// Success criteria:
 				// 1. Server returned 200/201/204
 				// 2. Response does not contain a soft-error denial message
+				// 3. The same method on a random sibling path is NOT accepted —
+				//    a server that answers PUT/DELETE on paths that don't exist
+				//    is ignoring the method, not authorizing a write
 				isSuccess := (methodStatus == 200 || methodStatus == 201 || methodStatus == 204) &&
-					!ContainsSoftError(methodBody)
+					!ContainsSoftError(methodBody) &&
+					!models.ProbeSibling(client, fullURL, method, "application/json", siblingBody(method, id)).AcceptsAnything()
 
 				if isSuccess {
 					return &models.Vulnerability{
@@ -136,6 +141,9 @@ func TestCrossTenantMethodAccess(client *http.Client, baseURL string, target mod
 			if respA.StatusCode != 200 || len(bodyA) < 20 {
 				continue
 			}
+			if models.ProbeSibling(client, fullURL, "GET", "", "").SameAs(respA.StatusCode, len(bodyA)) {
+				continue // catch-all route, not an object
+			}
 
 			// Brief delay to avoid triggering rate-limits between requests
 			time.Sleep(150 * time.Millisecond)
@@ -157,7 +165,8 @@ func TestCrossTenantMethodAccess(client *http.Client, baseURL string, target mod
 				}
 				bodyB := models.ReadBody(respB, 16384)
 
-				if (respB.StatusCode == 200 || respB.StatusCode == 204) && !ContainsSoftError(bodyB) {
+				if (respB.StatusCode == 200 || respB.StatusCode == 204) && !ContainsSoftError(bodyB) &&
+					!models.ProbeSibling(client, fullURL, method, "application/json", siblingBody(method, id)).AcceptsAnything() {
 					return &models.Vulnerability{
 						Target:   target,
 						Name:     fmt.Sprintf("CRITICAL BOLA — Cross-Tenant %s via Token B", method),
@@ -185,4 +194,13 @@ func TestCrossTenantMethodAccess(client *http.Client, baseURL string, target mod
 	}
 
 	return nil
+}
+
+// siblingBody is the request body the method-tampering probes send, reused
+// for the random-sibling control request so both differ only in the path.
+func siblingBody(method, id string) string {
+	if method == "PUT" || method == "PATCH" {
+		return `{"test":"bfla_probe","id":"` + id + `"}`
+	}
+	return ""
 }

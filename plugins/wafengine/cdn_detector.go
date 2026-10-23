@@ -33,7 +33,7 @@ var cdnSignatures = []CDNSignature{
 			{"X-Amz-Cf-Pop", ""},
 			{"X-Cache", "from cloudfront"},
 		},
-		HasWAF: true, // CloudFront can have WAF rules attached
+		HasWAF: false, // AWS WAF is optional; its evidence is a block page / X-Amzn-Waf-Action, not these headers
 	},
 	{
 		Name: "Akamai",

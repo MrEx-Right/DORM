@@ -40,8 +40,12 @@ func NewSession(ctx context.Context, cfg DOMConfig) (*Session, error) {
 		chromedp.Flag("disable-popup-blocking", true),
 		chromedp.Flag("disable-background-networking", true),
 		chromedp.Flag("safebrowsing-disable-auto-update", true),
-		chromedp.UserAgent(cfg.UserAgent),
 	)
+	// Scan route: persona User-Agent and --proxy-server when a proxy is set.
+	opts = append(opts, RouteOptions()...)
+	if cfg.UserAgent != "" {
+		opts = append(opts, chromedp.UserAgent(cfg.UserAgent))
+	}
 
 	allocCtx, allocCancel := chromedp.NewExecAllocator(ctx, opts...)
 

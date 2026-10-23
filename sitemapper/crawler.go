@@ -44,6 +44,36 @@ type Crawler struct {
 	Client    *http.Client
 	visited   sync.Map
 	sm        *SiteMap
+
+	seeds      []string        // extra start URLs (sitemap.xml), crawled at depth 1
+	scopeMu    sync.RWMutex
+	extraHosts map[string]bool // hosts the site root redirected to (see adoptRedirectHost)
+}
+
+// Seed queues an extra URL (e.g. from sitemap.xml) to crawl after the start
+// URL. Seeding used to store the URL in `visited` ("mark as to visit"), which
+// made the crawler treat it as already crawled: every URL listed in
+// sitemap.xml was skipped, even when a page linked to it.
+func (c *Crawler) Seed(u string) {
+	c.seeds = append(c.seeds, u)
+}
+
+// adoptRedirectHost puts the host the site root redirected to into scope —
+// puma.com → tr.puma.com, example.com → www.example.com. Without it every
+// link on the real site was out of scope and the crawl ended at the first
+// page. Only the same domain or a subdomain of it is adopted, never a foreign
+// host (an SSO or parking redirect).
+func (c *Crawler) adoptRedirectHost(host string) {
+	host = strings.ToLower(host)
+	if strings.EqualFold(host, c.BaseURL.Hostname()) || !RelatedHost(c.BaseURL.Hostname(), host) {
+		return
+	}
+	c.scopeMu.Lock()
+	if c.extraHosts == nil {
+		c.extraHosts = map[string]bool{}
+	}
+	c.extraHosts[host] = true
+	c.scopeMu.Unlock()
 }
 
 // NewCrawler creates a Crawler for the given base URL and config.
@@ -66,13 +96,64 @@ func (c *Crawler) Run() (jsURLs []string) {
 		depth int
 	}
 
-	// Seed the BFS queue with the start URL
-	queue := []queueItem{{c.BaseURL.String(), 0}}
+	var queue []queueItem
+	var wg sync.WaitGroup
+	var mu sync.Mutex // protects queue and c.pages/forms/etc inside goroutines
+
+	// process fetches one URL and records its results; safe for concurrent use.
+	process := func(u string, depth int) {
+		result := c.fetchAndParse(u, depth)
+		if result == nil {
+			return
+		}
+
+		mu.Lock()
+		c.sm.Pages = append(c.sm.Pages, result.page)
+		c.sm.Forms = append(c.sm.Forms, result.forms...)
+		c.sm.Endpoints = append(c.sm.Endpoints, result.endpoints...)
+		jsURLs = append(jsURLs, result.jsFileURLs...)
+
+		// Live Stats Update
+		c.sm.Stats.TotalPages = len(c.sm.Pages)
+		c.sm.Stats.TotalForms = len(c.sm.Forms)
+		c.sm.Stats.TotalEndpoints = len(c.sm.Endpoints)
+		if result.page.Depth > c.sm.Stats.MaxDepth {
+			c.sm.Stats.MaxDepth = result.page.Depth
+		}
+		for _, tech := range result.page.Tech {
+			c.sm.Stats.Technologies[tech]++
+		}
+
+		// Enqueue newly discovered links (safe: mu is held)
+		for _, link := range result.links {
+			queue = append(queue, queueItem{link, depth + 1})
+		}
+
+		// Live DB / Memory Sync
+		StoreSiteMap(c.sm)
+		mu.Unlock()
+	}
+
+	// The start URL is fetched first and on its own: where the site root
+	// redirects decides the crawl scope (adoptRedirectHost), and the seeds
+	// and links below are scope-checked against it. "http://host" and the
+	// "/" every page links to are the same page, so it is crawled as "/".
+	start := *c.BaseURL
+	if start.Path == "" {
+		start.Path = "/"
+	}
+	c.visited.Store(start.String(), true)
+	process(start.String(), 0)
+
+	// sitemap.xml URLs, after the start page's links.
+	mu.Lock()
+	for _, u := range c.seeds {
+		queue = append(queue, queueItem{u, 1})
+	}
+	mu.Unlock()
 
 	// Semaphore limits concurrent HTTP in-flight requests
 	sem := make(chan struct{}, c.Config.Concurrency)
-	var wg sync.WaitGroup
-	var mu sync.Mutex // protects queue and c.pages/forms/etc inside goroutines
 
 	for {
 		mu.Lock()
@@ -102,6 +183,11 @@ func (c *Crawler) Run() (jsURLs []string) {
 			continue
 		}
 
+		// Seeds are queued without a scope check: do it here.
+		if !c.inScope(item.u) {
+			continue
+		}
+
 		// Skip already visited (atomic compare-and-store)
 		if _, loaded := c.visited.LoadOrStore(item.u, true); loaded {
 			continue
@@ -117,37 +203,7 @@ func (c *Crawler) Run() (jsURLs []string) {
 		go func(u string, depth int) {
 			defer wg.Done()
 			defer func() { <-sem }()
-
-			result := c.fetchAndParse(u, depth)
-			if result == nil {
-				return
-			}
-
-			mu.Lock()
-			c.sm.Pages = append(c.sm.Pages, result.page)
-			c.sm.Forms = append(c.sm.Forms, result.forms...)
-			c.sm.Endpoints = append(c.sm.Endpoints, result.endpoints...)
-			jsURLs = append(jsURLs, result.jsFileURLs...)
-			
-			// Live Stats Update
-			c.sm.Stats.TotalPages = len(c.sm.Pages)
-			c.sm.Stats.TotalForms = len(c.sm.Forms)
-			c.sm.Stats.TotalEndpoints = len(c.sm.Endpoints)
-			if result.page.Depth > c.sm.Stats.MaxDepth {
-				c.sm.Stats.MaxDepth = result.page.Depth
-			}
-			for _, tech := range result.page.Tech {
-				c.sm.Stats.Technologies[tech]++
-			}
-
-			// Enqueue newly discovered links (safe: mu is held)
-			for _, link := range result.links {
-				queue = append(queue, queueItem{link, depth + 1})
-			}
-			
-			// Live DB / Memory Sync
-			StoreSiteMap(c.sm)
-			mu.Unlock()
+			process(u, depth)
 		}(item.u, item.depth)
 	}
 
@@ -165,13 +221,22 @@ func (c *Crawler) fetchAndParse(rawURL string, depth int) *crawlResult {
 	if err != nil {
 		return nil
 	}
-	req.Header.Set("User-Agent", "DORM-Sitemapper/1.19.0")
 
 	resp, err := c.Client.Do(req)
 	if err != nil {
 		return nil
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	// The URL the page was actually served from, after redirects: links on it
+	// resolve against it, and the site root's redirect target joins the scope.
+	finalURL := rawURL
+	if resp.Request != nil && resp.Request.URL != nil {
+		finalURL = resp.Request.URL.String()
+		if depth == 0 {
+			c.adoptRedirectHost(resp.Request.URL.Hostname())
+		}
+	}
 
 	// Collect headers (subset only)
 	headers := map[string]string{}
@@ -210,7 +275,7 @@ func (c *Crawler) fetchAndParse(rawURL string, depth int) *crawlResult {
 	page.Tech = FingerprintPage(resp, body)
 
 	// Parse HTML
-	result := c.parseHTML(body, rawURL, &page)
+	result := c.parseHTML(body, finalURL, &page)
 	result.page = page
 
 	return result
@@ -225,7 +290,7 @@ func (c *Crawler) parseHTML(body, currentURL string, page *Page) *crawlResult {
 		// Fallback: extract inline JS paths via regex
 		for _, path := range inlineJSPathRegex.FindAllStringSubmatch(body, -1) {
 			if len(path) > 1 {
-				if abs := c.resolveURL(path[1]); abs != "" {
+				if abs := c.resolveAgainst(currentURL, path[1]); abs != "" {
 					result.links = append(result.links, abs)
 				}
 			}
@@ -252,7 +317,7 @@ func (c *Crawler) parseHTML(body, currentURL string, page *Page) *crawlResult {
 			case "a":
 				for _, attr := range n.Attr {
 					if attr.Key == "href" && attr.Val != "" {
-						if abs := c.resolveURL(attr.Val); abs != "" && !seenLinks[abs] {
+						if abs := c.resolveAgainst(currentURL, attr.Val); abs != "" && !seenLinks[abs] {
 							seenLinks[abs] = true
 							if c.inScope(abs) {
 								result.links = append(result.links, abs)
@@ -285,7 +350,7 @@ func (c *Crawler) parseHTML(body, currentURL string, page *Page) *crawlResult {
 					switch attr.Key {
 					case "action":
 						if attr.Val != "" {
-							if abs := c.resolveURL(attr.Val); abs != "" {
+							if abs := c.resolveAgainst(currentURL, attr.Val); abs != "" {
 								f.Action = abs
 							} else {
 								f.Action = attr.Val
@@ -331,7 +396,7 @@ func (c *Crawler) parseHTML(body, currentURL string, page *Page) *crawlResult {
 					}
 				}
 				if src != "" {
-					if abs := c.resolveURL(src); abs != "" && c.sameHost(abs) {
+					if abs := c.resolveAgainst(currentURL, src); abs != "" && c.sameHost(abs) {
 						result.jsFileURLs = append(result.jsFileURLs, abs)
 						page.JSFiles = append(page.JSFiles, abs)
 					}
@@ -339,7 +404,7 @@ func (c *Crawler) parseHTML(body, currentURL string, page *Page) *crawlResult {
 					// Inline script: extract paths
 					paths := ExtractPathsFromJS(n.FirstChild.Data)
 					for _, p := range paths {
-						if abs := c.resolveURL(p); abs != "" && c.inScope(abs) && !seenLinks[abs] {
+						if abs := c.resolveAgainst(currentURL, p); abs != "" && c.inScope(abs) && !seenLinks[abs] {
 							seenLinks[abs] = true
 							result.links = append(result.links, abs)
 						}
@@ -369,7 +434,7 @@ func (c *Crawler) parseHTML(body, currentURL string, page *Page) *crawlResult {
 			// Also check data-href, data-url on any element
 			for _, attr := range n.Attr {
 				if (attr.Key == "data-href" || attr.Key == "data-url") && attr.Val != "" {
-					if abs := c.resolveURL(attr.Val); abs != "" && c.inScope(abs) && !seenLinks[abs] {
+					if abs := c.resolveAgainst(currentURL, attr.Val); abs != "" && c.inScope(abs) && !seenLinks[abs] {
 						seenLinks[abs] = true
 						result.links = append(result.links, abs)
 					}
@@ -425,13 +490,51 @@ func (c *Crawler) resolveURL(href string) string {
 	return c.BaseURL.ResolveReference(u).String()
 }
 
-// inScope returns true if the absolute URL belongs to the same host as the target.
+// RelatedHost reports whether host is the same site as base for crawl scope:
+// the www/non-www twin or a subdomain (puma.com → tr.puma.com). A redirect to
+// any other host (SSO, parking, CDN) is not.
+func RelatedHost(base, host string) bool {
+	base, host = strings.ToLower(base), strings.ToLower(host)
+	if host == "" || base == "" {
+		return false
+	}
+	root := strings.TrimPrefix(base, "www.")
+	return host == base || strings.TrimPrefix(host, "www.") == root || strings.HasSuffix(host, "."+root)
+}
+
+// resolveAgainst resolves href relative to the page it was found on (the
+// page's final URL), not the crawl's base URL: `item.html` on /products/ is
+// /products/item.html, and links on a page the root redirected to belong to
+// that host.
+func (c *Crawler) resolveAgainst(pageURL, href string) string {
+	abs := c.resolveURL(href)
+	if abs == "" {
+		return ""
+	}
+	base, err := url.Parse(pageURL)
+	if err != nil {
+		return abs
+	}
+	u, err := url.Parse(strings.TrimSpace(href))
+	if err != nil {
+		return abs
+	}
+	return base.ResolveReference(u).String()
+}
+
+// inScope returns true if the absolute URL belongs to the target host, or to a
+// host the site root redirected to (adoptRedirectHost).
 func (c *Crawler) inScope(absURL string) bool {
 	u, err := url.Parse(absURL)
 	if err != nil {
 		return false
 	}
-	return strings.EqualFold(u.Hostname(), c.BaseURL.Hostname())
+	if strings.EqualFold(u.Hostname(), c.BaseURL.Hostname()) {
+		return true
+	}
+	c.scopeMu.RLock()
+	defer c.scopeMu.RUnlock()
+	return c.extraHosts[strings.ToLower(u.Hostname())]
 }
 
 // sameHost is an alias for inScope for clarity in JS file filtering.

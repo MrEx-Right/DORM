@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"time"
 )
@@ -30,10 +31,12 @@ func NewProxyHandler() *ProxyHandler {
 }
 
 func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// For HTTPS tunneling via CONNECT, a different handler is needed.
-	// Since DORM uses `http.ProxyURL` in its `Transport`, standard forward proxy requests are sent.
+	// HTTPS: Go's transport (and any browser) sends CONNECT host:443 to an
+	// HTTP proxy and runs TLS end to end inside the tunnel. Rejecting it broke
+	// every HTTPS scan request routed through the analyzer (the default
+	// route), so tunnel it blind: the bytes are relayed, not inspected.
 	if r.Method == http.MethodConnect {
-		http.Error(w, "CONNECT method not supported by basic analyzer proxy", http.StatusMethodNotAllowed)
+		p.tunnel(w, r)
 		return
 	}
 
@@ -190,6 +193,56 @@ func (p *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if resp.Body != nil {
 		_, _ = io.Copy(w, resp.Body)
 	}
+}
+
+// tunnel serves CONNECT: dial the target, hand the client a 200 and copy
+// bytes both ways until either side closes. TLS stays end to end between
+// the client and the target, so HTTPS traffic is relayed without passive
+// analysis (that would need a MITM CA).
+func (p *ProxyHandler) tunnel(w http.ResponseWriter, r *http.Request) {
+	host := r.Host
+	if host == "" {
+		host = r.URL.Host
+	}
+	if _, _, err := net.SplitHostPort(host); err != nil {
+		http.Error(w, "CONNECT needs host:port", http.StatusBadRequest)
+		return
+	}
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "Proxy Error: connection cannot be hijacked", http.StatusInternalServerError)
+		return
+	}
+	upstream, err := net.DialTimeout("tcp", host, 10*time.Second)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Proxy Error: %v", err), http.StatusBadGateway)
+		return
+	}
+	client, buf, err := hj.Hijack()
+	if err != nil {
+		_ = upstream.Close()
+		return
+	}
+	if _, err := client.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n")); err != nil {
+		_ = client.Close()
+		_ = upstream.Close()
+		return
+	}
+
+	go func() {
+		// Bytes the client sent right after the CONNECT header (e.g. an eager
+		// ClientHello) may already sit in the hijacked reader's buffer.
+		_, _ = io.Copy(upstream, buf.Reader)
+		// Client done sending: half-close so the target still answers.
+		if tc, ok := upstream.(*net.TCPConn); ok {
+			_ = tc.CloseWrite()
+		}
+	}()
+	// The target closing (or failing) ends the tunnel. Closing both sides
+	// also unblocks the copy above when a keep-alive client never closes.
+	_, _ = io.Copy(client, upstream)
+	_ = client.Close()
+	_ = upstream.Close()
 }
 
 // StartAnalyzer starts the proxy server on the given port

@@ -49,7 +49,6 @@ func (p *FileUploadPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 
 		req, _ := http.NewRequest("POST", targetURL, body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
-		req.Header.Set("User-Agent", "DORM-Enterprise-Scanner/1.5.0")
 
 		resp, err := client.Do(req)
 		if err != nil {

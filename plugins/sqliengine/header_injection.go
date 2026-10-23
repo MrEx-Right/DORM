@@ -51,7 +51,12 @@ func RunHeaderInjection(client *http.Client, baseURL string, target models.ScanT
 				} else {
 					req.Header.Set(hdr, payload)
 				}
-				req.Header.Set("User-Agent", "DORM-Scanner/Enterprise")
+				if hdr == "User-Agent" {
+					// The payload is the User-Agent: keep the scan transport
+					// from swapping in the persona (it used to be overwritten
+					// here and again by the transport, so this was never sent).
+					req = models.KeepUserAgent(req)
+				}
 
 				resp, err := client.Do(req)
 				if err != nil {
