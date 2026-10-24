@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="DORM">
+  <rect width="128" height="128" rx="28" fill="#0A0C10"/>
+  <rect x=".75" y=".75" width="126.5" height="126.5" rx="27.25" fill="none" stroke="#1F232C" stroke-width="1.5"/>
+  <svg x="20" y="20" width="88" height="88" viewBox="381 347 511 511">
+    <path fill="#F2F2F2" fill-rule="evenodd" d="M386 420L513 352V388H655A232 232 0 0 1 655 852H386Z M485 467H655A155.5 155.5 0 0 1 655 778H525V712L386 808V770L485 700Z"/>
+    <path fill="#4ADE80" d="M648 520Q712 622 648 724Q584 622 648 520Z"/>
+  </svg>
+</svg>

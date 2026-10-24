@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" role="img" aria-labelledby="t d">
+  <title id="t">DORM</title>
+  <desc id="d">DORM logo and wordmark: Next-Gen Vulnerability Scanner</desc>
+  <style>
+    .mono { font-family: Consolas, 'SF Mono', Menlo, 'DejaVu Sans Mono', 'Courier New', monospace; }
+    .blink { transform-box: fill-box; transform-origin: center; animation: blink 6s infinite; }
+    .sweep { animation: sweep 7s cubic-bezier(.45,0,.55,1) infinite; }
+    .pulse { animation: pulse 2.4s ease-in-out infinite; }
+    @keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.08); } }
+    @keyframes sweep { 0% { transform: translateX(-260px); } 100% { transform: translateX(1540px); } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+    @media (prefers-reduced-motion: reduce) { .blink, .sweep, .pulse { animation: none; } .sweep { display: none; } }
+  </style>
+  <defs>
+    <clipPath id="card"><rect width="1280" height="360" rx="18"/></clipPath>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#1C2029" stroke-width="1"/>
+    </pattern>
+    <radialGradient id="gridFade" cx="50%" cy="50%" r="62%">
+      <stop offset="0" stop-color="#fff" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <mask id="gridMask"><rect width="1280" height="360" fill="url(#gridFade)"/></mask>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#4ADE80" stop-opacity=".28"/>
+      <stop offset=".45" stop-color="#4ADE80" stop-opacity=".07"/>
+      <stop offset="1" stop-color="#4ADE80" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="beam" x1="0" x2="1">
+      <stop offset="0" stop-color="#4ADE80" stop-opacity="0"/>
+      <stop offset=".85" stop-color="#4ADE80" stop-opacity=".07"/>
+      <stop offset="1" stop-color="#4ADE80" stop-opacity=".35"/>
+    </linearGradient>
+    <linearGradient id="rule" x1="0" x2="1">
+      <stop offset="0" stop-color="#4ADE80" stop-opacity="0"/>
+      <stop offset=".5" stop-color="#4ADE80" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#4ADE80" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+
+  <g clip-path="url(#card)">
+    <rect width="1280" height="360" fill="#0A0C10"/>
+    <rect width="1280" height="360" fill="url(#grid)" mask="url(#gridMask)"/>
+    <ellipse cx="341" cy="180" rx="260" ry="200" fill="url(#glow)"/>
+
+    <!-- scanner sweep -->
+    <g class="sweep"><rect x="0" y="0" width="240" height="360" fill="url(#beam)"/><rect x="238" y="0" width="2" height="360" fill="#4ADE80" opacity=".45"/></g>
+
+    <!-- HUD corners -->
+    <g fill="none" stroke="#5B6270" stroke-width="2">
+      <path d="M28 52V28H52"/><path d="M1228 28H1252V52"/>
+      <path d="M28 308V332H52"/><path d="M1252 308V332H1228"/>
+    </g>
+    <text class="mono" x="64" y="45" font-size="13" letter-spacing="2" fill="#5B6270">[ SECURITY ENGINE <tspan fill="#4ADE80" class="pulse">●</tspan> ACTIVE ]</text>
+    <text class="mono" x="1216" y="45" font-size="13" letter-spacing="2" fill="#5B6270" text-anchor="end">DAST · SPIDER · FUZZER · CVE</text>
+    <text class="mono" x="64" y="325" font-size="13" letter-spacing="2" fill="#5B6270">:8080 DASHBOARD  /  :8081 PROXY</text>
+    <text class="mono" x="1216" y="325" font-size="13" letter-spacing="2" fill="#5B6270" text-anchor="end">WRITTEN IN GO</text>
+
+    <!-- logo (docs/images/dorm-logo.svg) -->
+    <svg x="236" y="75" width="210" height="210" viewBox="381 347 511 511">
+      <path fill="#F2F2F2" fill-rule="evenodd" d="M386 420L513 352V388H655A232 232 0 0 1 655 852H386Z M485 467H655A155.5 155.5 0 0 1 655 778H525V712L386 808V770L485 700Z"/>
+      <path class="blink" fill="#4ADE80" opacity=".55" filter="url(#soft)" d="M648 520Q712 622 648 724Q584 622 648 520Z"/>
+      <path class="blink" fill="#4ADE80" d="M648 520Q712 622 648 724Q584 622 648 520Z"/>
+    </svg>
+
+    <!-- wordmark: geometric DORM, the O carries the logo's slit pupil -->
+    <g transform="translate(496 100)" fill="#F2F2F2">
+      <!-- D -->
+      <rect x="0" y="0" width="22" height="120"/>
+      <path d="M22 0H48A60 60 0 0 1 48 120H22V98H48A38 38 0 0 0 48 22H22Z"/>
+      <!-- O -->
+      <path fill-rule="evenodd" d="M194 0A60 60 0 1 1 194 120A60 60 0 1 1 194 0Z M194 22A38 38 0 1 0 194 98A38 38 0 1 0 194 22Z"/>
+      <path fill="#4ADE80" d="M194 34Q210 60 194 86Q178 60 194 34Z"/>
+      <!-- R -->
+      <rect x="280" y="0" width="22" height="120"/>
+      <path d="M302 0H330A34 34 0 0 1 330 68H302V46H330A12 12 0 0 0 330 22H302Z"/>
+      <path d="M326 62H351L384 120H359Z"/>
+      <!-- M -->
+      <path d="M410 120V0H434L475 70L516 0H540V120H518V44L482 104H468L432 44V120Z"/>
+    </g>
+
+    <rect x="496" y="242" width="540" height="1.5" fill="url(#rule)"/>
+    <text class="mono" x="766" y="276" font-size="19" letter-spacing="7.2" fill="#8B93A1" text-anchor="middle">NEXT-GEN VULNERABILITY SCANNER</text>
+  </g>
+  <rect x=".75" y=".75" width="1278.5" height="358.5" rx="17.5" fill="none" stroke="#1F232C" stroke-width="1.5"/>
+</svg>
