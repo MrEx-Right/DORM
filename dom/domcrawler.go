@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
@@ -201,11 +202,10 @@ func Crawl(ctx context.Context, targetURL string, cfg DOMConfig) (*DOMResult, er
 const spaRenderWait = 6 * time.Second
 
 // waitForEval polls a boolean JS expression until it is true or ctx ends.
-func waitForEval(expr string) chromedp.Action {
-	return chromedp.ActionFunc(func(ctx context.Context) error {
+func waitForEval(expr string) chromedp.Action[chromedp.Void] {
+	return chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
 		for {
-			var ok bool
-			if err := chromedp.Evaluate(expr, &ok).Do(ctx); err == nil && ok {
+			if ok, err := chromedp.Evaluate[bool](expr)(ctx, t); err == nil && ok {
 				return nil
 			}
 			select {
@@ -234,10 +234,30 @@ func (c *DOMCrawler) visitPage(ctx context.Context, rawURL string, depth int) ([
 	tabCtx, tabCancel := c.session.NewTab(pageCtx)
 	defer tabCancel()
 
+	// chromedp ties a tab to the context of the first Run on it: open it on
+	// tabCtx, or cancelling the listener or navigation context below closes
+	// the tab.
+	if err := chromedp.Do(tabCtx); err != nil {
+		return nil, fmt.Errorf("open tab for %s: %w", rawURL, err)
+	}
+
 	// ── XHR / Network Interception ────────────────────────────────────────────
-	// Listen for network requests initiated by the page BEFORE navigation.
-	chromedp.ListenTarget(tabCtx, func(ev interface{}) {
-		if req, ok := ev.(*network.EventRequestWillBeSent); ok {
+	// Subscribe to network requests initiated by the page BEFORE navigation.
+	// The reader is stopped and awaited before visitPage returns, so no event
+	// lands in the result after the page is done.
+	listenCtx, listenStop := context.WithCancel(tabCtx)
+	requests := chromedp.Events(listenCtx, network.RequestWillBeSent)
+	listenDone := make(chan struct{})
+	defer func() {
+		listenStop()
+		<-listenDone
+	}()
+	go func() {
+		defer close(listenDone)
+		for req, err := range requests {
+			if err != nil {
+				return
+			}
 			reqURL := req.Request.URL
 			// The start page's document request after a redirect shows where
 			// the site lives (puma.com → tr.puma.com): adopt it now, before
@@ -268,7 +288,7 @@ func (c *DOMCrawler) visitPage(ctx context.Context, rawURL string, depth int) ([
 				c.emit(EventXHR, reqURL, "", req.Request.Method, fmt.Sprintf("network intercept (%s)", req.Request.Method), depth)
 			}
 		}
-	})
+	}()
 
 	// ── Navigate ────────────────────────────────────────────────────────────
 	c.emit(EventNavigate, rawURL, "", "", fmt.Sprintf("depth=%d", depth), depth)
@@ -277,25 +297,24 @@ func (c *DOMCrawler) visitPage(ctx context.Context, rawURL string, depth int) ([
 	// (third-party tags, long-polling) often never fire it in time — the page
 	// was then dropped with no HTML, no links and no clicks, ending the crawl
 	// at the first page. On timeout, use whatever has rendered so far.
-	// chromedp ties a tab to the context of the first Run on it: open it on
-	// tabCtx, or cancelling the navigation context below closes the tab.
-	if err := chromedp.Run(tabCtx); err != nil {
-		return nil, fmt.Errorf("open tab for %s: %w", rawURL, err)
-	}
 	var navErrText string
 	navCtx, navCancel := context.WithTimeout(tabCtx, c.cfg.PageTimeout)
-	navErr := chromedp.Run(navCtx,
-		network.Enable(),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			_, err := page.AddScriptToEvaluateOnNewDocument(spaRouteInjectScript).Do(ctx)
+	navErr := chromedp.Do(navCtx,
+		chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+			_, err := cdp.Call(ctx, t, network.Enable, network.EnableParams{})
 			return err
 		}),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			_, _, errText, _, err := page.Navigate(rawURL).Do(ctx)
-			navErrText = errText
+		chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+			_, err := cdp.Call(ctx, t, page.AddScriptToEvaluateOnNewDocument,
+				page.AddScriptToEvaluateOnNewDocumentParams{Source: spaRouteInjectScript})
 			return err
 		}),
-		chromedp.WaitReady("body", chromedp.ByQuery),
+		chromedp.Func(func(ctx context.Context, t *chromedp.Target) error {
+			res, err := cdp.Call(ctx, t, page.Navigate, page.NavigateParams{URL: rawURL})
+			navErrText = res.ErrorText
+			return err
+		}),
+		chromedp.WaitReady(chromedp.CSS("body")),
 		waitForEval(`document.readyState === "complete"`),
 	)
 	navCancel()
@@ -303,9 +322,8 @@ func (c *DOMCrawler) visitPage(ctx context.Context, rawURL string, depth int) ([
 		return nil, fmt.Errorf("navigate %s: %s", rawURL, navErrText)
 	}
 	if navErr != nil {
-		var hasBody bool
 		probeCtx, probeCancel := context.WithTimeout(tabCtx, 3*time.Second)
-		probeErr := chromedp.Run(probeCtx, chromedp.Evaluate(`!!document.body && document.body.children.length > 0`, &hasBody))
+		hasBody, probeErr := chromedp.Run(probeCtx, chromedp.Evaluate[bool](`!!document.body && document.body.children.length > 0`))
 		probeCancel()
 		if probeErr != nil || !hasBody {
 			return nil, fmt.Errorf("navigate %s: %w", rawURL, navErr)
@@ -316,7 +334,7 @@ func (c *DOMCrawler) visitPage(ctx context.Context, rawURL string, depth int) ([
 	// Client-rendered apps (React/Vue <div id="root">) serve an empty shell:
 	// give them a moment to draw something clickable before the snapshot.
 	renderCtx, renderCancel := context.WithTimeout(tabCtx, spaRenderWait)
-	_ = chromedp.Run(renderCtx, waitForEval(`document.querySelectorAll("a[href],button,[role='button']").length > 0`))
+	_ = chromedp.Do(renderCtx, waitForEval(`document.querySelectorAll("a[href],button,[role='button']").length > 0`))
 	renderCancel()
 
 	// Wait for network to settle (SPA data fetches)
@@ -332,25 +350,20 @@ func (c *DOMCrawler) visitPage(ctx context.Context, rawURL string, depth int) ([
 	// (Headers set via CDP apply to the current navigation context)
 
 	// ── DOM Snapshot ──────────────────────────────────────────────────────────
-	var outerHTML string
-	if err := chromedp.Run(tabCtx,
-		chromedp.OuterHTML("html", &outerHTML, chromedp.ByQuery),
-	); err != nil {
+	outerHTML, err := chromedp.Run(tabCtx, chromedp.OuterHTML(chromedp.CSS("html")))
+	if err != nil {
 		outerHTML = ""
 	}
 
 	// Get final URL (may differ from rawURL after SPA redirects)
-	var currentURL string
-	if err := chromedp.Run(tabCtx,
-		chromedp.Location(&currentURL),
-	); err != nil {
+	currentURL, err := chromedp.Run(tabCtx, chromedp.Location())
+	if err != nil {
 		currentURL = rawURL
 	}
 
 	// ── Collect SPA Routes from injected script ───────────────────────────────
-	var routesJSON string
-	_ = chromedp.Run(tabCtx,
-		chromedp.Evaluate(`JSON.stringify(window.__dormRoutes || [])`, &routesJSON),
+	routesJSON, _ := chromedp.Run(tabCtx,
+		chromedp.Evaluate[string](`JSON.stringify(window.__dormRoutes || [])`),
 	)
 	if routesJSON != "" {
 		var routes []string
@@ -425,9 +438,8 @@ func (c *DOMCrawler) clickAndCollect(tabCtx context.Context, pageURL string) []s
 
 		// Find all matching elements
 		// The JS returns a JSON string like "[0,1,2]"
-		var nodeIDsJSON string
-		err := chromedp.Run(tabCtx,
-			chromedp.Evaluate(fmt.Sprintf(`
+		nodeIDsJSON, err := chromedp.Run(tabCtx,
+			chromedp.Evaluate[string](fmt.Sprintf(`
 				(function() {
 					var els = document.querySelectorAll(%q);
 					var results = [];
@@ -436,7 +448,7 @@ func (c *DOMCrawler) clickAndCollect(tabCtx context.Context, pageURL string) []s
 					}
 					return JSON.stringify(results);
 				})()
-			`, selector), &nodeIDsJSON),
+			`, selector)),
 		)
 		if err != nil || nodeIDsJSON == "" || nodeIDsJSON == "[]" {
 			continue
@@ -454,18 +466,17 @@ func (c *DOMCrawler) clickAndCollect(tabCtx context.Context, pageURL string) []s
 			}
 
 			// Record URL before click
-			var urlBefore string
-			_ = chromedp.Run(tabCtx, chromedp.Location(&urlBefore))
+			urlBefore, _ := chromedp.Run(tabCtx, chromedp.Location())
 
 			// Click element by index
-			clickErr := chromedp.Run(tabCtx,
-				chromedp.Evaluate(fmt.Sprintf(`
+			clickErr := chromedp.Do(tabCtx,
+				chromedp.Evaluate[chromedp.Void](fmt.Sprintf(`
 					(function() {
 						var els = document.querySelectorAll(%q);
 						if (els[%d]) { els[%d].click(); return true; }
 						return false;
 					})()
-				`, selector, idx, idx), nil),
+				`, selector, idx, idx)),
 			)
 			if clickErr != nil {
 				continue
@@ -479,13 +490,11 @@ func (c *DOMCrawler) clickAndCollect(tabCtx context.Context, pageURL string) []s
 			}
 
 			// Collect URL after click
-			var urlAfter string
-			_ = chromedp.Run(tabCtx, chromedp.Location(&urlAfter))
+			urlAfter, _ := chromedp.Run(tabCtx, chromedp.Location())
 
 			// Collect newly pushed routes
-			var routesJSON string
-			_ = chromedp.Run(tabCtx,
-				chromedp.Evaluate(`JSON.stringify(window.__dormRoutes || [])`, &routesJSON),
+			routesJSON, _ := chromedp.Run(tabCtx,
+				chromedp.Evaluate[string](`JSON.stringify(window.__dormRoutes || [])`),
 			)
 			var newRoutes []string
 			if routesJSON != "" {

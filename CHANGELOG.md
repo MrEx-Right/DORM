@@ -2,6 +2,47 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.29.1] - 2026-10-25
+### ⬆️ Dependency Upgrade (chromedp v0.21, jsPDF 4, Font Awesome 7), Port-Qualified Targets, Plesk Key False Positive, Missing Icons
+
+Every Go module, dashboard library and CI action is on its latest release. chromedp v0.21 rewrote its API, so the DOM crawler and the DOM XSS plugin moved to it. This release also makes `host:port` targets scan, stops reporting Plesk's own telemetry key as the site's leaked AWS key, and replaces three icons that never rendered.
+
+---
+
+#### ⬆️ Go Modules (`go.mod`, `dom/domcrawler.go`, `dom/session.go`, `plugins/domscanner.go`)
+- `chromedp` v0.16.0 → v0.21.0, `cdproto` → v0.158.4, `golang.org/x/crypto` v0.58.0, `x/net` v0.61.0, `x/sys` v0.49.0, `x/text` v0.43.0.
+- chromedp v0.21 is a new API: actions return their value (`Run[T]`, `Do`), commands are typed values called with `cdp.Call`, selectors are types (`CSS(...)` replaces `ByQuery`), and events are iterators (`Events` replaces `ListenTarget`). The crawler and the plugin use it; their behavior is unchanged.
+- The crawler's XHR capture used to be a callback inside chromedp's event loop. It is now a goroutine that reads the `Network.requestWillBeSent` iterator, and `visitPage` stops it and waits for it before returning, so no request lands in the result after its page is done.
+- chromedp now starts Chrome over a pipe instead of a websocket port (on Windows too). `gobwas/ws`, `gobwas/httphead`, `gobwas/pool` and `chromedp/sysutil` left the build.
+- Verified against real Chrome with a temporary harness (removed afterwards), the same tests run on v1.29.0's code for comparison: pages, forms, XHR GET/POST capture, click-triggered `pushState` routes, a page whose load event never fires (crawled from its partial DOM), a closed port (`ERR_CONNECTION_REFUSED`, no page) — identical results on both versions; no goroutine left behind; 0 reports under `go test -race`. The DOM XSS plugin reports a page that writes `location.hash` into the DOM and stays silent on a static page and a closed port. SSH brute force (`x/crypto/ssh`) finds a default credential on a real SSH server and reports nothing when none matches.
+
+#### ⬆️ Dashboard Libraries (`web/dashboard.html`)
+- jsPDF 2.5.1 → 4.2.1 (2.5.1 has published security advisories), jspdf-autotable 3.5.29 → 5.0.9.
+- Font Awesome 6.0.0 → 7.3.1. v7 makes every icon fixed-width (1.25em), which widened icons inside buttons and text; `--fa-width: auto` on `:root` keeps the v6 layout. `fa-shield-halved` did not exist in 6.0.0 and now renders.
+- Chart.js was loaded as `npm/chart.js` with no version, so every page load took whatever was newest. It is pinned to 4.6.1, so a future major cannot change the dashboard unannounced.
+- Verified in the browser: no console errors; the live chart draws; a 90-finding, two-target PDF builds 10 pages with the header, the per-target sections, the footers and all five severity colors.
+
+#### 🩹 `host:port` Targets Now Scan (`handlers.go`)
+- **Root cause:** a target typed as `127.0.0.1:9000` kept its port through sanitization, and port discovery joined it with every port in `commonPorts` — `[127.0.0.1:9000]:80`, `[127.0.0.1:9000]:443`, ... Every dial failed, and the scan ended with "No reachable ports found". A URL target (`http://host:3001`) lost its port instead, so a port outside `commonPorts` was never scanned.
+- A target is now split into host and port (`splitScanTarget`; IPv6 literals such as `[::1]:8080` included). The engine gets the bare host, as before. The port the user named is probed on top of `commonPorts`, and the sitemapper and the DOM crawler start on that port (https on 443/8443 when no scheme is given). A bare host scans and crawls exactly as before.
+- Verified through `handleScan` against a server on port 9001 (not in `commonPorts`): `127.0.0.1:9001` and `http://127.0.0.1:9001/` both find 9001 open and the DOM crawler starts at `http://127.0.0.1:9001`; a closed port named the same way is not reported open.
+
+#### 🩹 Plesk Telemetry Key No Longer a CRITICAL "AWS API Key Leak" (`plugins/apikey.go`, `analyzer/responser.go`, `models/plesk.go`, `plugins/secretfilter.go`)
+- **Root cause:** Plesk 18 login pages print a telemetry block, `Jsw.UAT.init({... "firehose": {"stream": "plesk-18.0-ux", "region": "us-west-2", "accessKeyId": "AKIA...", "secretAccessKey": "..."}})`. Older releases (18.0.72 seen) embed Plesk's own AWS Kinesis Firehose key there; newer ones (18.0.81 seen) send `00000000000000000000` and post through `uat-proxy.plesk.com`. The API key plugin fetches `/`, follows the redirect to `login_up.php` on the Plesk port (8443), and reported that key as the site's "AWS API Key Leak", CRITICAL 9.5, "rotate the key". The site owner cannot rotate a vendor's key, and it is not the site's credential.
+- A key that is the `accessKeyId` of a `Jsw.UAT.init` block with a `firehose` section (`models.PleskUATKey`) is now reported as **INFO "Outdated Plesk Exposes Vendor Telemetry Key"**, with the Plesk version, the page URL and the masked key. The fix it gives is to update Plesk and restrict the panel to trusted IPs. Any other key on the same page still outranks it with its own finding.
+- The passive analyzer had the same shape (CRITICAL "AWS Access Key Leakage" on any `AKIA...` in a response). It now skips the Plesk telemetry key too.
+- Every API key finding, and the analyzer's AWS finding, now names the URL where the key was found (the URL after redirects; `/` often lands on a login page). The description used to say only "found in source code".
+- `secretharvester.go` is unchanged: it scans JS bundles and source maps, and Plesk prints this block inline in HTML.
+- Verified live on two Plesk panels: 18.0.72 now gives the INFO finding with its `login_up.php` URL; 18.0.81 (placeholder key) gives no finding, and neither do the sites on `:443`. Pages that imitate part of the Plesk shape to hide a real key are still CRITICAL: an `accessKeyId` after the block closes, a block without `firehose`, the key in another field, and the same key repeated outside the block.
+
+#### 🩹 Icons That Never Rendered (`web/dashboard.html`, `web/js/supply-chain.js`)
+- `fa-trash-sweep` (Scan History → DELETE ALL), `fa-wifi-slash` (Supply Chain connection error) and `fa-shield-check` (Supply Chain "No CVEs found") are Font Awesome Pro icons and are missing from every Free release, so the three spots were blank. They are now `fa-broom`, `fa-plug-circle-xmark` and `fa-shield-halved`.
+
+#### 🔧 CI (`.github/workflows/`)
+- `actions/checkout` v4 → v7, `actions/setup-go` v5 → v7, `golangci/golangci-lint-action` v7 → v9 with golangci-lint v2.13.2 → v2.15.0, `google/osv-scanner-action` v1.7.3 → v2.7.0 (still pinned by commit).
+- Go is now read from `go.mod` (`go-version-file`) instead of a fixed `1.26.0`. golangci-lint v2.13.2 is built with Go 1.26 and refuses to load a module that targets Go 1.27.1 ("the Go language version (go1.26) used to build golangci-lint is lower than the targeted Go version"); v2.15.0 runs clean (0 issues).
+- osv-scanner v2 removed `--skip-git` (root git directories are skipped by default) and takes `fail-on-vuln` as a workflow input, so `--fail-on-vuln=false` moved there.
+
 ## [v1.29.0] - 2026-10-22
 ### ✨ New: Traffic Morph — Live OpSec / Identity Panel
 

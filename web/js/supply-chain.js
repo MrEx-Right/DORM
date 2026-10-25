@@ -52,7 +52,7 @@ async function analyzeSCI() {
     } catch (e) {
         resultsArea.innerHTML = `
             <div class="sci-empty">
-                <i class="fas fa-wifi-slash" style="font-size:40px; color:#F87171; display:block; margin-bottom:16px;"></i>
+                <i class="fas fa-plug-circle-xmark" style="font-size:40px; color:#F87171; display:block; margin-bottom:16px;"></i>
                 <p style="color:#F87171; font-weight:700; font-size:15px; margin:0 0 8px;">Connection error</p>
                 <p style="font-size:13px; margin:0;">${escapeHtml(e.message)}</p>
             </div>`;
@@ -140,7 +140,7 @@ function renderSCIResults(data) {
                 cveFooter = `
                 <div class="sci-card-footer">
                     <span style="font-size:11px; color:rgba(16,185,129,0.7); font-weight:600;">
-                        <i class="fas fa-shield-check"></i> No CVEs found
+                        <i class="fas fa-shield-halved"></i> No CVEs found
                     </span>
                 </div>`;
             }

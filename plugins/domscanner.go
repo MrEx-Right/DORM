@@ -38,16 +38,16 @@ func (p *DOMScannerPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	payload := "dorm_xss_check"
 	targetURL := getURL(target, "/#"+payload)
 
-	var res string
-
-	err := chromedp.Run(ctx,
+	err := chromedp.Do(ctx,
 		chromedp.Navigate(targetURL),
 
-		chromedp.WaitVisible("body", chromedp.ByQuery),
-
-		chromedp.OuterHTML("html", &res),
+		chromedp.WaitVisible(chromedp.CSS("body")),
 	)
+	if err != nil {
+		return nil
+	}
 
+	res, err := chromedp.Run(ctx, chromedp.OuterHTML("html"))
 	if err != nil {
 
 		return nil

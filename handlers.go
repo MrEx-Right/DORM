@@ -29,6 +29,7 @@ import (
 	"net/url"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -177,6 +178,55 @@ func handleCVEDetail(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(detail)
 }
 
+// splitScanTarget reduces a target as typed ("host", "host:9000",
+// "http://host:3001/app", "[::1]:8080") to its host, the port it names
+// (0 = none) and its scheme ("" = none). The host carries no port, so the
+// port probe can join it with each port.
+func splitScanTarget(raw string) (host string, port int, scheme string) {
+	t := strings.TrimSpace(raw)
+	if i := strings.Index(t, "://"); i >= 0 {
+		if u, err := url.Parse(t); err == nil {
+			return u.Hostname(), validPort(u.Port()), strings.ToLower(u.Scheme)
+		}
+		t = t[i+3:]
+	}
+	t, _, _ = strings.Cut(t, "/")
+	if h, p, err := net.SplitHostPort(t); err == nil {
+		return h, validPort(p), ""
+	}
+	return strings.Trim(t, "[]"), 0, ""
+}
+
+// validPort returns p as a TCP port number, or 0 when it is not one.
+func validPort(p string) int {
+	n, err := strconv.Atoi(p)
+	if err != nil || n < 1 || n > 65535 {
+		return 0
+	}
+	return n
+}
+
+// prescanURL is where the sitemapper and the DOM crawler start for a target:
+// the port and scheme the user named, else plain http on the default port.
+func prescanURL(host string, port int, scheme string) string {
+	hostport := host
+	if port > 0 {
+		hostport = net.JoinHostPort(host, strconv.Itoa(port))
+		if scheme == "" && (port == 443 || port == 8443) {
+			scheme = "https"
+		}
+	} else {
+		scheme = "" // as before: a bare host is crawled over http
+		if strings.Contains(host, ":") {
+			hostport = "[" + host + "]" // IPv6 literal
+		}
+	}
+	if scheme != "https" {
+		scheme = "http"
+	}
+	return scheme + "://" + hostport
+}
+
 func handleScan(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -289,36 +339,26 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	// host below; without de-duplication every plugin ran once per spelling
 	// (3 targets -> 3x the port probes, 3x the findings, 3x the load).
 	seenTargets := make(map[string]struct{})
+	// A port the user named ("host:9000", "http://host:3001") is probed on
+	// top of commonPorts, and the pre-scan crawls the site on that port.
+	explicitPorts := make(map[string][]int)
+	prescanURLs := make(map[string]string)
 
-	for _, t := range rawTargets {
-		t = strings.TrimSpace(t)
+	for _, raw := range rawTargets {
+		t, port, scheme := splitScanTarget(raw)
 		if t == "" {
 			continue
 		}
-
-		if strings.Contains(t, "://") {
-			if u, err := url.Parse(t); err == nil {
-				t = u.Hostname()
-			}
-		} else {
-			parts := strings.Split(t, "/")
-			if len(parts) > 0 {
-				t = parts[0]
-			}
+		key := strings.ToLower(t)
+		if port > 0 && !slices.Contains(explicitPorts[key], port) {
+			explicitPorts[key] = append(explicitPorts[key], port)
 		}
-
-		t = strings.TrimPrefix(t, "http://")
-		t = strings.TrimPrefix(t, "https://")
-		t = strings.TrimRight(t, "/")
-
-		if t != "" {
-			key := strings.ToLower(t)
-			if _, dup := seenTargets[key]; dup {
-				continue
-			}
-			seenTargets[key] = struct{}{}
-			sanitizedTargets = append(sanitizedTargets, t)
+		if _, dup := seenTargets[key]; dup {
+			continue
 		}
+		seenTargets[key] = struct{}{}
+		sanitizedTargets = append(sanitizedTargets, t)
+		prescanURLs[t] = prescanURL(t, port, scheme)
 	}
 
 	if len(sanitizedTargets) == 0 {
@@ -429,8 +469,7 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 
 	var prescanWg sync.WaitGroup
 	for _, host := range sanitizedTargets {
-		proto := "http"
-		targetURL := fmt.Sprintf("%s://%s", proto, host)
+		targetURL := prescanURLs[host]
 
 		prescanWg.Add(1)
 		go func(tURL, tHost string) {
@@ -532,7 +571,13 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	portSem := make(chan struct{}, 100) // cap concurrent port-probe goroutines
 
 	for _, host := range sanitizedTargets {
-		for _, port := range commonPorts {
+		ports := commonPorts
+		for _, p := range explicitPorts[strings.ToLower(host)] {
+			if !slices.Contains(ports, p) {
+				ports = append(slices.Clip(ports), p)
+			}
+		}
+		for _, port := range ports {
 			select {
 			case <-ctx.Done():
 				sendSSE(`{"Status": "DONE"}`)

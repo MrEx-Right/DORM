@@ -57,7 +57,7 @@ func NewSession(ctx context.Context, cfg DOMConfig) (*Session, error) {
 	// closed cleanly. Never await that synchronously here — it would stall
 	// NewSession's return (and therefore the whole crawl) for no benefit.
 	smokeCtx, smokeCancel := chromedp.NewContext(allocCtx)
-	if err := chromedp.Run(smokeCtx); err != nil {
+	if err := chromedp.Do(smokeCtx); err != nil {
 		go smokeCancel()
 		allocCancel()
 		return nil, fmt.Errorf("dom.NewSession: Chrome failed to start: %w", err)

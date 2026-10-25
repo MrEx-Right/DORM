@@ -67,21 +67,53 @@ func (p *APIKeyPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	bodyBytes, _ := io.ReadAll(resp.Body)
-	body := string(bodyBytes)
+	// The URL after redirects: "/" often lands on a login page.
+	return apiKeyFinding(target, string(bodyBytes), resp.Request.URL.String())
+}
 
+// apiKeyFinding reports the first key in body, in apiKeyPatterns order. A
+// Plesk telemetry key (models.PleskUATKey) is not the site's credential: it
+// is reported as an outdated-Plesk INFO, and only when the page has no
+// other key.
+func apiKeyFinding(target models.ScanTarget, body, pageURL string) *models.Vulnerability {
+	pleskKey, pleskVersion := "", ""
 	for _, pat := range apiKeyPatterns {
-		if ms := findKeys(pat.Regex, body, pat.Prefixes...); len(ms) > 0 {
-			m := ms[0]
+		for _, loc := range findKeyIndexes(pat.Regex, body, pat.Prefixes...) {
+			m := body[loc[0]:loc[1]]
+			if version, ok := models.PleskUATKey(body, loc[0]); ok {
+				if pleskKey == "" {
+					pleskKey, pleskVersion = m, version
+				}
+				continue
+			}
 			return &models.Vulnerability{
 				Target:      target,
 				Name:        pat.Name,
 				Severity:    pat.Severity,
 				CVSS:        pat.CVSS,
-				Description: fmt.Sprintf(pat.Description, maskKey(m)),
+				Description: fmt.Sprintf(pat.Description, maskKey(m)) + " URL: " + pageURL,
 				Solution:    "Rotate and revoke the exposed key immediately. Remove it from client-side/publicly served code and load secrets server-side from a vault or environment variable.",
 				Reference:   "CWE-798: Use of Hard-coded Credentials",
 			}
 		}
 	}
-	return nil
+	if pleskKey == "" {
+		return nil
+	}
+	if pleskVersion == "" {
+		pleskVersion = "(version not shown)"
+	}
+	return &models.Vulnerability{
+		Target:   target,
+		Name:     "Outdated Plesk Exposes Vendor Telemetry Key",
+		Severity: "INFO",
+		CVSS:     0.0,
+		Description: fmt.Sprintf("The Plesk %s page at %s embeds Plesk's own AWS Kinesis Firehose telemetry key (%s) in its Jsw.UAT.init block. "+
+			"The key belongs to the vendor, not to this site, so there is nothing to rotate here. "+
+			"Newer Plesk releases send this telemetry through uat-proxy.plesk.com and no longer ship a key. "+
+			"The page also shows that the Plesk panel is reachable from the internet.",
+			pleskVersion, pageURL, maskKey(pleskKey)),
+		Solution:  "Update Plesk to the current release. Restrict the Plesk panel (port 8443) to trusted IP addresses.",
+		Reference: "CWE-1104: Use of Unmaintained Third Party Components",
+	}
 }

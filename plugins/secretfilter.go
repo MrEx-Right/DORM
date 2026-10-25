@@ -121,6 +121,15 @@ func plausibleEntropyToken(token string) bool {
 // "sk-proj-" before "sk-").
 func findKeys(re *regexp.Regexp, body string, prefixes ...string) []string {
 	var out []string
+	for _, loc := range findKeyIndexes(re, body, prefixes...) {
+		out = append(out, body[loc[0]:loc[1]])
+	}
+	return out
+}
+
+// findKeyIndexes is findKeys returning the [start, end) of each match.
+func findKeyIndexes(re *regexp.Regexp, body string, prefixes ...string) [][]int {
+	var out [][]int
 	for _, loc := range re.FindAllStringIndex(body, -1) {
 		if !atTokenStart(body, loc[0]) {
 			continue
@@ -138,7 +147,7 @@ func findKeys(re *regexp.Regexp, body string, prefixes ...string) []string {
 				continue
 			}
 		}
-		out = append(out, m)
+		out = append(out, loc)
 	}
 	return out
 }

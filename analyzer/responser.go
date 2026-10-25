@@ -26,16 +26,22 @@ func AnalyzeResponse(req *http.Request, resp *http.Response, bodyBytes []byte) {
 	// checkSecurityHeaders(target, resp)
 
 	// 2. Information Leakage in Body (Critical/High findings only)
-	checkInformationLeakage(target, bodyStr)
+	checkInformationLeakage(target, bodyStr, req.URL.String())
 
 	// 3. Server Information Disclosure (Disabled by user request)
 	// checkServerDisclosure(target, resp)
 }
 
 
-func checkInformationLeakage(target models.ScanTarget, bodyStr string) {
-	if awsKeyRegex.MatchString(bodyStr) {
-		reportVuln(target, "AWS Access Key Leakage", "CRITICAL", 9.0, "An AWS Access Key was found exposed in the response body.", "Remove the key and rotate it immediately.")
+func checkInformationLeakage(target models.ScanTarget, bodyStr, pageURL string) {
+	for _, loc := range awsKeyRegex.FindAllStringIndex(bodyStr, -1) {
+		// Plesk's own telemetry key on its login page is not the site's
+		// credential; the API key plugin reports it as INFO.
+		if _, vendor := models.PleskUATKey(bodyStr, loc[0]); vendor {
+			continue
+		}
+		reportVuln(target, "AWS Access Key Leakage", "CRITICAL", 9.0, "An AWS Access Key was found exposed in the response body. URL: "+pageURL, "Remove the key and rotate it immediately.")
+		break
 	}
 	if privateKeyRegex.MatchString(bodyStr) {
 		reportVuln(target, "Private Key Disclosure", "CRITICAL", 9.5, "A cryptographic private key was found exposed in the response body.", "Remove the key and regenerate a new pair immediately.")
