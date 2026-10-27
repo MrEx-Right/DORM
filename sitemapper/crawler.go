@@ -319,10 +319,15 @@ func (c *Crawler) parseHTML(body, currentURL string, page *Page) *crawlResult {
 					if attr.Key == "href" && attr.Val != "" {
 						if abs := c.resolveAgainst(currentURL, attr.Val); abs != "" && !seenLinks[abs] {
 							seenLinks[abs] = true
-							if c.inScope(abs) {
-								result.links = append(result.links, abs)
-								page.Links = append(page.Links, abs)
+							// A link to another host (a video, a payment page) is
+							// neither crawled nor an endpoint: every injection
+							// plugin fuzzes the endpoint list, so registering it
+							// sent attack payloads to a site that is not the target.
+							if !c.inScope(abs) {
+								continue
 							}
+							result.links = append(result.links, abs)
+							page.Links = append(page.Links, abs)
 							// Register as GET endpoint if it has query params
 							if u, err := url.Parse(abs); err == nil && len(u.Query()) > 0 {
 								var params []string
@@ -352,7 +357,9 @@ func (c *Crawler) parseHTML(body, currentURL string, page *Page) *crawlResult {
 						if attr.Val != "" {
 							if abs := c.resolveAgainst(currentURL, attr.Val); abs != "" {
 								f.Action = abs
-							} else {
+							} else if !strings.HasPrefix(strings.TrimSpace(attr.Val), "#") {
+								// "javascript:..." and the like: no URL to submit to.
+								// A "#..." action submits to the current page, the default.
 								f.Action = attr.Val
 							}
 						}
@@ -362,6 +369,13 @@ func (c *Crawler) parseHTML(body, currentURL string, page *Page) *crawlResult {
 							f.Method = "GET"
 						}
 					}
+				}
+				// A form that submits to another host (payment provider,
+				// SSO, newsletter service) is not part of the target. Its
+				// inputs must not leak into the previous form either.
+				if !c.inScope(f.Action) {
+					currentForm = nil
+					break
 				}
 				result.forms = append(result.forms, f)
 				currentForm = &result.forms[len(result.forms)-1]

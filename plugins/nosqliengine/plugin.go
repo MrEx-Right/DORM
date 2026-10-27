@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 )
 
@@ -225,6 +226,16 @@ func runSpiderIntegration(client *http.Client, target models.ScanTarget) *models
 
 	for _, ep := range spiderEndpoints {
 		if ep.Method == "POST" {
+			// Control: the same login with plain wrong credentials. Only an
+			// injection response that logs in where this one does not is
+			// proof; a page that answers both the same way (a form login
+			// that never reads JSON, an API with one fixed reply) is not.
+			ctl, err := client.Post(ep.URL, "application/json", strings.NewReader(controlLoginBody))
+			if err != nil {
+				continue
+			}
+			ctlBody := models.ReadBody(ctl, 65536)
+
 			for _, pl := range jsonPayloads[:min(len(jsonPayloads), 2)] {
 				resp, err := client.Post(ep.URL, "application/json", strings.NewReader(pl.Body))
 				if err != nil {
@@ -232,7 +243,7 @@ func runSpiderIntegration(client *http.Client, target models.ScanTarget) *models
 				}
 				body := models.ReadBody(resp, 65536)
 
-				if resp.StatusCode == 200 && strings.ContainsAny(body, "token session user admin") {
+				if loginBypassed(ctl, ctlBody, resp, body) {
 					return &models.Vulnerability{
 						Target:   target,
 						Name:     "NoSQL Injection (Spider-Discovered POST Endpoint)",
@@ -250,6 +261,43 @@ func runSpiderIntegration(client *http.Client, target models.ScanTarget) *models
 		}
 	}
 	return nil
+}
+
+// controlLoginBody is a login with ordinary, certainly wrong credentials:
+// the same shape as the operator payloads, no operators.
+const controlLoginBody = `{"username": "dorm_no_such_user", "password": "dorm_wrong_password"}`
+
+// authKeyRe matches a JSON key that carries a credential in a login reply.
+var authKeyRe = regexp.MustCompile(`(?i)"(access_?token|refresh_?token|id_?token|auth_?token|token|jwt|session_?id|sid)"\s*:\s*"[^"]`)
+
+// loginBypassed reports whether the operator payload got a login the
+// control credentials did not: the control fails (4xx) where the payload
+// succeeds, the payload gets a credential field or a session cookie the
+// control does not, or the two are redirected to different places.
+func loginBypassed(ctl *http.Response, ctlBody string, inj *http.Response, injBody string) bool {
+	if inj.StatusCode >= 400 {
+		return false
+	}
+	if ctl.StatusCode >= 400 {
+		return true
+	}
+	if authKeyRe.MatchString(injBody) && !authKeyRe.MatchString(ctlBody) {
+		return true
+	}
+	ctlCookies := map[string]bool{}
+	for _, c := range ctl.Cookies() {
+		ctlCookies[c.Name] = true
+	}
+	for _, c := range inj.Cookies() {
+		if !ctlCookies[c.Name] {
+			return true
+		}
+	}
+	if inj.StatusCode/100 == 3 && ctl.StatusCode/100 == 3 &&
+		inj.Header.Get("Location") != ctl.Header.Get("Location") {
+		return true
+	}
+	return false
 }
 
 func min(a, b int) int {

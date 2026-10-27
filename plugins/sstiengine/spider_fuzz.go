@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"strings"
 )
 
 // RunSpiderFuzz is Phase 2: replay a reduced probe set (RCE payloads
@@ -22,6 +21,19 @@ func RunSpiderFuzz(client *http.Client, target models.ScanTarget) *models.Vulner
 		// ── GET Parameter Fuzzing ─────────────────────────────────────
 		if ep.Method == "GET" && len(ep.Params) > 0 {
 			for _, param := range ep.Params {
+				ctlURL, err := url.Parse(ep.URL)
+				if err != nil {
+					continue
+				}
+				cq := ctlURL.Query()
+				cq.Set(param, controlValue)
+				ctlURL.RawQuery = cq.Encode()
+				ctl, err := client.Get(ctlURL.String())
+				if err != nil {
+					continue
+				}
+				control := models.ReadBody(ctl, 65536)
+
 				for _, probe := range Probes[:8] { // First 8 probes (RCE-free)
 					parsedURL, err := url.Parse(ep.URL)
 					if err != nil {
@@ -37,7 +49,7 @@ func RunSpiderFuzz(client *http.Client, target models.ScanTarget) *models.Vulner
 					}
 					body := models.ReadBody(resp, 65536)
 
-					if strings.Contains(body, probe.Expected) && !strings.Contains(body, probe.Payload) {
+					if fired(probe, body, control) {
 						return &models.Vulnerability{
 							Target:   target,
 							Name:     fmt.Sprintf("SSTI (Spider-Discovered — %s)", probe.Engine),
@@ -58,6 +70,12 @@ func RunSpiderFuzz(client *http.Client, target models.ScanTarget) *models.Vulner
 		// ── POST Parameter Fuzzing ────────────────────────────────────
 		if ep.Method == "POST" && len(ep.Params) > 0 {
 			for _, param := range ep.Params {
+				ctl, err := client.PostForm(ep.URL, url.Values{param: {controlValue}})
+				if err != nil {
+					continue
+				}
+				control := models.ReadBody(ctl, 65536)
+
 				for _, probe := range Probes[:6] {
 					formData := url.Values{}
 					formData.Set(param, probe.Payload)
@@ -68,7 +86,7 @@ func RunSpiderFuzz(client *http.Client, target models.ScanTarget) *models.Vulner
 					}
 					body := models.ReadBody(resp, 65536)
 
-					if strings.Contains(body, probe.Expected) && !strings.Contains(body, probe.Payload) {
+					if fired(probe, body, control) {
 						return &models.Vulnerability{
 							Target:   target,
 							Name:     fmt.Sprintf("SSTI (POST Spider-Discovered — %s)", probe.Engine),

@@ -59,9 +59,14 @@ func (p *CRLFPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		return fmt.Sprintf("http://example.com%sSet-Cookie: %s=1", crlf, cookieCanary)
 	}
 
+	// The XSS payload also injects a header of its own: Content-Type
+	// text/html on a 200 is what every HTML page answers, so the proof is
+	// that this header exists and the script reached the body unencoded.
+	xssCanary := "X-DORM-XSS"
+	xssScript := "<script>alert('DORM_XSS_CRLF')</script>"
 	buildXSSPayload := func(crlf string) string {
-		// \r\nContent-Type: text/html\r\n\r\n<script>alert('DORM_XSS')</script>
-		return fmt.Sprintf("/%sContent-Type: text/html%s%s<script>alert('DORM_XSS_CRLF')</script>", crlf, crlf, crlf)
+		// \r\nX-DORM-XSS: 1\r\nContent-Type: text/html\r\n\r\n<script>alert('DORM_XSS')</script>
+		return fmt.Sprintf("/%s%s: 1%sContent-Type: text/html%s%s%s", crlf, xssCanary, crlf, crlf, crlf, xssScript)
 	}
 
 	buildHeaderPayload := func(crlf string) string {
@@ -118,17 +123,17 @@ func (p *CRLFPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		xssPayload := buildXSSPayload(variant.Encoded)
 		respXSS, err := client.Get(baseURL + xssPayload)
 		if err == nil {
-			_ = respXSS.Body.Close()
+			xssBody := models.ReadBody(respXSS, 65536)
 			ct := respXSS.Header.Get("Content-Type")
-			if strings.Contains(ct, "text/html") && respXSS.StatusCode == 200 {
+			if respXSS.Header.Get(xssCanary) != "" && strings.Contains(ct, "text/html") && strings.Contains(xssBody, xssScript) {
 				return &models.Vulnerability{
 					Target:   target,
 					Name:     "CRLF Injection (XSS Escalation via Response Splitting)",
 					Severity: "HIGH",
 					CVSS:     7.5,
 					Description: fmt.Sprintf(
-						"Content-Type: text/html was injected via CRLF injection — XSS escalation vector confirmed.\nEncoding: %s\nPayload: %s",
-						variant.Name, xssPayload,
+						"Injected headers (%s, Content-Type: text/html) and an unencoded script in the body — XSS escalation via CRLF injection confirmed.\nEncoding: %s\nPayload: %s",
+						xssCanary, variant.Name, xssPayload,
 					),
 					Solution:  "Filter \\r\\n characters in all HTTP header values. Implement Content Security Policy (CSP).",
 					Reference: "CWE-113 / CWE-79: XSS via CRLF Injection",

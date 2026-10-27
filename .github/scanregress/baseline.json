@@ -1,0 +1,37 @@
+{
+  "notes": [
+    "Recorded from plugins=ALL lab runs (local Docker, 2026-10-26, v1.29.2). Every expected key appeared in every run after the v1.29.2 false-positive fixes.",
+    "Keys are '<label>:<port> | <Name> | <Severity>'; * matches anything.",
+    "expected = real findings DORM must keep making. knownFalsePositives = wrong today, tolerated with a warning until fixed; when one stops firing, delete it here.",
+    "A new finding that matches nothing here fails the run: review it, then add it to expected or knownFalsePositives.",
+    "The nine false positives the first lab runs raised (NoSQL/SSTI on DVWA, SSTI/SSRF/CRLF/WordPress on Juice Shop, request smuggling, Unknown WAF, file disclosure on the nginx control) were fixed in v1.29.2; if one comes back, it fails the run as unexpected."
+  ],
+  "expected": [
+    "clean:80 | Clickjacking Risk | INFO",
+    "clean:80 | Missing Security Headers | INFO",
+    "clean:80 | Open TCP Port | INFO",
+    "clean:80 | Service Banner | INFO",
+    "clean:80 | Service Detection: Nginx | INFO",
+    "clean:80 | Site Map (Sitemapper v1.19) | INFO",
+
+    "dvwa:80 | Clickjacking Risk | INFO",
+    "dvwa:80 | Critical File/Directory Disclosure (Hybrid) | HIGH",
+    "dvwa:80 | Insecure Cookie | INFO",
+    "dvwa:80 | Missing Security Headers | INFO",
+    "dvwa:80 | Open TCP Port | INFO",
+    "dvwa:80 | Service Banner | INFO",
+    "dvwa:80 | Service Detection: Apache/2.4.25 (Debian) | INFO",
+    "dvwa:80 | Site Map (Sitemapper v1.19) | INFO",
+
+    "juiceshop:3000 | Alternative HTTP Service on Port 3000 | INFO",
+    "juiceshop:3000 | Critical File/Directory Disclosure (Hybrid) | HIGH",
+    "juiceshop:3000 | HIGH BFLA — Admin Endpoint Publicly Accessible | HIGH",
+    "juiceshop:3000 | Missing Security Headers | INFO",
+    "juiceshop:3000 | Open TCP Port | INFO",
+    "juiceshop:3000 | Security.txt Found | INFO",
+    "juiceshop:3000 | Service Banner | INFO",
+    "juiceshop:3000 | Site Map (Sitemapper v1.19) | INFO"
+  ],
+  "knownFalsePositives": [],
+  "flaky": []
+}

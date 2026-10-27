@@ -25,22 +25,24 @@ var Probes = []SSTIProbe{
 	{"{{7*'7'}}", "7777777", "Jinja2 (string-repeat fingerprint)", false},
 
 	// ── Twig-spesifik ────────────────────────────────────────────────
-	{"{{7*7}}", "49", "Twig/Jinja2 (generic)", false},
-	{"{7*7}", "49", "Smarty (curly-only)", false},
+	// 7331*1337 = 9801547: unlike 7*7 = 49, it does not turn up by chance
+	// in a CSRF token, a CSS value or a version number.
+	{"{{7331*1337}}", "9801547", "Twig/Jinja2 (generic)", false},
+	{"{7331*1337}", "9801547", "Smarty (curly-only)", false},
 
 	// ── Smarty-spesifik ──────────────────────────────────────────────
 	{"{$smarty.version}", "Smarty", "Smarty (version disclosure)", false},
-	{"{math equation=\"x*y\" x=7 y=7}", "49", "Smarty (math function)", false},
+	{"{math equation=\"x*y\" x=7331 y=1337}", "9801547", "Smarty (math function)", false},
 
 	// ── Freemarker-spesifik ──────────────────────────────────────────
 	{"${\"freemarker\".toUpperCase()}", "FREEMARKER", "Freemarker (string method)", false},
-	{"[#assign x=7*7]${x}", "49", "Freemarker (assign directive)", false},
+	{"[#assign x=7331*1337]${x?c}", "9801547", "Freemarker (assign directive)", false},
 
 	// ── Mako (Python) ────────────────────────────────────────────────
-	{"${7*7}", "49", "Mako/Python (dollar-brace)", false},
+	{"${7331*1337}", "9801547", "Mako/Python (dollar-brace)", false},
 
 	// ── Universal polyglot ───────────────────────────────────────────
-	{"{{7*7}}${7*7}#{7*7}<%= 7*7 %>${{7*7}}", "49", "Polyglot (universal)", false},
+	{"{{7331*1337}}${7331*1337}#{7331*1337}<%= 7331*1337 %>${{7331*1337}}", "9801547", "Polyglot (universal)", false},
 
 	// ── Jinja2 RCE Escalation ────────────────────────────────────────
 	{
@@ -83,4 +85,29 @@ func Fingerprint(body string) string {
 		}
 	}
 	return "Unknown Engine"
+}
+
+// controlValue is a harmless input that holds none of the probes' canaries.
+const controlValue = "dormctlqzx"
+
+// fired reports whether probe's canary is evidence that a template engine
+// ran the payload: it is in the payload response, it is not in the
+// response to the same endpoint and parameter with controlValue (a CSRF
+// token, a CSS value or a version string that happens to hold it), and the
+// response is not just the payload echoed back.
+func fired(probe SSTIProbe, body, control string) bool {
+	return strings.Contains(body, probe.Expected) &&
+		!strings.Contains(control, probe.Expected) &&
+		!strings.Contains(body, probe.Payload)
+}
+
+// leakedError returns the template error signature in body that the
+// control response does not already carry, or "".
+func leakedError(body, control string) string {
+	for _, sig := range ErrorSigs {
+		if strings.Contains(body, sig) && !strings.Contains(control, sig) {
+			return sig
+		}
+	}
+	return ""
 }

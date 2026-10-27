@@ -1,0 +1,35 @@
+name: govulncheck
+
+# OSV-Scanner flags every advisory on a module DORM requires. govulncheck
+# walks the call graph and fails only when DORM's code actually reaches the
+# vulnerable symbol, including the Go standard library of the toolchain that
+# go.mod pins. The weekly run catches advisories published after the last
+# push, when no code changed.
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    - cron: '0 9 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Set up Go
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: go.mod
+        cache: true
+
+    - name: Run govulncheck
+      run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...

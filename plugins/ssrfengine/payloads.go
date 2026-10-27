@@ -113,7 +113,7 @@ var GopherPayloads = []SSRFPayload{
 	},
 	{
 		"gopher://127.0.0.1:25/_HELO%20dorm%0d%0a",
-		"220",
+		"220 ", // SMTP greeting: code and a space, never inside a hex token or a CSS value
 		"Gopher Protocol → SMTP HELO (Internal Mail Server Pivot)",
 		9.0,
 	},

@@ -17,6 +17,12 @@ func RunStaticFuzz(client *http.Client, baseURL string, target models.ScanTarget
 
 	for _, ep := range endpoints {
 		for _, param := range params {
+			ctl, err := client.Get(fmt.Sprintf("%s%s?%s=%s", baseURL, ep, param, controlValue))
+			if err != nil {
+				continue
+			}
+			control := models.ReadBody(ctl, 65536)
+
 			for _, probe := range Probes {
 				targetURL := fmt.Sprintf("%s%s?%s=%s", baseURL, ep, param, url.QueryEscape(probe.Payload))
 
@@ -27,7 +33,7 @@ func RunStaticFuzz(client *http.Client, baseURL string, target models.ScanTarget
 				body := models.ReadBody(resp, 65536)
 
 				// Math/fingerprint canary match
-				if strings.Contains(body, probe.Expected) && !strings.Contains(body, probe.Payload) {
+				if fired(probe, body, control) {
 					sev := "CRITICAL"
 					cvss := 9.9
 					var name string
@@ -54,21 +60,19 @@ func RunStaticFuzz(client *http.Client, baseURL string, target models.ScanTarget
 				}
 
 				// Error-based detection
-				for _, errSig := range ErrorSigs {
-					if strings.Contains(body, errSig) {
-						engine := Fingerprint(body)
-						return &models.Vulnerability{
-							Target:   target,
-							Name:     "SSTI (Template Syntax Error Leak)",
-							Severity: "HIGH",
-							CVSS:     8.0,
-							Description: fmt.Sprintf(
-								"Template engine parse error leaked — SSTI surface area confirmed.\nEndpoint: %s\nParam: %s\nPayload: %s\nError: %s\nEngine: %s",
-								targetURL, param, probe.Payload, errSig, engine,
-							),
-							Solution:  "Do not show template error messages to the user in production.",
-							Reference: "OWASP SSTI / CWE-209: Error Message Information Exposure",
-						}
+				if errSig := leakedError(body, control); errSig != "" {
+					engine := Fingerprint(body)
+					return &models.Vulnerability{
+						Target:   target,
+						Name:     "SSTI (Template Syntax Error Leak)",
+						Severity: "HIGH",
+						CVSS:     8.0,
+						Description: fmt.Sprintf(
+							"Template engine parse error leaked — SSTI surface area confirmed.\nEndpoint: %s\nParam: %s\nPayload: %s\nError: %s\nEngine: %s",
+							targetURL, param, probe.Payload, errSig, engine,
+						),
+						Solution:  "Do not show template error messages to the user in production.",
+						Reference: "OWASP SSTI / CWE-209: Error Message Information Exposure",
 					}
 				}
 			}

@@ -11,6 +11,13 @@ import (
 
 type WPEnumPlugin struct{}
 
+// wpMarkerRe matches what only WordPress pages carry: the login form's
+// field names and the wp-content / wp-includes asset paths.
+var wpMarkerRe = regexp.MustCompile(`(?i)(name=["']?wp-submit|id=["']?user_login|/wp-content/|/wp-includes/|wp-login\.php\?action=)`)
+
+// wpReadmeRe matches a WordPress plugin readme.txt.
+var wpReadmeRe = regexp.MustCompile(`(?mi)^===.+===\s*$|^(Stable tag|Contributors):`)
+
 func (p *WPEnumPlugin) Name() string { return "WordPress Enumeration & CVE Radar" }
 
 func (p *WPEnumPlugin) Run(target models.ScanTarget) *models.Vulnerability {
@@ -25,10 +32,20 @@ func (p *WPEnumPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if err != nil {
 		return nil
 	}
-	_ = resp.Body.Close()
+	loginBody := models.ReadBody(resp, 65536)
 
 	if resp.StatusCode != 200 && resp.StatusCode != 403 {
 		return nil
+	}
+	// A 200 or 403 is not WordPress by itself: a single-page app answers
+	// every path with its shell. The login form must look like WordPress's,
+	// or (when the login page is blocked) the home page must load WordPress
+	// assets.
+	if !wpMarkerRe.MatchString(loginBody) {
+		home, err := client.Get(baseURL + "/")
+		if err != nil || !wpMarkerRe.MatchString(models.ReadBody(home, 262144)) {
+			return nil
+		}
 	}
 
 	var findings []string
@@ -73,7 +90,7 @@ func (p *WPEnumPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		re := regexp.MustCompile(`(?i)Version\s+([0-9\.]+)`)
 		m := re.FindStringSubmatch(string(bodyBytes))
 
-		if len(m) > 1 {
+		if len(m) > 1 && strings.Contains(string(bodyBytes), "WordPress") {
 			wpVersion = m[1]
 			findings = append(findings, fmt.Sprintf("[+] Core: WordPress v%s (Disclosed via readme.html)", wpVersion))
 			checkCVEs("wordpress", wpVersion)
@@ -119,6 +136,13 @@ func (p *WPEnumPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 		if errP == nil && respP.StatusCode == 200 {
 			bodyBytes, _ := io.ReadAll(io.LimitReader(respP.Body, 2048))
 			_ = respP.Body.Close()
+
+			// A plugin readme.txt opens with "=== Name ===" and carries
+			// Contributors / Stable tag; anything else (an SPA shell, a
+			// soft 404) is not the plugin.
+			if !wpReadmeRe.Match(bodyBytes) {
+				continue
+			}
 
 			reStable := regexp.MustCompile(`(?i)Stable tag:\s*([0-9\.]+)`)
 			m := reStable.FindStringSubmatch(string(bodyBytes))

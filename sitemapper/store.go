@@ -2,6 +2,7 @@ package sitemapper
 
 import (
 	"DORM/models"
+	"net/url"
 	"strings"
 )
 
@@ -43,7 +44,7 @@ func RegisterAnalyzerEndpoint(host, rawURL, method string, params []string) {
 	models.SharedData.Store(key, sm)
 
 	// Also keep the models.Endpoint slice in sync
-	modelEps := toModelEndpoints(sm.Endpoints)
+	modelEps := toModelEndpoints(host, sm.Endpoints)
 	models.SharedData.Store("endpoints_"+host, modelEps)
 }
 
@@ -56,7 +57,7 @@ func StoreSiteMap(sm *SiteMap) {
 	models.SharedData.Store("sitemap_"+host, sm)
 
 	// 2. endpoints_<host> — used by SQLi, XSS, LFI, SSTI, XXE, CRLF, IDOR, NoSQL, etc.
-	models.SharedData.Store("endpoints_"+host, toModelEndpoints(sm.Endpoints))
+	models.SharedData.Store("endpoints_"+host, toModelEndpoints(host, sm.Endpoints))
 
 	// 3. forbidden_<host> — used by bypass403, adminbypass, dirbuster
 	existing, ok := models.SharedData.Load("forbidden_" + host)
@@ -106,9 +107,20 @@ func GetSiteMap(host string) *SiteMap {
 
 // toModelEndpoints converts sitemapper.Endpoint slice to models.Endpoint slice
 // for backward compatibility with all existing DORM plugins.
-func toModelEndpoints(eps []Endpoint) []models.Endpoint {
+//
+// endpoints_<host> is the list every injection plugin fuzzes, so it only
+// ever holds endpoints on host or a host the crawl scope allows for it
+// (RelatedHost: the www twin or a subdomain the site redirected to). One on
+// any other host, from whatever source (a hostile robots.txt "Disallow:
+// @other.host/", a proxied request), would point attack payloads at a site
+// that is not the target.
+func toModelEndpoints(host string, eps []Endpoint) []models.Endpoint {
 	out := make([]models.Endpoint, 0, len(eps))
 	for _, e := range eps {
+		u, err := url.Parse(e.URL)
+		if err != nil || !RelatedHost(host, u.Hostname()) {
+			continue
+		}
 		out = append(out, models.Endpoint{
 			URL:    e.URL,
 			Method: e.Method,

@@ -1,0 +1,123 @@
+name: Nightly
+
+# Two slow suites that do not fit a push/PR run:
+#   fuzz            - native Go fuzzing of the parsers that read
+#                     target-controlled input (HTML, JS, robots.txt, URLs,
+#                     proxied response bodies)
+#   scan-regression - one full plugins=ALL scan against intentionally
+#                     vulnerable containers plus a clean nginx control,
+#                     compared with .github/scanregress/baseline.json
+# Run it by hand with "record" checked to produce a candidate baseline.
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      record:
+        description: "Record a candidate baseline instead of comparing"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  fuzz:
+    name: Fuzz (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { pkg: ./sitemapper, target: FuzzParseHTML }
+          - { pkg: ./sitemapper, target: FuzzExtractPathsFromJS }
+          - { pkg: ./sitemapper, target: FuzzRobotsTxt }
+          - { pkg: ./dom, target: FuzzResolveFrom }
+          - { pkg: ./dom, target: FuzzChromeProxyServer }
+          - { pkg: ./analyzer, target: FuzzAnalyzeResponse }
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Set up Go
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: go.mod
+        cache: true
+
+    - name: Fuzz
+      run: go test ${{ matrix.pkg }} -run='^$' -fuzz='^${{ matrix.target }}$' -fuzztime=5m
+
+    # The minimized crasher lands in <pkg>/testdata/fuzz/<target>/. Drop it
+    # into the same path locally and `go test -run=<target>` reproduces it.
+    - name: Upload failing input
+      if: failure()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: fuzz-crasher-${{ matrix.target }}
+        path: ${{ matrix.pkg }}/testdata/fuzz/${{ matrix.target }}/
+
+  scan-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    # DORM blocks at startup until the ~280K-entry CVE snapshot is loaded.
+    # Restoring last night's copy turns the full download into a delta.
+    - name: Restore CVE database
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: cve/cve_full.json
+        key: cve-db-${{ github.run_id }}
+        restore-keys: cve-db-
+
+    # lab.sh starts the targets on an internal Docker network, sets DORM up
+    # in its own container, then cuts that container off the internet before
+    # the scan: a payload aimed at a host outside the lab cannot leave the
+    # runner. Each target has its own IP, so port discovery never sees the
+    # runner's ports or DORM's own 8080/8081.
+    - name: Scan and compare with baseline
+      env:
+        RECORD: ${{ inputs.record && '-record' || '' }}
+      run: |
+        status=0
+        bash .github/scanregress/lab.sh $RECORD || status=$?
+        [ -f scan-summary.md ] && cat scan-summary.md >> "$GITHUB_STEP_SUMMARY"
+        exit $status
+
+    # A target that crashed mid-scan makes a "lost detection" on it
+    # meaningless, so say so explicitly: a restart is a warning (results for
+    # that target may be incomplete), a target that stayed down fails.
+    - name: Check lab targets survived the scan
+      if: always()
+      run: |
+        ok=1
+        for name in juiceshop dvwa clean; do
+          state=$(docker inspect -f '{{.State.Status}} restarts={{.RestartCount}} exit={{.State.ExitCode}}' "$name")
+          echo "$name: $state"
+          case "$state" in
+            "running restarts=0 "*) ;;
+            running*) echo "::warning::$name crashed and restarted during the scan ($state); its findings may be incomplete" ;;
+            *) echo "::error::$name died during the scan ($state)"; docker logs "$name" 2>&1 | tail -20; ok=0 ;;
+          esac
+        done
+        [ "$ok" = 1 ]
+
+    - name: Upload results
+      if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: scan-regression
+        path: |
+          findings*.json
+          dorm.log
+          scan-summary.md
+        if-no-files-found: ignore

@@ -16,15 +16,34 @@ import (
 // BehaviorProbe sends known-malicious payloads and analyzes the response
 // to determine if a WAF is actively blocking requests.
 func BehaviorProbe(client *http.Client, baseURL string) (wafName, confidence, details string) {
-	// Step 1: Baseline — clean request
-	baseResp, err := client.Get(baseURL + "/")
-	if err != nil {
+	// fetch returns the status and body size of a GET, or ok=false.
+	fetch := func(u string) (status, size int, ok bool) {
+		resp, err := client.Get(u)
+		if err != nil {
+			return 0, 0, false
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 32768))
+		_ = resp.Body.Close()
+		return resp.StatusCode, len(body), true
+	}
+
+	// Step 1: Baselines — one clean request per injection point. A probe is
+	// compared with the same request carrying a harmless value, not with the
+	// home page: a path that climbs above the web root gets nginx's own 400
+	// and a missing file gets Apache's 404, both much smaller than the home
+	// page, with or without an attack string in them.
+	baseStatus, baseSize, ok := fetch(baseURL + "/")
+	if !ok {
 		return "", "", ""
 	}
-	baseBody, _ := io.ReadAll(io.LimitReader(baseResp.Body, 32768))
-	_ = baseResp.Body.Close()
-	baseStatus := baseResp.StatusCode
-	baseSize := len(baseBody)
+	queryStatus, querySize, ok := fetch(baseURL + "/?dorm_test=dormsafe")
+	if !ok {
+		queryStatus, querySize = baseStatus, baseSize
+	}
+	pathStatus, pathSize, ok := fetch(fmt.Sprintf("%s/%s", baseURL, url.PathEscape("../../dorm-safe/dormsafe")))
+	if !ok {
+		pathStatus, pathSize = baseStatus, baseSize
+	}
 
 	// Step 2: Send a series of malicious probes
 	probes := []struct {
@@ -79,22 +98,31 @@ func BehaviorProbe(client *http.Client, baseURL string) (wafName, confidence, de
 		probeStatus := resp.StatusCode
 		probeSize := len(probeBody)
 
-		// Detect blocking behavior
+		ctlStatus, ctlSize := baseStatus, baseSize
+		switch probe.Via {
+		case "query":
+			ctlStatus, ctlSize = queryStatus, querySize
+		case "path":
+			ctlStatus, ctlSize = pathStatus, pathSize
+		}
+
+		// Detect blocking behavior: only an answer the harmless control
+		// did not get counts.
 		isBlocked := false
 
-		// Status code change (200 → 403/406/429/503)
-		if baseStatus == 200 && (probeStatus == 403 || probeStatus == 406 || probeStatus == 429 || probeStatus == 503) {
+		// Status code change (2xx/3xx → 403/406/429/503)
+		if ctlStatus < 400 && (probeStatus == 403 || probeStatus == 406 || probeStatus == 429 || probeStatus == 503) {
 			isBlocked = true
 		}
 
 		// Significant size reduction (WAF replaced page with block message)
-		if probeSize < baseSize/3 && probeStatus >= 400 {
+		if ctlStatus < 400 && probeStatus >= 400 && probeSize < ctlSize/3 {
 			isBlocked = true
 		}
 
 		if isBlocked {
-			blockEvents = append(blockEvents, fmt.Sprintf("• %s → HTTP %d (baseline: %d) — Size: %d vs %d",
-				probe.Name, probeStatus, baseStatus, probeSize, baseSize))
+			blockEvents = append(blockEvents, fmt.Sprintf("• %s → HTTP %d (harmless control: %d) — Size: %d vs %d",
+				probe.Name, probeStatus, ctlStatus, probeSize, ctlSize))
 
 			// Try to identify the specific WAF from the block page
 			detectedWAF, _ := AnalyzeBlockPage(resp, string(probeBody))
