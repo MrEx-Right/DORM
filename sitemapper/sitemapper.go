@@ -95,10 +95,7 @@ func Run(ctx context.Context, targetURL string, cfg Config, scanID string) (*Sit
 	// ── PHASE 2: sitemap.xml discovery ───────────────────────────────
 	if cfg.ParseSitemaps {
 		sitemapURLs := DiscoverSitemaps(client, base, robots.Sitemaps)
-		for _, smURL := range sitemapURLs {
-			pageURLs := ParseSitemapXML(client, smURL, 0)
-			sm.SitemapURLs = append(sm.SitemapURLs, pageURLs...)
-		}
+		sm.SitemapURLs = ParseSitemaps(client, sitemapURLs)
 	}
 
 	// ── PHASE 3: HTTP Crawl ───────────────────────────────────────────

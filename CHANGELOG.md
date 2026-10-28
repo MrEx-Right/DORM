@@ -2,6 +2,79 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.29.3] - 2026-10-27
+### 🛡️ Dashboard API Closed to Other Sites, SSRF Spider and Localhost Probes Fixed, Request Smuggling Sees Host-Strict Back-Ends, Sitemap Request Budget, Scan Transport Timeouts, and Why Juice Shop Runs Out of Memory
+
+This release works through v1.29.2's Known Limits. Any web page open in the user's browser, or a scanned site's own page, could drive DORM's API on `localhost:8080`; that is closed. Also fixed: two SSRF checks that could never fire, request smuggling that was blind behind back-ends requiring a `Host` header, a sitemap index that could multiply into a hundred thousand requests, and dials that outlived their requests. The unused crawler in `spider.go` is gone, and the cause of Juice Shop's crash under a full scan is identified — it is Juice Shop's own challenge bookkeeping, not DORM's traffic.
+
+---
+
+#### 🛡️ Other Sites Can No Longer Drive DORM (`main.go`, `handlers.go`, `traffic_morph.go`)
+- **Root cause:** every API route accepted plain `GET`s (the dashboard starts scans with `EventSource`, which can send nothing else), had no authentication, and answered every origin with `Access-Control-Allow-Origin: *`. A page in another tab, or a scanned site's page opened by the DOM crawler's headless Chrome, could therefore send requests to `localhost:8080` from the user's own machine (cross-site request forgery).
+- Shown live in Chrome 156 against an isolated DORM copy before the fix. A page on another origin:
+  - started a scan of a target of its choosing, which then received DORM's requests from the user's machine;
+  - read the scan's live stream and the whole scan history.
+  - Separately, a scanned target whose page calls `/stop` cancelled the scan two seconds in, through DORM's own DOM crawler, and the scan ended with no findings.
+- Every route on `:8080` now answers only when:
+  - the `Host` is a loopback name (`localhost`, `127.0.0.0/8`, `::1`), which also stops DNS rebinding;
+  - an `Origin`, if sent, is the dashboard's own;
+  - without `Origin`, `Sec-Fetch-Site` is `same-origin` or `none`. Browsers send it even on `<img>` and `no-cors` requests, which carry no `Origin`.
+  
+  Anything else gets `403`. The 22 `Access-Control-Allow-Origin: *` headers are removed. The dashboard calls the API with relative paths from its own origin and never needed them.
+- Tools that send neither header (curl, the scan-regression lab) work as before.
+- Verified after the fix, against the same copy and the same Chrome:
+  - Attacks that are now refused, with nothing reaching the canary target and nothing in DORM's log: a cross-origin fetch, a `no-cors` fetch and an `<img>` to `/scan`, a history read, a cross-site POST to `/api/history/delete_all` (the history was intact afterwards) and an `<img>` to `/stop`.
+  - The target page calling `/stop` was opened by the DOM crawler, and the scan still completed with its finding.
+  - Also refused: `Origin: null`, `Sec-Fetch-Site: same-site` (another port on localhost), `Host: evil.example` and a LAN address as `Host`.
+  - The dashboard still works: all its requests load, a scan started from its origin runs to `DONE`, and history and `/stop` work. A request typed into the address bar, curl, and `[::1]` are still answered.
+- Opening the dashboard from another machine by its LAN address is now refused.
+
+#### 🎯 SSRF: Spider Endpoints Get the Payload (`plugins/ssrfengine/`)
+- **Root cause:** for an endpoint the spider found (say `/api/fetch?id=1&url=...`), the check sent its cloud-metadata payloads to `/?url=...` on the site root, with only the parameter name taken from the endpoint. The endpoint itself was never probed.
+- The payload now goes into that parameter of that endpoint, keeping its path and its other parameters. The control request (a harmless, unresolvable URL) goes to the same place. The finding names the request URL.
+- Verified on mocks: an endpoint that really fetches the URL is reported, while the same server's root ignores the parameter. An endpoint that echoes the URL and an endpoint whose page always contains `ami-id` stay silent.
+
+#### 🎯 SSRF: Localhost Probes Can Fire (`plugins/ssrfengine/payloads.go`, `bypass.go`)
+- **Root cause:** three DNS-rebinding probes (`127.0.0.1.nip.io`, `127.0.0.1.xip.io`, `127-0-0-1.sslip.io`) went through the signature check looking for the literal `localhost_marker`, which no server ever returns. The eight encoded-IP probes carried the same placeholder.
+- Nothing on localhost answers with a known string, so the proof is now a differential. The payload's host is requested on its own port and then, with the same spelling, on port 1, where nothing listens. A server that really fetches it gets content from one and a refused connection from the other. A filter treats both alike. So does a page that echoes its input or names the host it could not reach, once the injected URL is masked in all its spellings. The hit must repeat with the same body. The DNS-rebinding probes moved into this check.
+- `xip.io` shut down in 2021 and no longer resolves; its two probes are removed.
+- Verified on mocks: a naive filter that blocks the literal `127.0.0.1` but lets `0x7f000001` reach an internal JSON API is reported. A JSON API echoing its input, a fetcher whose error names the host, and a filter blocking every spelling stay silent. The old check compared with an unresolvable URL only, so the echoing API would have differed from its control.
+
+#### 🧭 Request Smuggling Behind Host-Strict Back-Ends (`plugins/requestsmuggling.go`)
+- **Root cause:** the smuggled request had no `Host` header. A back-end that requires one, as HTTP/1.1 does, answered it with `400`, and a real CL.TE/CL.0 desync behind it was never seen. Adding the header alone was tried in v1.29.2's lab and raised a new false positive: a single server that honours `Transfer-Encoding` over `Content-Length`, as RFC 9112 says, answers the attack's leftover bytes as an ordinary pipelined request, which looked like smuggling.
+- The smuggled request now carries `Host`. The follow-up probe asks for `/`, a path that exists. Every response the attack gets is read until the connection goes quiet, so answers that arrive together are counted together. Then:
+  - Two answers to the attack mean the server framed it as two requests on its own, with no second component to disagree, so the variant is skipped. The exception is CL.0: a server that answers a body with a valid `Content-Length` as a request has ignored that length, which is the CL.0/client-side desync bug, and that is reported.
+  - One answer, then a `/` answered with the smuggled request's 404/405 naming its path, is a desync (CRITICAL).
+  - A `/` answered with a 404/405 that does not name the path counts only if `/` gets its normal answer after a cleanly framed POST and the attack repeats it (HIGH).
+  - The blind/timing check also measures `/`.
+- The TE.CL body was missing the CRLF after its chunk data, so a strict chunked parser rejected it as malformed. It is now framed correctly.
+- Verified on raw-socket mocks:
+  - A CL.TE front-end/back-end pair is reported as CRITICAL CL.TE when its 404 names the path, and as HIGH when it does not. A server that ignores `Content-Length` on `/static/` is reported as CL.0.
+  - A lenient single server, a strict single server and Go's `net/http` stay silent.
+  - The old code reported the CL.TE pair only as "TE.CL, blind/timing" and the CL.0 server as "CL.CL", and raised a CRITICAL on the lenient single server.
+
+#### 🗺️ Sitemap Request Budget (`sitemapper/robotstxt.go`)
+- **Root cause:** a sitemap index was followed three levels deep with no memory of what was fetched and no total, so an index listing itself (or two listing each other) multiplied: 10 entries made 1,111 requests, 50 entries about 127,000.
+- Each sitemap is fetched at most once per crawl, and the sitemap phase stops at 50 fetches and 10,000 page URLs. A self-referencing index with 50 entries now costs 50 requests. A normal index with two sitemaps, one listed twice, costs 3 requests and returns all 4 pages.
+- The sitemap existence probes released each 5-second timeout only when the whole loop ended (a `defer` inside a `for`). They now release it per probe.
+
+#### 🔌 Scan Transport: Dial Timeout and Per-Host Cap (`client.go`, `plugins/dirbuster.go`)
+- The scan transport had no dial timeout. When a target stopped answering, each dial kept running after its request's 10-second client timeout, until the OS connect timeout. Against an address that never answers, 20 workers left 40 dials still pending after 25 seconds. The dial and TLS handshake now time out after 5 seconds, so nothing outlives its request. A host is capped at 100 connections, the size of its idle pool.
+- DORM-BUSTER no longer starts a goroutine per word (20,000 at once, all waiting on a semaphore). It now uses a fixed pool of 20 workers.
+- **Correction to v1.29.2's Known Limits:** the Windows "thread exhaustion" crash with 14,611 sockets in `TIME_WAIT` was produced by test harnesses that ran plugins without DORM's client wired in, so every request used Go's default client, which keeps only two idle connections per host. With DORM's own client, DORM-BUSTER's 20,003 requests against the same kind of loopback mock open 38 connections before this release and 33 after. Go 1.27's transport also reuses a connection whose body was closed unread. A drain-on-close wrapper written for this was measured to change nothing and was not kept.
+
+#### 🧹 Unused Crawler Removed (`spider.go`)
+- The `Spider` type (`NewSpider`, `Crawl` and helpers) was not called from anywhere. It still carried a substring scope check (`strings.Contains`) and registered forms and JS endpoints with no scope check at all. It is deleted. `SpiderPlugin`, which uses the sitemapper, is unchanged.
+
+#### 🔬 Why Juice Shop Runs Out of Memory Under a Full Scan
+- Reproduced with DORM-BUSTER alone: Juice Shop v20.3.0 went from 181 MB to 2.46 GB during one pass and died with `JavaScript heap out of memory`.
+- The trigger is any request that is not a static file, from any client: 1,500 plain Go requests to an unknown path grew the live heap from 49 MB to 225 MB, and 3,000 requests to `/` added 45 MB of RSS. The heap is not leaked. It drains back to 50–170 MB live once the server is idle, and climbs to 450–870 MB live within each burst of 2,000 requests.
+- **Root cause, in Juice Shop:** its `databaseRelatedChallenges` middleware (`routes/verify.js`) runs on every non-static request and starts several unawaited SQLite queries to check challenge progress. Under sustained load they arrive faster than SQLite answers them, and the backlog grows on the heap. A full scan never lets it drain. With that one middleware disabled, the same burst left the live heap flat at about 54 MB and RSS at 202 MB, and ran six times faster.
+- This is specific to Juice Shop's challenge tracking. Nothing in DORM's requests causes it, and a larger heap only delays it. The lab keeps Juice Shop on restart-on-failure, so its injection findings are still not part of the baseline.
+
+#### ✅ Lab
+- The full `plugins=ALL` lab scan ran end to end in local Docker with this release, before and after the dashboard guard: 22 findings both times, every one an expected baseline pattern, and no new finding on any target (no request smuggling, SSRF or other false positive came back). The lab's scan client reached DORM's API through the guard. Juice Shop restarted once per run, as described above.
+
 ## [v1.29.2] - 2026-10-27
 ### 🛡️ Out-of-Scope Attack Traffic Fixed, Nine Lab False Positives Fixed, Go 1.27.3 Security Toolchain, CI Hardening and a Nightly Scan Lab
 

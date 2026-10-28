@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/tls"
 	"errors"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -38,17 +39,34 @@ var (
 // newScanTransport builds the transport every scan request goes through.
 // Traffic Morph reuses it (TLS fingerprint probe, egress check) so what the
 // panel measures is exactly what a target sees.
+//
+// The dial and TLS handshake have their own timeouts, shorter than the
+// clients' 10 s, and a host gets at most as many connections as the idle
+// pool keeps for it. Without a dial timeout, a target that stopped
+// answering SYNs left each request's dial running after its client gave up
+// (until the OS connect timeout), so every retry added another; and with no
+// per-host cap, a burst past the idle pool opened connections that were
+// closed after one request.
 func newScanTransport(proxyFunc func(*http.Request) (*url.URL, error)) *http.Transport {
 	return &http.Transport{
 		Proxy: proxyFunc,
+		DialContext: (&net.Dialer{
+			Timeout:   5 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout: 5 * time.Second,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: true, // Always skip verify for intercepts
 		},
 		MaxIdleConns:        100,
-		MaxIdleConnsPerHost: 100,
+		MaxIdleConnsPerHost: scanConnsPerHost,
+		MaxConnsPerHost:     scanConnsPerHost,
 		IdleConnTimeout:     90 * time.Second,
 	}
 }
+
+// scanConnsPerHost is the most connections the scan keeps open to one host.
+const scanConnsPerHost = 100
 
 // scanProxyFunc resolves the UI's proxy settings into a Transport.Proxy func.
 // SOCKS5 proxies without their own credentials get the current Traffic Morph

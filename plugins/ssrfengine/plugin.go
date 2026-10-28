@@ -21,9 +21,10 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 	baseURL := models.GetURL(target, "")
 
 	for _, param := range Params {
+		inject := RootParam(baseURL, param)
 		for _, group := range AllGroups() {
 			for _, pl := range group {
-				if vuln := Probe(client, baseURL, target, param, pl.URL, pl.Sig, pl.Desc, pl.CVSS); vuln != nil {
+				if vuln := Probe(client, inject, target, param, pl.URL, pl.Sig, pl.Desc, pl.CVSS); vuln != nil {
 					return vuln
 				}
 			}
@@ -38,7 +39,7 @@ func (p *SSRFMetadataPlugin) Run(target models.ScanTarget) *models.Vulnerability
 		return vuln
 	}
 
-	if vuln := RunSpiderIntegration(client, baseURL, target); vuln != nil {
+	if vuln := RunSpiderIntegration(client, target); vuln != nil {
 		return vuln
 	}
 

@@ -115,14 +115,44 @@ type xmlSitemap struct {
 	Loc string `xml:"loc"`
 }
 
-// ParseSitemapXML fetches and recursively parses a sitemap XML file.
+// sitemapMaxFetches and sitemapMaxURLs bound one crawl's sitemap phase. A
+// sitemap index that lists itself (or a chain of indexes that list each
+// other) used to be followed three levels deep with no total: 10 entries
+// were 1,111 requests, 50 entries about 127,000.
+const (
+	sitemapMaxFetches = 50
+	sitemapMaxURLs    = 10000
+)
+
+// sitemapBudget is shared by every sitemap fetched in one crawl.
+type sitemapBudget struct {
+	seen    map[string]bool
+	fetches int
+	urls    int
+}
+
+// ParseSitemaps fetches and parses the given sitemap files, following
+// sitemap indexes, and returns a flat list of every page URL they list.
+// Each sitemap is fetched at most once, and the whole call stays within
+// sitemapMaxFetches requests and sitemapMaxURLs page URLs.
+func ParseSitemaps(client *http.Client, sitemapURLs []string) []string {
+	b := &sitemapBudget{seen: make(map[string]bool)}
+	var urls []string
+	for _, u := range sitemapURLs {
+		urls = append(urls, parseSitemapXML(client, u, 0, b)...)
+	}
+	return urls
+}
+
+// parseSitemapXML fetches and recursively parses a sitemap XML file.
 // It handles both standard sitemaps and sitemap index files.
-// Returns a flat list of all discovered page URLs.
-func ParseSitemapXML(client *http.Client, sitemapURL string, depth int) []string {
+func parseSitemapXML(client *http.Client, sitemapURL string, depth int, b *sitemapBudget) []string {
 	// Limit recursion depth for sitemap indexes
-	if depth > 3 {
+	if depth > 3 || b.seen[sitemapURL] || b.fetches >= sitemapMaxFetches || b.urls >= sitemapMaxURLs {
 		return nil
 	}
+	b.seen[sitemapURL] = true
+	b.fetches++
 
 	ctx, cancel := newTimeoutContext(15 * time.Second)
 	defer cancel()
@@ -152,8 +182,12 @@ func ParseSitemapXML(client *http.Client, sitemapURL string, depth int) []string
 	var urlSet xmlURLSet
 	if err := xml.Unmarshal(body, &urlSet); err == nil && len(urlSet.URLs) > 0 {
 		for _, u := range urlSet.URLs {
+			if b.urls >= sitemapMaxURLs {
+				break
+			}
 			if u.Loc != "" {
 				urls = append(urls, u.Loc)
+				b.urls++
 			}
 		}
 		return urls
@@ -164,7 +198,7 @@ func ParseSitemapXML(client *http.Client, sitemapURL string, depth int) []string
 	if err := xml.Unmarshal(body, &sitemapIndex); err == nil && len(sitemapIndex.Sitemaps) > 0 {
 		for _, sm := range sitemapIndex.Sitemaps {
 			if sm.Loc != "" {
-				childURLs := ParseSitemapXML(client, sm.Loc, depth+1)
+				childURLs := parseSitemapXML(client, strings.TrimSpace(sm.Loc), depth+1, b)
 				urls = append(urls, childURLs...)
 			}
 		}
@@ -209,21 +243,27 @@ func DiscoverSitemaps(client *http.Client, baseURL *url.URL, robotsSitemaps []st
 	// Filter to only those that actually exist (200 OK)
 	var valid []string
 	for _, u := range found {
-		ctx, cancel := newTimeoutContext(5 * time.Second)
-		defer cancel()
-		req, err := http.NewRequestWithContext(ctx, "HEAD", u, nil)
-		if err != nil {
-			continue
-		}
-		resp, err := client.Do(req)
-		if err != nil {
-			continue
-		}
-		_ = resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
+		if sitemapExists(client, u) {
 			valid = append(valid, u)
 		}
 	}
 
 	return valid
+}
+
+// sitemapExists sends a HEAD for u; its own function so each probe's
+// timeout is released when it returns, not when the whole loop does.
+func sitemapExists(client *http.Client, u string) bool {
+	ctx, cancel := newTimeoutContext(5 * time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, "HEAD", u, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }

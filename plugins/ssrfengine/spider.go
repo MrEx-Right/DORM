@@ -24,8 +24,8 @@ func containsAny(s string, subs ...string) bool {
 
 // RunSpiderIntegration replays the most critical cloud-metadata payloads
 // against spider-discovered GET endpoints whose parameter names look
-// SSRF-sensitive.
-func RunSpiderIntegration(client *http.Client, baseURL string, target models.ScanTarget) *models.Vulnerability {
+// SSRF-sensitive, in that parameter of that endpoint.
+func RunSpiderIntegration(client *http.Client, target models.ScanTarget) *models.Vulnerability {
 	key := "endpoints_" + target.IP
 	existing, ok := models.SharedData.Load(key)
 	if !ok {
@@ -45,8 +45,9 @@ func RunSpiderIntegration(client *http.Client, baseURL string, target models.Sca
 				continue
 			}
 			// Try the most critical payloads
+			inject := EndpointParam(ep.URL, param)
 			for _, pl := range CloudPayloads[:3] {
-				if vuln := Probe(client, baseURL, target, param, pl.URL, pl.Sig, pl.Desc+" (Spider)", pl.CVSS); vuln != nil {
+				if vuln := Probe(client, inject, target, param, pl.URL, pl.Sig, pl.Desc+" (Spider)", pl.CVSS); vuln != nil {
 					vuln.Name += " (Spider-Discovered)"
 					return vuln
 				}

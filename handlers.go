@@ -75,7 +75,6 @@ func handleDOMEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	// Register this connection as a subscriber on the DOM event bus
 	subID := fmt.Sprintf("sse-%p", r)
@@ -105,7 +104,6 @@ func handleDOMEvents(w http.ResponseWriter, r *http.Request) {
 
 // STOP ENDPOINT
 func handleStop(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	activeScanMu.Lock()
 	cancel := activeScanCancel
@@ -125,7 +123,6 @@ func handleStop(w http.ResponseWriter, r *http.Request) {
 
 // List CVE Database (first 500 records + stats)
 func handleCVEDatabase(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
 	type CVEResponse struct {
@@ -143,7 +140,6 @@ func handleCVEDatabase(w http.ResponseWriter, r *http.Request) {
 
 // CVE Search
 func handleCVESearch(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
 	query := r.URL.Query().Get("q")
@@ -158,7 +154,6 @@ func handleCVESearch(w http.ResponseWriter, r *http.Request) {
 
 // CVE Detail — full, live lookup from NVD for a single CVE ID.
 func handleCVEDetail(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
 	id := r.URL.Query().Get("id")
@@ -231,7 +226,6 @@ func handleScan(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	// --- CONTEXT SETUP (FOR CANCELLATION) ---
 	activeScanMu.Lock()
@@ -822,7 +816,6 @@ WaitLoop:
 // handleSiteMap returns the site map for a given host.
 // First checks in-memory SharedData (live scan), then falls back to SQLite.
 func handleSiteMap(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
 	host := r.URL.Query().Get("target")
@@ -859,7 +852,6 @@ func handleSiteMap(w http.ResponseWriter, r *http.Request) {
 
 // handleSiteMapList returns the list of hosts that have a stored SiteMap for a specific scanID.
 func handleSiteMapList(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
 	scanID := r.URL.Query().Get("scan_id")
@@ -883,7 +875,6 @@ func handleSiteMapList(w http.ResponseWriter, r *http.Request) {
 // --- HISTORY API HANDLERS ---
 
 func handleHistory(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
 	records, err := DB.GetAll()
@@ -896,7 +887,6 @@ func handleHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleDelete(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -921,7 +911,6 @@ func handleDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleDeleteAll(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -945,7 +934,6 @@ func handleDeleteAll(w http.ResponseWriter, r *http.Request) {
 // as every other record, via DB (StorageManager).
 
 func handleTemplates(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
 	switch r.Method {
@@ -980,7 +968,6 @@ func handleTemplates(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleTemplateGet(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
 	id := r.URL.Query().Get("id")
@@ -998,7 +985,6 @@ func handleTemplateGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleTemplateUpdate(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
 	if r.Method != http.MethodPost {
@@ -1025,7 +1011,6 @@ func handleTemplateUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleTemplateDelete(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -1047,7 +1032,6 @@ func handleTemplateDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleTemplateOptions(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(templates.GetBuilderOptions())
 }
@@ -1065,7 +1049,6 @@ func handleKEV(w http.ResponseWriter, r *http.Request) {
 // handleSCI runs the Supply Chain Interface analysis for a given target URL.
 // GET /api/sci?target=https://example.com
 func handleSCI(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
 	target := r.URL.Query().Get("target")

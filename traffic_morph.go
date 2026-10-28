@@ -676,7 +676,6 @@ func morphRouteParams(r *http.Request) (bool, string) {
 }
 
 func handleIdentity(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 
 	cfgEnabled, cfgURL := morphRouteParams(r)
@@ -796,7 +795,6 @@ func morphConsistency(fp morphTLS, browsers []string, mode string, poolSize int,
 }
 
 func handleIdentityRotate(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 	if r.Method != http.MethodPost {
 		http.Error(w, `{"error":"POST only"}`, http.StatusMethodNotAllowed)
@@ -864,7 +862,6 @@ func handleIdentityRotate(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleIdentityPersona(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 	if r.Method != http.MethodPost {
 		http.Error(w, `{"error":"POST only"}`, http.StatusMethodNotAllowed)
@@ -888,7 +885,6 @@ func handleIdentityPersona(w http.ResponseWriter, r *http.Request) {
 // client sends morphPlainUA and NEW IDENTITY is refused; the identity,
 // persona mode and sticky persona are kept, so switching back on resumes them.
 func handleIdentityEnabled(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 	if r.Method != http.MethodPost {
 		http.Error(w, `{"error":"POST only"}`, http.StatusMethodNotAllowed)
@@ -906,7 +902,6 @@ func handleIdentityEnabled(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleIdentityEgress(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Content-Type", "application/json")
 	if r.Method != http.MethodPost {
 		http.Error(w, `{"error":"POST only"}`, http.StatusMethodNotAllowed)

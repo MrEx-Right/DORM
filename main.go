@@ -7,7 +7,9 @@ import (
 	"DORM/plugins/promptinjectionengine"
 	"DORM/sitemapper"
 	"fmt"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -107,7 +109,7 @@ func main() {
 ██║  ██║██║   ██║██████╔╝██╔████╔██║
 ██║  ██║██║   ██║██╔══██╗██║╚██╔╝██║
 ██████╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
-╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.29.2
+╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.29.3
 
        [ Security Engine • Active ]
 `
@@ -135,7 +137,7 @@ func main() {
 		promptinjectionengine.StartBackgroundSync()
 	}()
 
-	if err := http.ListenAndServe(port, nil); err != nil {
+	if err := http.ListenAndServe(port, localOnly(http.DefaultServeMux)); err != nil {
 		fmt.Println("ERROR:", err)
 	}
 }
@@ -147,5 +149,45 @@ func noCacheHeaders(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		h.ServeHTTP(w, r)
+	})
+}
+
+// localOnly guards every dashboard and API route on :8080. DORM's API takes
+// plain GETs (the dashboard starts scans with EventSource, which can send
+// nothing else) and used to answer every origin with
+// Access-Control-Allow-Origin: *, so any web page open in the user's
+// browser, or a scanned site's page opened by the DOM crawler's headless
+// Chrome, could start a scan of any target from the user's machine, stop
+// the running one, or read the whole scan history.
+//
+// A request is served only when:
+//   - its Host is a loopback name (localhost, 127.0.0.0/8, ::1), so a
+//     hostile domain re-pointed at 127.0.0.1 (DNS rebinding) is refused;
+//   - an Origin header, if sent, is the dashboard's own origin;
+//   - without Origin, Sec-Fetch-Site (sent by current browsers on every
+//     request, including <img> and no-cors fetches that carry no Origin) is
+//     same-origin or none (typed into the address bar).
+//
+// Tools that send neither header (curl, the scan-regression lab) still work.
+func localOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host, _, err := net.SplitHostPort(r.Host)
+		if err != nil {
+			host = strings.Trim(r.Host, "[]")
+		}
+		if !isLoopbackHost(strings.ToLower(host)) {
+			http.Error(w, "DORM: refused, the dashboard only answers on localhost / 127.0.0.1", http.StatusForbidden)
+			return
+		}
+		if origin := r.Header.Get("Origin"); origin != "" {
+			if origin != "http://"+r.Host {
+				http.Error(w, "DORM: refused, request from another site ("+origin+")", http.StatusForbidden)
+				return
+			}
+		} else if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+			http.Error(w, "DORM: refused, request from another site (Sec-Fetch-Site: "+site+")", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }

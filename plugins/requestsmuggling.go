@@ -2,12 +2,16 @@ package plugins
 
 import (
 	"DORM/models"
+	"bufio"
+	"bytes"
 	"crypto/rand"
 	"crypto/tls"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +31,62 @@ func randomMarker() string {
 	return hex.EncodeToString(b)
 }
 
+// smuggleResponse is one HTTP response read off a raw connection.
+type smuggleResponse struct {
+	status int
+	text   string // status line, headers and body
+}
+
+// smuggleRead is everything a connection returned before it went quiet.
+type smuggleRead struct {
+	responses []smuggleResponse
+	timedOut  bool // nothing at all arrived before the first deadline
+	closed    bool // the server closed the connection (EOF or reset)
+}
+
+// readSmuggleResponses reads from conn until it stays quiet for quiet (or
+// nothing arrives within first), then splits what came back into HTTP
+// responses. Reading until quiet matters: a server that answers the attack
+// as two pipelined requests sends both answers at once, and they must not
+// be mistaken for the answer to the probe that follows.
+func readSmuggleResponses(conn net.Conn, first, quiet time.Duration) smuggleRead {
+	var raw []byte
+	var res smuggleRead
+	buf := make([]byte, 16384)
+	wait := first
+	for len(raw) < 1<<20 {
+		_ = conn.SetReadDeadline(time.Now().Add(wait))
+		n, err := conn.Read(buf)
+		raw = append(raw, buf[:n]...)
+		if err != nil {
+			var ne net.Error
+			if errors.As(err, &ne) && ne.Timeout() {
+				res.timedOut = len(raw) == 0
+			} else {
+				res.closed = true
+			}
+			break
+		}
+		wait = quiet
+	}
+	br := bufio.NewReader(bytes.NewReader(raw))
+	for {
+		resp, err := http.ReadResponse(br, nil)
+		if err != nil {
+			break
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		var head strings.Builder
+		_ = resp.Header.Write(&head)
+		res.responses = append(res.responses, smuggleResponse{
+			status: resp.StatusCode,
+			text:   resp.Proto + " " + resp.Status + "\r\n" + head.String() + "\r\n" + string(body),
+		})
+	}
+	return res
+}
+
 func (p *RequestSmugglingPlugin) Run(target models.ScanTarget) *models.Vulnerability {
 	if !isWebPort(target.Port) {
 		return nil
@@ -34,16 +94,18 @@ func (p *RequestSmugglingPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 
 	marker := randomMarker()
 	smugglePath := "/dorm-" + marker
-	// The probe path has its own token: a server that names the requested
-	// path in its 404 page (Apache does) must not hand the marker back on
-	// the probe's own, perfectly normal 404.
-	probePath := "/dorm-probe-" + randomMarker()
-	// smuggledPrefix is a syntactically valid, harmless GET request. When a
-	// desync attack succeeds, these bytes get left in the connection's read
-	// buffer and are parsed by one side as the start of a brand-new request.
-	smuggledPrefix := fmt.Sprintf("GET %s HTTP/1.1\r\nX-Dorm-Marker: %s", smugglePath, marker)
-	requestChunk := smuggledPrefix + "\r\n\r\n"
-	chunkBody := "0\r\n\r\n" + requestChunk // 0-size chunk terminates the "legit" body; requestChunk leaks as pipelined bytes
+	// smuggledRequest is a complete, harmless GET with its own Host header:
+	// strict back-ends answer a Host-less HTTP/1.1 request with 400, which
+	// hid a real desync. When a desync attack succeeds, these bytes are left
+	// on the back-end connection and answered as a request of their own; the
+	// front-end hands that answer to whatever request it forwards next.
+	smuggledRequest := fmt.Sprintf("GET %s HTTP/1.1\r\nHost: %s\r\nX-Dorm-Marker: %s\r\n\r\n", smugglePath, target.IP, marker)
+	chunkBody := "0\r\n\r\n" + smuggledRequest // 0-size chunk terminates the "legit" body; the smuggled request follows
+
+	// The follow-up probe asks for "/", a path that exists, and must get
+	// what "/" gets after a request with consistent framing. It used to ask
+	// for a random path, whose normal answer is itself a 404.
+	probe := fmt.Sprintf("GET / HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", target.IP)
 
 	connect := func() (net.Conn, error) {
 		address := net.JoinHostPort(target.IP, strconv.Itoa(target.Port))
@@ -54,59 +116,64 @@ func (p *RequestSmugglingPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 		return net.DialTimeout("tcp", address, 5*time.Second)
 	}
 
-	// containsSmuggleSignature reports whether resp shows evidence that some
-	// component actually parsed the smuggled prefix as its own request: one
-	// of the HTTP responses in resp is a 404/405 that names the smuggled
-	// path. A server echoing our request body back answers 200, not 404.
-	containsSmuggleSignature := func(resp string) bool {
-		for _, r := range strings.Split(resp, "HTTP/1.")[1:] {
-			if len(r) < 5 {
-				continue
-			}
-			if code := r[2:5]; (code == "404" || code == "405") && strings.Contains(r, smugglePath) {
-				return true
-			}
-		}
-		return false
+	// smuggledAnswer reports whether r is the answer to the smuggled request:
+	// a 404/405 that names the smuggled path. A server echoing our request
+	// body back answers 200, not 404.
+	smuggledAnswer := func(r smuggleResponse) bool {
+		return (r.status == 404 || r.status == 405) && strings.Contains(r.text, smugglePath)
 	}
 
-	// stallsAnyway reports whether the probe also stalls after a request with
-	// consistent framing (a plain Content-Length body of the same size): if
-	// so, a stalled probe after the attack says nothing about a desync.
-	stallsAnyway := func(bodyLen int) bool {
+	// cleanProbe sends a POST with consistent framing (a plain Content-Length
+	// body of bodyLen bytes) and then the probe on the same connection: how
+	// "/" is normally answered in that position. ok is false when the server
+	// did not answer the POST alone, or closed the connection.
+	type cleanResult struct {
+		status  int
+		stalled bool
+		ok      bool
+	}
+	cleanProbe := func(bodyLen int) cleanResult {
 		conn, err := connect()
 		if err != nil {
-			return true
+			return cleanResult{}
 		}
 		defer func() { _ = conn.Close() }()
 		clean := fmt.Sprintf("POST / HTTP/1.1\r\nHost: %s\r\nConnection: keep-alive\r\nContent-Length: %d\r\n\r\n%s",
 			target.IP, bodyLen, strings.Repeat("x", bodyLen))
-		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		if _, err := conn.Write([]byte(clean)); err != nil {
-			return true
+			return cleanResult{}
 		}
-		buf := make([]byte, 4096)
-		if _, err := conn.Read(buf); err != nil {
-			return true
+		if pre := readSmuggleResponses(conn, 5*time.Second, time.Second); len(pre.responses) != 1 || pre.closed {
+			return cleanResult{}
 		}
-		probe := fmt.Sprintf("GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", probePath, target.IP)
-		_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		if _, err := conn.Write([]byte(probe)); err != nil {
-			return true
+			return cleanResult{}
 		}
-		n, err := conn.Read(buf)
-		var ne net.Error
-		return n == 0 && errors.As(err, &ne) && ne.Timeout()
+		post := readSmuggleResponses(conn, 5*time.Second, 500*time.Millisecond)
+		if len(post.responses) == 0 {
+			return cleanResult{stalled: post.timedOut, ok: post.timedOut}
+		}
+		return cleanResult{status: post.responses[0].status, ok: true}
 	}
 
-	// sendAttackThenProbe writes the attack payload, takes a best-effort read
-	// of whatever comes back on it, then performs the real desync
-	// confirmation: a second, distinct request is written on the SAME
-	// connection and its response is inspected. A genuinely desynced backend
-	// either answers the unrelated probe with data belonging to the smuggled
-	// request, or the connection stalls entirely waiting for bytes the
-	// smuggled request already consumed from the pipe.
-	sendAttackThenProbe := func(attackPayload, attackName string) *models.Vulnerability {
+	solution := "Disable HTTP/1.1 connection reuse (Keep-Alive) between the front-end and back-end, or normalize/validate Content-Length and Transfer-Encoding framing consistently at both layers."
+
+	// sendAttackThenProbe writes the attack payload, reads every answer it
+	// gets, then sends the probe on the SAME connection. A desynced back-end
+	// answers the probe with the smuggled request's response (its 404), or
+	// leaves the connection silent while it waits for bytes the smuggled
+	// prefix consumed.
+	//
+	// A server that answers the attack with two responses parsed it as two
+	// requests by itself: for CL.TE that is plain HTTP/1.1 (Transfer-Encoding
+	// wins over Content-Length) followed by ordinary pipelining, and there is
+	// no second component to disagree with it. Only CL.0 counts that case,
+	// since a server answering a Content-Length body as a request ignored a
+	// valid Content-Length (cl0 is true there).
+	var sendAttackThenProbe func(attackPayload, attackName string, cl0, confirming bool) *models.Vulnerability
+	sendAttackThenProbe = func(attackPayload, attackName string, cl0, confirming bool) *models.Vulnerability {
 		conn, err := connect()
 		if err != nil {
 			return nil
@@ -118,46 +185,55 @@ func (p *RequestSmugglingPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 			return nil
 		}
 
-		_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-		buf := make([]byte, 4096)
-		n, _ := conn.Read(buf)
-		first := string(buf[:n])
-		if containsSmuggleSignature(first) {
-			return &models.Vulnerability{
-				Target:      target,
-				Name:        "HTTP Request Smuggling (" + attackName + ")",
-				Severity:    "CRITICAL",
-				CVSS:        9.8,
-				Description: fmt.Sprintf("The %s attack request's own response already leaked the smuggled marker %q tied to a 404/405 — the payload was parsed as two requests by a single component.\n\nPayload:\n%s", attackName, marker, attackPayload),
-				Solution:    "Disable HTTP/1.1 connection reuse (Keep-Alive) between the front-end and back-end, or normalize/validate Content-Length and Transfer-Encoding framing consistently at both layers.",
-				Reference:   "PortSwigger: HTTP Request Smuggling",
+		pre := readSmuggleResponses(conn, 3*time.Second, time.Second)
+		if pre.closed {
+			return nil
+		}
+		// The server rejected the attack and is closing the connection (Node
+		// answers 400 to Content-Length plus Transfer-Encoding): nothing was
+		// left on the connection to desync.
+		for _, r := range pre.responses {
+			if strings.Contains(strings.ToLower(r.text), "\r\nconnection: close") {
+				return nil
 			}
 		}
-
-		// The server rejected the attack and closed the connection (Node
-		// answers 400 to Content-Length plus Transfer-Encoding): nothing was
-		// left on the connection to desync, and whatever the probe reads
-		// next (EOF or a reset) is just the close.
-		if strings.Contains(strings.ToLower(first), "\r\nconnection: close") {
+		if len(pre.responses) > 1 {
+			if !cl0 {
+				return nil
+			}
+			for _, r := range pre.responses[1:] {
+				if smuggledAnswer(r) {
+					return &models.Vulnerability{
+						Target:      target,
+						Name:        "HTTP Request Smuggling (" + attackName + ")",
+						Severity:    "CRITICAL",
+						CVSS:        9.8,
+						Description: fmt.Sprintf("The server answered the body of a POST with a valid Content-Length as a request of its own: the smuggled GET for %q got its own 404/405. Any front-end that honors the Content-Length (or a browser, for client-side desync) is desynced by such a request.\n\nPayload:\n%s", smugglePath, attackPayload),
+						Solution:    solution,
+						Reference:   "PortSwigger: HTTP Request Smuggling",
+					}
+				}
+			}
 			return nil
 		}
 
-		probeReq := fmt.Sprintf("GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", probePath, target.IP)
 		_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		if _, err := conn.Write([]byte(probeReq)); err != nil {
+		if _, err := conn.Write([]byte(probe)); err != nil {
 			return nil
 		}
+		post := readSmuggleResponses(conn, 5*time.Second, 500*time.Millisecond)
 
-		_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-		buf2 := make([]byte, 4096)
-		n2, err2 := conn.Read(buf2)
-
-		// Only a real timeout counts: a reset is a closed connection, not a
-		// back-end waiting for bytes. And the same probe after a request with
-		// consistent framing must be answered, or the stall is just how this
-		// server treats any request.
-		var ne net.Error
-		if n2 == 0 && errors.As(err2, &ne) && ne.Timeout() && !stallsAnyway(len(attackPayload)) {
+		if len(post.responses) == 0 {
+			// Only a real timeout counts: a reset is a closed connection, not
+			// a back-end waiting for bytes. And the probe after a request with
+			// consistent framing must be answered, or the stall is just how
+			// this server treats any request.
+			if !post.timedOut {
+				return nil
+			}
+			if base := cleanProbe(len(attackPayload)); !base.ok || base.stalled {
+				return nil
+			}
 			// The connection went silent after a request it should have
 			// answered instantly — consistent with the back-end still
 			// blocked on bytes the smuggled prefix consumed. Lower
@@ -167,31 +243,52 @@ func (p *RequestSmugglingPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 				Name:        "HTTP Request Smuggling (" + attackName + ", blind/timing)",
 				Severity:    "HIGH",
 				CVSS:        7.5,
-				Description: fmt.Sprintf("After the %s attack request, an unrelated follow-up probe on the same connection received no response before timeout — consistent with the back-end being desynced. Lower-confidence signal; verify manually before treating as confirmed.\n\nAttack payload:\n%s", attackName, attackPayload),
-				Solution:    "Disable HTTP/1.1 connection reuse (Keep-Alive) between the front-end and back-end, or normalize/validate Content-Length and Transfer-Encoding framing consistently at both layers.",
+				Description: fmt.Sprintf("After the %s attack request, a follow-up request for \"/\" on the same connection received no response before timeout, while the same request after a cleanly framed POST is answered — consistent with the back-end being desynced. Lower-confidence signal; verify manually before treating as confirmed.\n\nAttack payload:\n%s", attackName, attackPayload),
+				Solution:    solution,
 				Reference:   "PortSwigger: HTTP Request Smuggling",
 			}
 		}
 
-		if containsSmuggleSignature(string(buf2[:n2])) {
+		got := post.responses[0]
+		if smuggledAnswer(got) {
 			return &models.Vulnerability{
 				Target:      target,
 				Name:        "HTTP Request Smuggling (" + attackName + ")",
 				Severity:    "CRITICAL",
 				CVSS:        9.8,
-				Description: fmt.Sprintf("A follow-up probe request for %q (unrelated to the %s attack) came back tied to the smuggled marker %q instead of answering its own path — the connection was desynced by the smuggled request.\n\nAttack payload:\n%s", probePath, attackName, marker, attackPayload),
-				Solution:    "Disable HTTP/1.1 connection reuse (Keep-Alive) between the front-end and back-end, or normalize/validate Content-Length and Transfer-Encoding framing consistently at both layers.",
+				Description: fmt.Sprintf("A follow-up request for \"/\" on the same connection was answered with the smuggled request's response (a %d naming %q, marker %q) instead of its own — the %s request desynced the connection.\n\nAttack payload:\n%s", got.status, smugglePath, marker, attackName, attackPayload),
+				Solution:    solution,
 				Reference:   "PortSwigger: HTTP Request Smuggling",
 			}
 		}
-
-		return nil
+		if got.status != 404 && got.status != 405 {
+			return nil
+		}
+		// "/" answered 404/405 without naming our path: a desync whose 404
+		// page does not echo the path, or this server's normal answer to "/"
+		// after a POST. The clean sequence tells, and the attack must do it
+		// again.
+		if base := cleanProbe(len(attackPayload)); !base.ok || base.stalled || base.status == 404 || base.status == 405 {
+			return nil
+		}
+		if !confirming && sendAttackThenProbe(attackPayload, attackName, cl0, true) == nil {
+			return nil
+		}
+		return &models.Vulnerability{
+			Target:      target,
+			Name:        "HTTP Request Smuggling (" + attackName + ")",
+			Severity:    "HIGH",
+			CVSS:        8.1,
+			Description: fmt.Sprintf("Twice, a follow-up request for \"/\" on the same connection got %d after the %s attack, while after a cleanly framed POST it gets its normal answer — the answer to the smuggled request for %q was handed to it. The 404 page does not name the path, so this is not tied to the marker; verify manually.\n\nAttack payload:\n%s", got.status, attackName, smugglePath, attackPayload),
+			Solution:    solution,
+			Reference:   "PortSwigger: HTTP Request Smuggling",
+		}
 	}
 
 	// --- CL.TE: front-end honors Content-Length, back-end honors Transfer-Encoding ---
 	clte := fmt.Sprintf("POST / HTTP/1.1\r\nHost: %s\r\nConnection: keep-alive\r\nContent-Length: %d\r\nTransfer-Encoding: chunked\r\n\r\n%s",
 		target.IP, len(chunkBody), chunkBody)
-	if vuln := sendAttackThenProbe(clte, "CL.TE"); vuln != nil {
+	if vuln := sendAttackThenProbe(clte, "CL.TE", false, false); vuln != nil {
 		return vuln
 	}
 
@@ -199,13 +296,13 @@ func (p *RequestSmugglingPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 	// Chunk size is computed from the real request length (not hardcoded),
 	// and the front Content-Length is sized to truncate right after the
 	// chunk-size line, so only that line is consumed as "the body" by a
-	// Content-Length-only parser, leaving requestChunk pipelined.
-	chunkSizeHex := fmt.Sprintf("%x", len(requestChunk))
-	teClBody := chunkSizeHex + "\r\n" + requestChunk + "0\r\n\r\n"
+	// Content-Length-only parser, leaving smuggledRequest pipelined.
+	chunkSizeHex := fmt.Sprintf("%x", len(smuggledRequest))
+	teClBody := chunkSizeHex + "\r\n" + smuggledRequest + "\r\n0\r\n\r\n"
 	frontCL := len(chunkSizeHex) + 2
 	tecl := fmt.Sprintf("POST / HTTP/1.1\r\nHost: %s\r\nConnection: keep-alive\r\nContent-Length: %d\r\nTransfer-Encoding: chunked\r\n\r\n%s",
 		target.IP, frontCL, teClBody)
-	if vuln := sendAttackThenProbe(tecl, "TE.CL"); vuln != nil {
+	if vuln := sendAttackThenProbe(tecl, "TE.CL", false, false); vuln != nil {
 		return vuln
 	}
 
@@ -225,25 +322,25 @@ func (p *RequestSmugglingPlugin) Run(target models.ScanTarget) *models.Vulnerabi
 		// answers the second request as ordinary HTTP pipelining.
 		payload := fmt.Sprintf("POST / HTTP/1.1\r\nHost: %s\r\nConnection: keep-alive\r\nContent-Length: %d\r\n%s\r\n\r\n%s",
 			target.IP, len(chunkBody), v.header, chunkBody)
-		if vuln := sendAttackThenProbe(payload, v.name); vuln != nil {
+		if vuln := sendAttackThenProbe(payload, v.name, false, false); vuln != nil {
 			return vuln
 		}
 	}
 
 	// --- CL.CL: duplicate Content-Length headers with conflicting values ---
 	shortBody := "x"
-	fullBody := shortBody + requestChunk
+	fullBody := shortBody + smuggledRequest
 	clcl := fmt.Sprintf("POST / HTTP/1.1\r\nHost: %s\r\nConnection: keep-alive\r\nContent-Length: %d\r\nContent-Length: %d\r\n\r\n%s",
 		target.IP, len(shortBody), len(fullBody), fullBody)
-	if vuln := sendAttackThenProbe(clcl, "CL.CL"); vuln != nil {
+	if vuln := sendAttackThenProbe(clcl, "CL.CL", false, false); vuln != nil {
 		return vuln
 	}
 
 	// --- CL.0: back-end treats the body as zero-length on some routes
 	// (e.g. a static-file handler) while the front-end forwards it whole ---
 	cl0 := fmt.Sprintf("POST /static/1 HTTP/1.1\r\nHost: %s\r\nConnection: keep-alive\r\nContent-Length: %d\r\n\r\n%s",
-		target.IP, len(requestChunk), requestChunk)
-	if vuln := sendAttackThenProbe(cl0, "CL.0"); vuln != nil {
+		target.IP, len(smuggledRequest), smuggledRequest)
+	if vuln := sendAttackThenProbe(cl0, "CL.0", true, false); vuln != nil {
 		return vuln
 	}
 
