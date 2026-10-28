@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 
 ## [v1.29.3] - 2026-10-27
-### 🛡️ Dashboard API Closed to Other Sites, SSRF Spider and Localhost Probes Fixed, Request Smuggling Sees Host-Strict Back-Ends, Sitemap Request Budget, Scan Transport Timeouts, and Why Juice Shop Runs Out of Memory
+### 🛡️ Dashboard API Closed to Other Sites, golang.org/x/net Security Update, SSRF Spider and Localhost Probes Fixed, Request Smuggling Sees Host-Strict Back-Ends, Sitemap Request Budget, Scan Transport Timeouts, and Why Juice Shop Runs Out of Memory
 
 This release works through v1.29.2's Known Limits. Any web page open in the user's browser, or a scanned site's own page, could drive DORM's API on `localhost:8080`; that is closed. Also fixed: two SSRF checks that could never fire, request smuggling that was blind behind back-ends requiring a `Host` header, a sitemap index that could multiply into a hundred thousand requests, and dials that outlived their requests. The unused crawler in `spider.go` is gone, and the cause of Juice Shop's crash under a full scan is identified — it is Juice Shop's own challenge bookkeeping, not DORM's traffic.
 
@@ -62,6 +62,11 @@ This release works through v1.29.2's Known Limits. Any web page open in the user
 - The scan transport had no dial timeout. When a target stopped answering, each dial kept running after its request's 10-second client timeout, until the OS connect timeout. Against an address that never answers, 20 workers left 40 dials still pending after 25 seconds. The dial and TLS handshake now time out after 5 seconds, so nothing outlives its request. A host is capped at 100 connections, the size of its idle pool.
 - DORM-BUSTER no longer starts a goroutine per word (20,000 at once, all waiting on a semaphore). It now uses a fixed pool of 20 workers.
 - **Correction to v1.29.2's Known Limits:** the Windows "thread exhaustion" crash with 14,611 sockets in `TIME_WAIT` was produced by test harnesses that ran plugins without DORM's client wired in, so every request used Go's default client, which keeps only two idle connections per host. With DORM's own client, DORM-BUSTER's 20,003 requests against the same kind of loopback mock open 38 connections before this release and 33 after. Go 1.27's transport also reuses a connection whose body was closed unread. A drain-on-close wrapper written for this was measured to change nothing and was not kept.
+
+#### 🔒 golang.org/x/net v0.62.0 (`go.mod`)
+- `golang.org/x/net` v0.61.0 → v0.62.0. govulncheck in CI traced GO-2026-6860 (quadratic time when the HTML parser coalesces text nodes) to DORM's code: the sitemapper parses every crawled page with `html.Parse` (`sitemapper/crawler.go`), so a target could serve a page that is slow to parse. No other module changed, and `go mod tidy` leaves the files as they are.
+- govulncheck now reports no vulnerability reachable from DORM's code. One remains in `golang.org/x/crypto` (GO-2026-5932): no fixed version exists yet, and DORM does not call the affected code.
+- Verified: build, vet and every test pass, and the HTML parser fuzz target ran clean on v0.62.0.
 
 #### 🧹 Unused Crawler Removed (`spider.go`)
 - The `Spider` type (`NewSpider`, `Crawl` and helpers) was not called from anywhere. It still carried a substring scope check (`strings.Contains`) and registered forms and JS endpoints with no scope check at all. It is deleted. `SpiderPlugin`, which uses the sitemapper, is unchanged.
