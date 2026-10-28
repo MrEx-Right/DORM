@@ -106,6 +106,32 @@ const defaultProxyURL = "http://127.0.0.1:" + morphAnalyzerPort
 // fall through their loops and exit.
 var errScanClosed = errors.New("dorm: scan has ended, request not sent")
 
+// dashboardPort is where main serves the dashboard and its API.
+const dashboardPort = "8080"
+
+// errSelfRequest is what a scan request to DORM's own dashboard or analyzer
+// returns instead of being sent.
+var errSelfRequest = errors.New("dorm: request to DORM's own dashboard or analyzer refused")
+
+// targetsDORMItself reports whether u is DORM's own dashboard/API or
+// analyzer proxy on this machine. The dashboard refuses browser pages from
+// other sites, but a scan request is a plain HTTP client, like curl: a
+// target's robots.txt line "Sitemap: http://127.0.0.1:8080/stop", or a
+// redirect to that URL, made the scan stop itself, and /scan?targets=...
+// would start another one.
+func targetsDORMItself(u *url.URL) bool {
+	port := u.Port()
+	if port != dashboardPort && port != morphAnalyzerPort {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if isLoopbackHost(host) {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsUnspecified() // 0.0.0.0 and [::] reach this machine too
+}
+
 // SetActiveClient creates a brand new HTTP client with isolated proxy and auth
 // settings for the current scan. The returned endScan closes it: call it when
 // the scan finishes or is stopped.
@@ -170,6 +196,10 @@ type UARoundTripper struct {
 func (urt *UARoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if urt.Closed != nil && urt.Closed.Load() {
 		return nil, errScanClosed
+	}
+	// Every hop of a redirect comes back through here too.
+	if targetsDORMItself(req.URL) {
+		return nil, errSelfRequest
 	}
 
 	// 1. WAF Rate Limiting / Jitter Bypass — first, so the identity below is

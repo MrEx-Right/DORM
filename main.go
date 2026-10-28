@@ -100,7 +100,7 @@ func main() {
 	// DOM-Crawler real-time event stream (SSE)
 	http.HandleFunc("/dom-events", handleDOMEvents)
 
-	port := ":8080"
+	port := ":" + dashboardPort
 	url := "http://localhost" + port
 
 	banner := `
@@ -109,7 +109,7 @@ func main() {
 ██║  ██║██║   ██║██████╔╝██╔████╔██║
 ██║  ██║██║   ██║██╔══██╗██║╚██╔╝██║
 ██████╔╝╚██████╔╝██║  ██║██║ ╚═╝ ██║
-╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.29.3
+╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝ v1.29.4
 
        [ Security Engine • Active ]
 `
@@ -166,7 +166,10 @@ func noCacheHeaders(h http.Handler) http.Handler {
 //   - an Origin header, if sent, is the dashboard's own origin;
 //   - without Origin, Sec-Fetch-Site (sent by current browsers on every
 //     request, including <img> and no-cors fetches that carry no Origin) is
-//     same-origin or none (typed into the address bar).
+//     same-origin, or none for the dashboard page itself (typed into the
+//     address bar). Chrome also sends none on a navigation the DOM crawler
+//     started that a target redirected to http://127.0.0.1:8080/stop, so
+//     none is not enough for any other path.
 //
 // Tools that send neither header (curl, the scan-regression lab) still work.
 func localOnly(next http.Handler) http.Handler {
@@ -184,8 +187,8 @@ func localOnly(next http.Handler) http.Handler {
 				http.Error(w, "DORM: refused, request from another site ("+origin+")", http.StatusForbidden)
 				return
 			}
-		} else if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
-			http.Error(w, "DORM: refused, request from another site (Sec-Fetch-Site: "+site+")", http.StatusForbidden)
+		} else if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && (site != "none" || r.URL.Path != "/") {
+			http.Error(w, "DORM: refused, request from another site (Sec-Fetch-Site: "+site+"); open the dashboard at http://localhost:"+dashboardPort+"/", http.StatusForbidden)
 			return
 		}
 		next.ServeHTTP(w, r)

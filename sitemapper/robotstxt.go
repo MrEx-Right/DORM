@@ -126,17 +126,31 @@ const (
 
 // sitemapBudget is shared by every sitemap fetched in one crawl.
 type sitemapBudget struct {
+	host    string // the target's host: sitemaps on any other host are not fetched
 	seen    map[string]bool
 	fetches int
 	urls    int
+}
+
+// sitemapInScope reports whether a sitemap URL that the target named (in
+// robots.txt or a sitemap index) is on the target's own host, or a host the
+// crawl scope allows for it. The target chooses these URLs: a robots.txt
+// "Sitemap:" line or an index <loc> on another host used to be requested
+// as given, so a target could send DORM's requests anywhere.
+func sitemapInScope(host, raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return false
+	}
+	return RelatedHost(host, u.Hostname())
 }
 
 // ParseSitemaps fetches and parses the given sitemap files, following
 // sitemap indexes, and returns a flat list of every page URL they list.
 // Each sitemap is fetched at most once, and the whole call stays within
 // sitemapMaxFetches requests and sitemapMaxURLs page URLs.
-func ParseSitemaps(client *http.Client, sitemapURLs []string) []string {
-	b := &sitemapBudget{seen: make(map[string]bool)}
+func ParseSitemaps(client *http.Client, host string, sitemapURLs []string) []string {
+	b := &sitemapBudget{host: host, seen: make(map[string]bool)}
 	var urls []string
 	for _, u := range sitemapURLs {
 		urls = append(urls, parseSitemapXML(client, u, 0, b)...)
@@ -148,7 +162,7 @@ func ParseSitemaps(client *http.Client, sitemapURLs []string) []string {
 // It handles both standard sitemaps and sitemap index files.
 func parseSitemapXML(client *http.Client, sitemapURL string, depth int, b *sitemapBudget) []string {
 	// Limit recursion depth for sitemap indexes
-	if depth > 3 || b.seen[sitemapURL] || b.fetches >= sitemapMaxFetches || b.urls >= sitemapMaxURLs {
+	if depth > 3 || b.seen[sitemapURL] || b.fetches >= sitemapMaxFetches || b.urls >= sitemapMaxURLs || !sitemapInScope(b.host, sitemapURL) {
 		return nil
 	}
 	b.seen[sitemapURL] = true
@@ -229,9 +243,12 @@ func DiscoverSitemaps(client *http.Client, baseURL *url.URL, robotsSitemaps []st
 		}
 	}
 
-	// Declared in robots.txt — these are authoritative
+	// Declared in robots.txt — these are authoritative, as long as they are
+	// on the target itself
 	for _, s := range robotsSitemaps {
-		add(s)
+		if sitemapInScope(baseURL.Hostname(), s) {
+			add(s)
+		}
 	}
 
 	// Probe well-known paths

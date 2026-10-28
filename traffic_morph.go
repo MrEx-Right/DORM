@@ -608,6 +608,11 @@ func runEgressCheck(proxyEnabled bool, proxyURL string) *morphEgress {
 
 	t := newScanTransport(scanProxyFunc(proxyEnabled, proxyURL))
 	defer t.CloseIdleConnections()
+	// Same route, but the certificate is checked: the scan transport skips
+	// verification for targets, and on a hostile route (a Tor exit, a proxy)
+	// the answer to "which IP do I leave from, am I on Tor?" could otherwise
+	// be forged. Verification changes nothing in what is sent.
+	t.TLSClientConfig = &tls.Config{}
 	client := &http.Client{Transport: t, Timeout: 20 * time.Second}
 	get := func(u string, v any) error {
 		req, err := http.NewRequest(http.MethodGet, u, nil)
@@ -641,7 +646,7 @@ func runEgressCheck(proxyEnabled bool, proxyURL string) *morphEgress {
 		var ipify struct {
 			IP string `json:"ip"`
 		}
-		if err2 := get("http://api.ipify.org/?format=json", &ipify); err2 != nil {
+		if err2 := get("https://api.ipify.org/?format=json", &ipify); err2 != nil {
 			out.Error = err2.Error()
 			out.LatencyMs = time.Since(start).Milliseconds()
 			return out
