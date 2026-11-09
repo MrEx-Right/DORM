@@ -3,8 +3,8 @@ module DORM
 go 1.27.3
 
 require (
-	github.com/chromedp/cdproto v0.158.6
-	github.com/chromedp/chromedp v0.21.0
+	github.com/chromedp/cdproto v0.159.0
+	github.com/chromedp/chromedp v0.23.0
 	github.com/google/uuid v1.6.0
 	github.com/jlaffaye/ftp v0.2.4
 	golang.org/x/crypto v0.58.0
